@@ -1,0 +1,26 @@
+[project]
+name = "calendar-backend"
+version = "0.1.0"
+description = "FastAPI backend for the scheduled task calendar MVP"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115.0",
+  "psycopg[binary]>=3.2.0",
+  "pydantic-settings>=2.6.0",
+  "sqlalchemy>=2.0.0",
+  "uvicorn[standard]>=0.32.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.27.0",
+  "pytest>=8.3.0",
+  "ruff>=0.7.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
