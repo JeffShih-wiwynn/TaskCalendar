@@ -15,13 +15,16 @@ The current app is web-first:
 
 - Calendar-first task UI with FullCalendar.
 - Month, week, and day calendar views.
+- Clickable month-view year control for jumping by year.
 - Draggable and resizable scheduled task events.
-- Task creation from selected calendar time ranges.
-- Task editing for title, notes, category, due date, scheduled start/end, and completion.
+- Task creation from selected calendar time ranges, including all-day slots.
+- Task editing for title, notes, category, scheduled start/end, and completion.
 - Task completion and uncompletion.
-- Task deletion.
+- Task deletion from the edit form and right-click menus in the calendar and sidebar task list.
 - Category/task-list creation, color updates, and deletion.
 - Sidebar filters for Today, Upcoming, Completed, and All tasks.
+- Custom upcoming-day window, including today.
+- Optional completed-task visibility toggle on the calendar while viewing completed tasks.
 - Optional scheduled start/end, so unscheduled tasks are valid.
 - Backend health endpoint.
 - Backend REST endpoints for tasks and task lists.
@@ -52,7 +55,7 @@ The current app is web-first:
 ## Important Edge Cases
 
 - Timezone: the backend defaults task timezone to `Asia/Taipei`; the frontend sends datetime-local values as ISO strings. Future work should define user timezone behavior explicitly.
-- All-day tasks: not modeled separately yet. Avoid assuming a null time means all-day; null scheduled fields currently mean unscheduled.
+- All-day tasks: stored through scheduled start/end ranges and rendered as all-day calendar events when the range spans local midnight-to-midnight in the task timezone.
 - Timed tasks: both start and end should be present for calendar range behavior. Backend validation rejects end times that are not after start times when both are provided.
 - Recurring tasks/events: not implemented. Do not add recurrence semantics without explicit product and data-model design.
 - Completed tasks: completed tasks remain visible and retain calendar timing; completion state should stay task-level.

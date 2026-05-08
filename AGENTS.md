@@ -21,6 +21,12 @@ Start PostgreSQL:
 docker compose up -d postgres
 ```
 
+Or start the full local stack in the background:
+
+```sh
+./scripts/dev.sh start
+```
+
 Install backend:
 
 ```sh
@@ -54,6 +60,16 @@ Frontend dev server:
 cd frontend
 npm run dev
 ```
+
+Background stack helpers:
+
+```sh
+./scripts/dev.sh start
+./scripts/dev.sh stop
+./scripts/dev.sh status
+```
+
+For remote testing, use `PUBLIC_HOST=<reachable-ip> ./scripts/dev.sh start`. The script remembers the last `PUBLIC_HOST` value in `.calendar-dev/public_host` until it is overridden.
 
 Frontend validation:
 
@@ -114,6 +130,8 @@ pytest
 - Do not start Quadlet work unless explicitly requested.
 - Do not implement non-MVP features without explicit approval.
 - Update docs when behavior, setup, commands, or architecture changes.
+- Keep `README.md` and `AGENTS.md` aligned with the actual `scripts/dev.sh` workflow when that script changes.
+- When the user says `Done with this commit`, update all relevant markdown docs to match the finished behavior and write the git commit before closing the task.
 
 ## Non-MVP By Default
 

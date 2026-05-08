@@ -20,3 +20,6 @@ coverage/
 .idea/
 .vscode/
 .calendar-dev/
+
+# Test
+./nohup.out
