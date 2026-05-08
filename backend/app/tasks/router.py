@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
@@ -21,6 +21,7 @@ def list_tasks(
     range_end: Annotated[datetime | None, Query(alias="to")] = None,
     completed: bool | None = None,
     list_id: uuid.UUID | None = None,
+    view: str | None = None,
 ) -> list[ScheduledTaskRead]:
     return service.list_tasks(
         db,
@@ -28,6 +29,7 @@ def list_tasks(
         range_end=range_end,
         completed=completed,
         list_id=list_id,
+        view=view,
     )
 
 
@@ -46,13 +48,18 @@ def update_task(
     task_id: uuid.UUID,
     data: ScheduledTaskUpdate,
     db: DbSession,
+    update_scope: Literal["single", "series"] = "single",
 ) -> ScheduledTaskRead:
-    return service.update_task(db, task_id, data)
+    return service.update_task(db, task_id, data, update_scope=update_scope)
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_task(task_id: uuid.UUID, db: DbSession) -> Response:
-    service.delete_task(db, task_id)
+def delete_task(
+    task_id: uuid.UUID,
+    db: DbSession,
+    delete_scope: Literal["single", "following"] = "single",
+) -> Response:
+    service.delete_task(db, task_id, delete_scope=delete_scope)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

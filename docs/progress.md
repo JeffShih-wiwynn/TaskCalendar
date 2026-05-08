@@ -29,11 +29,26 @@ This document summarizes what is already in the repository snapshot and where th
 - [x] Step 5: Frontend FullCalendar UI
   - FullCalendar is wired into the frontend.
   - Month, week, and day views are available.
+  - The sidebar includes a `No time tasks` view for unscheduled tasks.
+  - Week and day views now show the full `00:00` through `24:00` range.
   - Tasks render as calendar events.
   - Checkbox completion behavior is wired through the UI.
   - Drag-and-drop and resizing work for scheduled tasks.
   - Task creation and editing are available in the left sidebar.
   - Sidebar task rows support editing and right-click deletion.
+- [x] Step 6: Overdue view
+  - The sidebar now includes an Overdue filter.
+  - Overdue tasks are filtered client-side and supported by the backend list endpoint.
+  - Completed tasks stay out of the overdue list.
+- [x] Step 7: Recurring task MVP
+  - Recurrence is stored as an RRULE-like string on tasks.
+  - The backend materializes concrete occurrence rows for the series.
+  - The current implementation keeps recurrence simple and stops at a one-year horizon when no end date is provided.
+- [x] Step 8: Discord notifications MVP
+  - Tasks can opt into Discord notifications with an offset in minutes before `scheduled_start`.
+  - The backend polls for due notifications and marks `notification_sent_at` after a successful send.
+  - Discord webhook URL and message template can now be configured from the sidebar settings button.
+  - The webhook settings panel can send a one-off test message from the current draft values.
 
 ## Current Notes
 
@@ -43,8 +58,10 @@ This document summarizes what is already in the repository snapshot and where th
 - There is no authentication or multi-user scoping yet; the backend still creates a default user.
 - There is no migration tool yet; the backend creates tables at startup.
 - All-day tasks are inferred from midnight-to-midnight ranges in the task timezone rather than from a separate all-day field.
+- Unscheduled tasks now have a dedicated `No time tasks` sidebar view.
 - `due_at` still exists in the backend/data model, but the current edit form hides it.
 - The current UI is more sidebar-based than the original floating-column idea.
+- Recurrence and notifications are now in MVP form, but the series expansion horizon and webhook worker are intentionally limited.
 
 ## Repository Snapshot
 

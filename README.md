@@ -59,10 +59,13 @@ Click a blank calendar slot to open the create-task form in the left sidebar. Cl
 Current frontend behavior includes:
 
 - month, week, and day calendar views
+- a `No time tasks` sidebar view for unscheduled tasks
 - draggable, resizable, and all-day scheduled tasks
+- a full-day week/day time grid from `00:00` through `24:00`
 - a clickable year control in month view
 - category colors with inline category editing
 - customizable `Upcoming` day ranges
+- a webhook settings form with `Test` and `Cancel` actions
 - a completed-task calendar toggle in the `Completed` view
 - right-click delete from calendar events and task-list rows
 
