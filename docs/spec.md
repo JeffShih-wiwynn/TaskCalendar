@@ -15,12 +15,19 @@ The current app is web-first:
 
 - Calendar-first task UI with FullCalendar.
 - Month, week, and day calendar views.
+- A `No time tasks` sidebar view for unscheduled tasks that can be reordered and dragged into the calendar.
 - Clickable month-view year control for jumping by year.
 - Draggable and resizable scheduled task events.
+- Week and day views show a full `00:00` through `24:00` time grid.
 - Task creation from selected calendar time ranges, including all-day slots.
 - Task editing for title, notes, category, scheduled start/end, and completion.
+- Recurring task creation with RRULE-style daily, weekly, monthly, and yearly intervals.
 - Task completion and uncompletion.
 - Task deletion from the edit form and right-click menus in the calendar and sidebar task list.
+- Recurring-task deletion choices for only the selected occurrence or the selected occurrence plus following occurrences in the same series.
+- Recurring-task edit choices for only the selected occurrence or the whole recurring series when editing shared series fields such as title, category, schedule, and notifications. Clearing recurrence while editing the whole series keeps the edited occurrence as a standalone task and deletes the other materialized occurrences in that series.
+- Sidebar webhook settings button that expands inline inputs for the Discord webhook URL and custom notification message format.
+- Webhook settings test button for sending a one-off Discord test message from the current draft values before saving.
 - Category/task-list creation, color updates, and deletion.
 - Sidebar filters for Today, Upcoming, Completed, and All tasks.
 - Custom upcoming-day window, including today.
@@ -57,7 +64,8 @@ The current app is web-first:
 - Timezone: the backend defaults task timezone to `Asia/Taipei`; the frontend sends datetime-local values as ISO strings. Future work should define user timezone behavior explicitly.
 - All-day tasks: stored through scheduled start/end ranges and rendered as all-day calendar events when the range spans local midnight-to-midnight in the task timezone.
 - Timed tasks: both start and end should be present for calendar range behavior. Backend validation rejects end times that are not after start times when both are provided.
-- Recurring tasks/events: not implemented. Do not add recurrence semantics without explicit product and data-model design.
+- Recurring tasks: the backend materializes concrete task rows for each occurrence and links them with `recurrence_series_id`. Deleting a recurring task can target only the current occurrence or the current and following occurrences. Switching a whole series to no recurrence removes the sibling occurrences and keeps only the edited task.
+- Notifications: Discord delivery can be configured from the app UI through stored webhook settings, and message templates can include `{title}`, `{when}`, `{notes}`, and `{app_url}` placeholders.
 - Completed tasks: completed tasks remain visible and retain calendar timing; completion state should stay task-level.
 - Sync conflicts: no conflict resolution exists yet. Future sync should use stable IDs plus `updated_at` and likely a version/revision field.
 
@@ -68,7 +76,6 @@ The current app is web-first:
 - Offline/local-first sync.
 - Full CalDAV server support.
 - Google Calendar or external calendar sync.
-- Recurring tasks.
 - Natural-language task parsing.
 - Multi-user sharing.
 - End-to-end encryption.

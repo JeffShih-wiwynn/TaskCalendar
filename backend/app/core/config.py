@@ -7,6 +7,8 @@ class Settings(BaseSettings):
         "http://localhost:5173,http://localhost:5174,http://localhost:5175,"
         "http://localhost:5176,http://localhost:5177,http://localhost:5178"
     )
+    app_base_url: str | None = None
+    discord_webhook_url: str | None = None
 
     @property
     def allowed_frontend_origins(self) -> list[str]:
