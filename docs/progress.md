@@ -30,6 +30,7 @@ This document summarizes what is already in the repository snapshot and where th
   - FullCalendar is wired into the frontend.
   - Month, week, and day views are available.
   - The sidebar includes a `No time tasks` view for unscheduled tasks.
+  - Unscheduled task rows can be reordered directly, and the sidebar includes quick `Move to top`, `Move up`, and `Move down` controls.
   - Week and day views now show the full `00:00` through `24:00` range.
   - Tasks render as calendar events.
   - Checkbox completion behavior is wired through the UI.
@@ -59,6 +60,7 @@ This document summarizes what is already in the repository snapshot and where th
 - There is no migration tool yet; the backend creates tables at startup.
 - All-day tasks are inferred from midnight-to-midnight ranges in the task timezone rather than from a separate all-day field.
 - Unscheduled tasks now have a dedicated `No time tasks` sidebar view.
+- Completed tasks keep their category color in the calendar and render with lower opacity instead of a fixed pale fill.
 - `due_at` still exists in the backend/data model, but the current edit form hides it.
 - The current UI is more sidebar-based than the original floating-column idea.
 - Recurrence and notifications are now in MVP form, but the series expansion horizon and webhook worker are intentionally limited.

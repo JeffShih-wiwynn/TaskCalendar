@@ -60,12 +60,14 @@ Current frontend behavior includes:
 
 - month, week, and day calendar views
 - a `No time tasks` sidebar view for unscheduled tasks
+- unscheduled task rows can be reordered directly, with quick `Move to top`, `Move up`, and `Move down` controls
 - draggable, resizable, and all-day scheduled tasks
 - a full-day week/day time grid from `00:00` through `24:00`
 - a clickable year control in month view
 - category colors with inline category editing
 - customizable `Upcoming` day ranges
 - a webhook settings form with `Test` and `Cancel` actions
+- completed tasks stay category-colored in the calendar with increased transparency
 - a completed-task calendar toggle in the `Completed` view
 - right-click delete from calendar events and task-list rows
 

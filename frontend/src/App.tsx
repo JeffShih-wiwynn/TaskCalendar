@@ -24,8 +24,8 @@ import {
     useRef,
     useState,
     type CSSProperties,
-    type DragEvent as ReactDragEvent,
     type FormEvent,
+    type MouseEvent as ReactMouseEvent,
     type PointerEvent as ReactPointerEvent,
 } from "react";
 
@@ -118,6 +118,9 @@ type PendingTaskEditState = {
 };
 
 type DetailPanelMode = "create" | "edit" | null;
+type TaskRowDragEvent =
+    | ReactMouseEvent<HTMLElement>
+    | ReactPointerEvent<HTMLElement>;
 
 const initialFormState: TaskFormState = {
     title: "",
@@ -237,6 +240,7 @@ export function App() {
         startY: number;
         dragging: boolean;
     } | null>(null);
+    const taskRowWindowDragCleanupRef = useRef<(() => void) | null>(null);
     const draggedUnscheduledTaskIdRef = useRef<string | null>(null);
     const suppressTaskRowClickRef = useRef<string | null>(null);
     const titleInputRef = useRef<HTMLInputElement | null>(null);
@@ -447,7 +451,7 @@ export function App() {
 
     useEffect(() => {
         const taskListElement = taskListRef.current;
-        if (!taskListElement || detailPanelMode) {
+        if (!taskListElement || detailPanelMode || activeView === "unscheduled") {
             return;
         }
 
@@ -853,9 +857,100 @@ export function App() {
         setContextMenu(null);
     }, []);
 
+    const moveTaskRowDuringDrag = useCallback(
+        (
+            taskId: string,
+            clientX: number,
+            clientY: number,
+            buttons: number,
+            preventDefault: () => void,
+        ) => {
+            const pointerState = taskRowPointerStateRef.current;
+            if (!pointerState || pointerState.taskId !== taskId) {
+                return;
+            }
+
+            const movedEnough =
+                Math.abs(clientX - pointerState.startX) > 6 ||
+                Math.abs(clientY - pointerState.startY) > 6;
+            if (movedEnough || (activeView === "unscheduled" && buttons === 1)) {
+                pointerState.dragging = true;
+            }
+
+            if (
+                activeView !== "unscheduled" ||
+                !pointerState.dragging
+            ) {
+                return;
+            }
+
+            preventDefault();
+            draggedUnscheduledTaskIdRef.current = taskId;
+            suppressTaskRowClickRef.current = taskId;
+
+            const dropTarget = getTaskReorderTarget(taskId, clientY);
+            if (!dropTarget) {
+                return;
+            }
+
+            setUnscheduledOrder((current) =>
+                moveTaskIdRelative(
+                    current,
+                    taskId,
+                    dropTarget.targetTaskId,
+                    dropTarget.position,
+                ),
+            );
+            pointerState.startX = clientX;
+            pointerState.startY = clientY;
+        },
+        [activeView],
+    );
+
+    const handleTaskRowPointerMove = useCallback(
+        (taskId: string, event: TaskRowDragEvent) => {
+            if (isInteractiveTaskRowTarget(event.target)) {
+                return;
+            }
+
+            moveTaskRowDuringDrag(
+                taskId,
+                event.clientX,
+                event.clientY,
+                event.buttons,
+                () => event.preventDefault(),
+            );
+        },
+        [moveTaskRowDuringDrag],
+    );
+
+    const finishTaskRowPointerInteraction = useCallback(
+        (taskId: string, event?: TaskRowDragEvent) => {
+            const pointerState = taskRowPointerStateRef.current;
+            if (!pointerState || pointerState.taskId !== taskId) {
+                return;
+            }
+
+            taskRowWindowDragCleanupRef.current?.();
+            if (event && "pointerId" in event) {
+                event.currentTarget.releasePointerCapture?.(event.pointerId);
+            }
+            draggedUnscheduledTaskIdRef.current = null;
+            suppressTaskRowClickRef.current = pointerState.dragging
+                ? taskId
+                : null;
+            taskRowPointerStateRef.current = null;
+        },
+        [],
+    );
+
     const handleTaskRowPointerDown = useCallback(
-        (taskId: string, event: ReactPointerEvent<HTMLButtonElement>) => {
-            if (event.button !== 0) {
+        (
+            taskId: string,
+            event: TaskRowDragEvent,
+            trackWindowDrag = false,
+        ) => {
+            if (typeof event.button === "number" && event.button !== 0) {
                 return;
             }
 
@@ -866,99 +961,70 @@ export function App() {
                 dragging: false,
             };
             suppressTaskRowClickRef.current = null;
-        },
-        [],
-    );
-
-    const handleTaskRowPointerMove = useCallback(
-        (taskId: string, event: ReactPointerEvent<HTMLButtonElement>) => {
-            const pointerState = taskRowPointerStateRef.current;
-            if (!pointerState || pointerState.taskId !== taskId) {
-                return;
-            }
-
             if (
-                Math.abs(event.clientX - pointerState.startX) > 6 ||
-                Math.abs(event.clientY - pointerState.startY) > 6
+                activeView === "unscheduled" &&
+                !isInteractiveTaskRowTarget(event.target)
             ) {
-                pointerState.dragging = true;
+                if ("pointerId" in event) {
+                    event.currentTarget.setPointerCapture?.(event.pointerId);
+                }
+
+                if (trackWindowDrag) {
+                    taskRowWindowDragCleanupRef.current?.();
+                    const handleMouseMove = (moveEvent: MouseEvent) => {
+                        moveTaskRowDuringDrag(
+                            taskId,
+                            moveEvent.clientX,
+                            moveEvent.clientY,
+                            moveEvent.buttons,
+                            () => moveEvent.preventDefault(),
+                        );
+                    };
+                    const handleMouseUp = () => {
+                        finishTaskRowPointerInteraction(taskId);
+                    };
+
+                    window.addEventListener("mousemove", handleMouseMove);
+                    window.addEventListener("mouseup", handleMouseUp, {
+                        once: true,
+                    });
+                    taskRowWindowDragCleanupRef.current = () => {
+                        window.removeEventListener("mousemove", handleMouseMove);
+                        window.removeEventListener("mouseup", handleMouseUp);
+                        taskRowWindowDragCleanupRef.current = null;
+                    };
+                }
             }
         },
-        [],
+        [
+            activeView,
+            finishTaskRowPointerInteraction,
+            moveTaskRowDuringDrag,
+        ],
     );
 
-    const finishTaskRowPointerInteraction = useCallback((taskId: string) => {
-        const pointerState = taskRowPointerStateRef.current;
-        if (!pointerState || pointerState.taskId !== taskId) {
-            return;
-        }
-
-        suppressTaskRowClickRef.current = pointerState.dragging ? taskId : null;
-        taskRowPointerStateRef.current = null;
-    }, []);
-
-    const handleUnscheduledTaskDragStart = useCallback(
-        (taskId: string, event: ReactDragEvent<HTMLElement>) => {
+    const moveUnscheduledTask = useCallback(
+        (taskId: string, offset: -1 | 1) => {
             if (activeView !== "unscheduled") {
-                return;
-            }
-
-            draggedUnscheduledTaskIdRef.current = taskId;
-            suppressTaskRowClickRef.current = taskId;
-            if (event.dataTransfer) {
-                event.dataTransfer.effectAllowed = "move";
-                event.dataTransfer.setData("text/plain", taskId);
-            }
-        },
-        [activeView],
-    );
-
-    const handleUnscheduledTaskDragOver = useCallback(
-        (event: ReactDragEvent<HTMLElement>) => {
-            if (
-                activeView !== "unscheduled" ||
-                !draggedUnscheduledTaskIdRef.current
-            ) {
-                return;
-            }
-
-            event.preventDefault();
-            if (event.dataTransfer) {
-                event.dataTransfer.dropEffect = "move";
-            }
-        },
-        [activeView],
-    );
-
-    const handleUnscheduledTaskDrop = useCallback(
-        (targetTaskId: string, event: ReactDragEvent<HTMLElement>) => {
-            if (activeView !== "unscheduled") {
-                return;
-            }
-
-            event.preventDefault();
-            const draggedTaskId = draggedUnscheduledTaskIdRef.current;
-            draggedUnscheduledTaskIdRef.current = null;
-            if (!draggedTaskId || draggedTaskId === targetTaskId) {
                 return;
             }
 
             setUnscheduledOrder((current) =>
-                moveTaskIdBefore(current, draggedTaskId, targetTaskId),
+                moveTaskIdByOffset(current, taskId, offset),
             );
         },
         [activeView],
     );
 
-    const handleUnscheduledTaskDragEnd = useCallback(() => {
-        draggedUnscheduledTaskIdRef.current = null;
-    }, []);
+    const moveUnscheduledTaskToTop = useCallback(
+        (taskId: string) => {
+            if (activeView !== "unscheduled") {
+                return;
+            }
 
-    const stopTaskReorderHandlePropagation = useCallback(
-        (event: ReactPointerEvent<HTMLElement>) => {
-            event.stopPropagation();
+            setUnscheduledOrder((current) => moveTaskIdToTop(current, taskId));
         },
-        [],
+        [activeView],
     );
 
     const promptRecurringTaskDelete = useCallback(
@@ -1165,6 +1231,12 @@ export function App() {
         setEditingListColor(defaultCategoryColor);
     }, []);
 
+    useEffect(() => {
+        if (!isCategoryMenuOpen) {
+            resetCategoryEditor();
+        }
+    }, [isCategoryMenuOpen, resetCategoryEditor]);
+
     const startEditingTaskList = useCallback((taskList: TaskList) => {
         setIsAddingCategory(false);
         setEditingTaskListId(taskList.id);
@@ -1208,6 +1280,40 @@ export function App() {
                     ? error.message
                     : "Unable to update category",
             );
+        }
+    };
+
+    const handleDeleteEditingTaskList = async () => {
+        if (!editingTaskListId) {
+            return;
+        }
+
+        setFormError(null);
+        setIsDeleting(true);
+
+        try {
+            await deleteTaskList(editingTaskListId);
+            setActiveListId((currentId) =>
+                currentId === editingTaskListId ? null : currentId,
+            );
+            setSelectedTaskId((currentId) => {
+                const selected = tasks.find((task) => task.id === currentId);
+                return selected?.list_id === editingTaskListId
+                    ? null
+                    : currentId;
+            });
+            resetCategoryEditor();
+            setIsCategoryMenuOpen(false);
+            void refreshTaskLists();
+            reloadTasks();
+        } catch (error) {
+            setFormError(
+                error instanceof Error
+                    ? error.message
+                    : "Unable to delete category",
+            );
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -1547,7 +1653,7 @@ export function App() {
                                         </button>
                                         <button
                                             type="button"
-                                            className="danger-button"
+                                            className="ghost-button"
                                             disabled={
                                                 isWebhookSettingsSaving ||
                                                 isWebhookSettingsTesting
@@ -1749,7 +1855,7 @@ export function App() {
                                             {taskLists.map((taskList) => (
                                                 <div
                                                     key={taskList.id}
-                                                    className="filter-option-row"
+                                                    className={`filter-option-row ${activeListId === taskList.id ? "active" : ""}`}
                                                 >
                                                     <button
                                                         type="button"
@@ -1796,7 +1902,12 @@ export function App() {
                                                             )
                                                         }
                                                     >
-                                                        Edit
+                                                        <span
+                                                            aria-hidden="true"
+                                                            className="filter-option-action-icon"
+                                                        >
+                                                            ⚙
+                                                        </span>
                                                     </button>
                                                 </div>
                                             ))}
@@ -1810,38 +1921,61 @@ export function App() {
                                                             )
                                                         }
                                                     >
-                                                        <input
-                                                            type="color"
-                                                            value={
-                                                                editingListColor
-                                                            }
-                                                            onChange={(event) =>
-                                                                setEditingListColor(
-                                                                    event.target
-                                                                        .value,
-                                                                )
-                                                            }
-                                                            aria-label="Edit category color"
-                                                        />
-                                                        <input
-                                                            ref={
-                                                                categoryNameInputRef
-                                                            }
-                                                            value={
-                                                                editingListName
-                                                            }
-                                                            onChange={(event) =>
-                                                                setEditingListName(
-                                                                    event.target
-                                                                        .value,
-                                                                )
-                                                            }
-                                                            placeholder="Category name"
-                                                            aria-label="Edit category name"
-                                                        />
+                                                        <div className="category-inline-fields">
+                                                            <input
+                                                                type="color"
+                                                                value={
+                                                                    editingListColor
+                                                                }
+                                                                onChange={(
+                                                                    event,
+                                                                ) =>
+                                                                    setEditingListColor(
+                                                                        event
+                                                                            .target
+                                                                            .value,
+                                                                    )
+                                                                }
+                                                                aria-label="Edit category color"
+                                                            />
+                                                            <input
+                                                                ref={
+                                                                    categoryNameInputRef
+                                                                }
+                                                                type="text"
+                                                                value={
+                                                                    editingListName
+                                                                }
+                                                                onChange={(
+                                                                    event,
+                                                                ) =>
+                                                                    setEditingListName(
+                                                                        event
+                                                                            .target
+                                                                            .value,
+                                                                    )
+                                                                }
+                                                                placeholder="Category name"
+                                                                aria-label="Edit category name"
+                                                            />
+                                                        </div>
                                                         <div className="category-inline-actions">
                                                             <button type="submit">
                                                                 Save
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className="danger-button"
+                                                                disabled={
+                                                                    isDeleting
+                                                                }
+                                                                onClick={() =>
+                                                                    void handleDeleteEditingTaskList()
+                                                                }
+                                                            >
+                                                                {isDeleting
+                                                                    ? "Deleting..."
+                                                                    : "Delete"}
                                                             </button>
                                                             <button
                                                                 type="button"
@@ -1863,31 +1997,34 @@ export function App() {
                                                             )
                                                         }
                                                     >
-                                                        <input
-                                                            type="color"
-                                                            value={newListColor}
-                                                            onChange={(event) =>
-                                                                setNewListColor(
-                                                                    event.target
-                                                                        .value,
-                                                                )
-                                                            }
-                                                            aria-label="New category color"
-                                                        />
-                                                        <input
-                                                            ref={
-                                                                categoryNameInputRef
-                                                            }
-                                                            value={newListName}
-                                                            onChange={(event) =>
-                                                                setNewListName(
-                                                                    event.target
-                                                                        .value,
-                                                                )
-                                                            }
-                                                            placeholder="New category"
-                                                            aria-label="New category"
-                                                        />
+                                                        <div className="category-inline-fields">
+                                                            <input
+                                                                type="color"
+                                                                value={newListColor}
+                                                                onChange={(event) =>
+                                                                    setNewListColor(
+                                                                        event.target
+                                                                            .value,
+                                                                    )
+                                                                }
+                                                                aria-label="New category color"
+                                                            />
+                                                            <input
+                                                                ref={
+                                                                    categoryNameInputRef
+                                                                }
+                                                                type="text"
+                                                                value={newListName}
+                                                                onChange={(event) =>
+                                                                    setNewListName(
+                                                                        event.target
+                                                                            .value,
+                                                                    )
+                                                                }
+                                                                placeholder="New category"
+                                                                aria-label="New category"
+                                                            />
+                                                        </div>
                                                         <div className="category-inline-actions">
                                                             <button type="submit">
                                                                 Add
@@ -1921,7 +2058,7 @@ export function App() {
                                                             );
                                                         }}
                                                     >
-                                                        Add category
+                                                        Add
                                                     </button>
                                                 )}
                                             </div>
@@ -1934,6 +2071,7 @@ export function App() {
                                 <button
                                     type="button"
                                     className="sidebar-create-task-button"
+                                    aria-label="Create task"
                                     onClick={openUnscheduledCreatePanel}
                                 >
                                     Create
@@ -1957,17 +2095,55 @@ export function App() {
                                         ? "Create task"
                                         : "Edit task"}
                                 </h2>
-                                <button
-                                    type="button"
-                                    className="floating-panel-close"
-                                    onClick={closeDetailPanel}
-                                >
-                                    Close
-                                </button>
+                                <div className="task-detail-header-actions">
+                                    {detailPanelMode === "create" ? (
+                                        <button
+                                            type="submit"
+                                            form="task-create-form"
+                                            className="floating-panel-action floating-panel-save"
+                                            disabled={isSaving}
+                                        >
+                                            {isSaving ? "Saving..." : "Save"}
+                                        </button>
+                                    ) : selectedTask && editState ? (
+                                        <>
+                                            <button
+                                                type="submit"
+                                                form="task-edit-form"
+                                                className="floating-panel-action floating-panel-save"
+                                                disabled={isEditSaving}
+                                            >
+                                                {isEditSaving
+                                                    ? "Saving..."
+                                                    : "Save"}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="floating-panel-action floating-panel-delete"
+                                                disabled={isDeleting}
+                                                onClick={() =>
+                                                    void handleDeleteSelectedTask()
+                                                }
+                                            >
+                                                {isDeleting
+                                                    ? "Deleting..."
+                                                    : "Delete"}
+                                            </button>
+                                        </>
+                                    ) : null}
+                                    <button
+                                        type="button"
+                                        className="floating-panel-action"
+                                        onClick={closeDetailPanel}
+                                    >
+                                        Close
+                                    </button>
+                                </div>
                             </div>
 
                             {detailPanelMode === "create" ? (
                                 <form
+                                    id="task-create-form"
                                     ref={createFormRef}
                                     className="task-form active-form"
                                     onSubmit={(event) =>
@@ -2157,12 +2333,10 @@ export function App() {
                                             rows={3}
                                         />
                                     </label>
-                                    <button type="submit" disabled={isSaving}>
-                                        {isSaving ? "Creating..." : "Create"}
-                                    </button>
                                 </form>
                             ) : selectedTask && editState ? (
                                 <form
+                                    id="task-edit-form"
                                     className="task-form"
                                     onSubmit={(event) =>
                                         void handleEditSubmit(event)
@@ -2367,28 +2541,6 @@ export function App() {
                                             rows={5}
                                         />
                                     </label>
-                                    <div className="task-form-actions">
-                                        <button
-                                            type="submit"
-                                            disabled={isEditSaving}
-                                        >
-                                            {isEditSaving
-                                                ? "Saving..."
-                                                : "Save"}
-                                        </button>
-                                        <button
-                                            className="danger-button"
-                                            type="button"
-                                            disabled={isDeleting}
-                                            onClick={() =>
-                                                void handleDeleteSelectedTask()
-                                            }
-                                        >
-                                            {isDeleting
-                                                ? "Deleting..."
-                                                : "Delete"}
-                                        </button>
-                                    </div>
                                 </form>
                             ) : (
                                 <p className="muted">
@@ -2418,12 +2570,13 @@ export function App() {
                                         No tasks in this view.
                                     </p>
                                 )}
-                            {orderedVisibleTasks.map((task) => (
-                                <button
+                            {orderedVisibleTasks.map((task, taskIndex) => (
+                                <div
                                     key={task.id}
-                                    type="button"
+                                    role="button"
+                                    tabIndex={0}
                                     data-task-id={task.id}
-                                    className={`task-row ${selectedTaskId === task.id ? "selected" : ""}`}
+                                    className={`task-row ${activeView === "unscheduled" ? "task-row--reorderable" : ""} ${selectedTaskId === task.id ? "selected" : ""}`}
                                     style={{
                                         borderLeftColor: taskCategoryColor(
                                             task,
@@ -2437,20 +2590,45 @@ export function App() {
                                     onPointerDown={(event) =>
                                         handleTaskRowPointerDown(task.id, event)
                                     }
+                                    onMouseDown={(event) =>
+                                        handleTaskRowPointerDown(
+                                            task.id,
+                                            event,
+                                            true,
+                                        )
+                                    }
+                                    onSelectStart={
+                                        activeView === "unscheduled"
+                                            ? (event) => event.preventDefault()
+                                            : undefined
+                                    }
                                     onPointerMove={(event) =>
                                         handleTaskRowPointerMove(task.id, event)
                                     }
-                                    onPointerUp={() =>
-                                        finishTaskRowPointerInteraction(task.id)
+                                    onMouseMove={(event) =>
+                                        handleTaskRowPointerMove(task.id, event)
                                     }
-                                    onPointerCancel={() => {
+                                    onPointerUp={(event) =>
+                                        finishTaskRowPointerInteraction(
+                                            task.id,
+                                            event,
+                                        )
+                                    }
+                                    onMouseUp={(event) =>
+                                        finishTaskRowPointerInteraction(
+                                            task.id,
+                                            event,
+                                        )
+                                    }
+                                    onPointerCancel={(event) => {
+                                        event.currentTarget.releasePointerCapture?.(
+                                            event.pointerId,
+                                        );
+                                        draggedUnscheduledTaskIdRef.current =
+                                            null;
                                         taskRowPointerStateRef.current = null;
                                         suppressTaskRowClickRef.current = null;
                                     }}
-                                    onDragOver={handleUnscheduledTaskDragOver}
-                                    onDrop={(event) =>
-                                        handleUnscheduledTaskDrop(task.id, event)
-                                    }
                                     onClick={() => {
                                         if (
                                             suppressTaskRowClickRef.current ===
@@ -2460,6 +2638,20 @@ export function App() {
                                                 null;
                                             return;
                                         }
+                                        setDetailPanelMode("edit");
+                                        setSelectedTaskId(task.id);
+                                    }}
+                                    onKeyDown={(event) => {
+                                        if (
+                                            event.target !==
+                                                event.currentTarget ||
+                                            (event.key !== "Enter" &&
+                                                event.key !== " ")
+                                        ) {
+                                            return;
+                                        }
+
+                                        event.preventDefault();
                                         setDetailPanelMode("edit");
                                         setSelectedTaskId(task.id);
                                     }}
@@ -2474,32 +2666,6 @@ export function App() {
                                         });
                                     }}
                                 >
-                                    {activeView === "unscheduled" && (
-                                        <span
-                                            className="task-reorder-handle"
-                                            aria-label={`Reorder ${task.title}`}
-                                            role="button"
-                                            tabIndex={-1}
-                                            draggable
-                                            onPointerDown={
-                                                stopTaskReorderHandlePropagation
-                                            }
-                                            onClick={(event) =>
-                                                event.stopPropagation()
-                                            }
-                                            onDragStart={(event) =>
-                                                handleUnscheduledTaskDragStart(
-                                                    task.id,
-                                                    event,
-                                                )
-                                            }
-                                            onDragEnd={
-                                                handleUnscheduledTaskDragEnd
-                                            }
-                                        >
-                                            ≡
-                                        </span>
-                                    )}
                                     <input
                                         type="checkbox"
                                         checked={task.completed}
@@ -2525,7 +2691,68 @@ export function App() {
                                             {formatTaskMeta(task)}
                                         </span>
                                     </span>
-                                </button>
+                                    {activeView === "unscheduled" && (
+                                        <span className="task-order-actions task-order-actions--aligned">
+                                            <button
+                                                type="button"
+                                                className="task-order-button task-order-button-top"
+                                                aria-label={`Move ${task.title} to top`}
+                                                disabled={taskIndex === 0}
+                                                onPointerDown={(event) =>
+                                                    event.stopPropagation()
+                                                }
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    moveUnscheduledTaskToTop(
+                                                        task.id,
+                                                    );
+                                                }}
+                                            >
+                                                ⇡
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="task-order-button"
+                                                aria-label={`Move ${task.title} up`}
+                                                disabled={taskIndex === 0}
+                                                onPointerDown={(event) =>
+                                                    event.stopPropagation()
+                                                }
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    moveUnscheduledTask(
+                                                        task.id,
+                                                        -1,
+                                                    );
+                                                }}
+                                            >
+                                                ↑
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="task-order-button"
+                                                aria-label={`Move ${task.title} down`}
+                                                disabled={
+                                                    taskIndex ===
+                                                    orderedVisibleTasks.length -
+                                                        1
+                                                }
+                                                onPointerDown={(event) =>
+                                                    event.stopPropagation()
+                                                }
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    moveUnscheduledTask(
+                                                        task.id,
+                                                        1,
+                                                    );
+                                                }}
+                                            >
+                                                ↓
+                                            </button>
+                                        </span>
+                                    )}
+                                </div>
                             ))}
                         </section>
                     )}
@@ -3129,6 +3356,10 @@ function filterTasksForView(
 ): ScheduledTask[] {
     const now = new Date();
     const filteredTasks = tasks.filter((task) => {
+        if (activeView === "unscheduled") {
+            return !task.completed && !task.scheduled_start && !task.scheduled_end;
+        }
+
         if (
             activeListId === unclassifiedCategoryFilter &&
             task.list_id !== null
@@ -3154,10 +3385,6 @@ function filterTasksForView(
 
         if (activeView === "overdue") {
             return isOverdueTask(task, now);
-        }
-
-        if (activeView === "unscheduled") {
-            return !task.completed && !task.scheduled_start && !task.scheduled_end;
         }
 
         if (task.completed) {
@@ -3235,10 +3462,11 @@ function reconcileTaskOrder(currentOrder: string[], taskIds: string[]): string[]
     return nextOrder;
 }
 
-function moveTaskIdBefore(
+function moveTaskIdRelative(
     currentOrder: string[],
     draggedTaskId: string,
     targetTaskId: string,
+    position: "before" | "after",
 ): string[] {
     if (draggedTaskId === targetTaskId) {
         return currentOrder;
@@ -3250,8 +3478,79 @@ function moveTaskIdBefore(
         return [...nextOrder, draggedTaskId];
     }
 
-    nextOrder.splice(targetIndex, 0, draggedTaskId);
+    const insertIndex = position === "after" ? targetIndex + 1 : targetIndex;
+    nextOrder.splice(insertIndex, 0, draggedTaskId);
     return nextOrder;
+}
+
+function moveTaskIdByOffset(
+    currentOrder: string[],
+    taskId: string,
+    offset: -1 | 1,
+): string[] {
+    const currentIndex = currentOrder.indexOf(taskId);
+    if (currentIndex === -1) {
+        return currentOrder;
+    }
+
+    const targetIndex = currentIndex + offset;
+    if (targetIndex < 0 || targetIndex >= currentOrder.length) {
+        return currentOrder;
+    }
+
+    const nextOrder = [...currentOrder];
+    [nextOrder[currentIndex], nextOrder[targetIndex]] = [
+        nextOrder[targetIndex],
+        nextOrder[currentIndex],
+    ];
+    return nextOrder;
+}
+
+function moveTaskIdToTop(currentOrder: string[], taskId: string): string[] {
+    const currentIndex = currentOrder.indexOf(taskId);
+    if (currentIndex <= 0) {
+        return currentOrder;
+    }
+
+    const nextOrder = currentOrder.filter((currentTaskId) => currentTaskId !== taskId);
+    nextOrder.unshift(taskId);
+    return nextOrder;
+}
+
+function getTaskReorderTarget(
+    draggedTaskId: string,
+    clientY: number,
+): { targetTaskId: string; position: "before" | "after" } | null {
+    const rows = Array.from(
+        document.querySelectorAll<HTMLElement>(".task-row[data-task-id]"),
+    ).filter((row) => row.dataset.taskId !== draggedTaskId);
+
+    if (rows.length === 0) {
+        return null;
+    }
+
+    const firstRowAfterPointer = rows.find((row) => {
+        const rect = row.getBoundingClientRect();
+        return clientY < rect.top + rect.height / 2;
+    });
+
+    if (firstRowAfterPointer?.dataset.taskId) {
+        return {
+            targetTaskId: firstRowAfterPointer.dataset.taskId,
+            position: "before",
+        };
+    }
+
+    const lastRow = rows[rows.length - 1];
+    return lastRow?.dataset.taskId
+        ? { targetTaskId: lastRow.dataset.taskId, position: "after" }
+        : null;
+}
+
+function isInteractiveTaskRowTarget(target: EventTarget): boolean {
+    return target instanceof Element
+        ? Boolean(target.closest("button, input, textarea, select, a"))
+        : false;
 }
 
 function areStringArraysEqual(left: string[], right: string[]): boolean {
@@ -3669,7 +3968,9 @@ function mapTaskToCalendarEvent(
         allDay,
         display: "block",
         editable: true,
-        backgroundColor: task.completed ? "#eef2ef" : color,
+        backgroundColor: task.completed
+            ? withAlpha(color, 0.32)
+            : color,
         borderColor: color,
         textColor: task.completed ? "#50615b" : readableTextColor(color),
         classNames: task.completed
@@ -3687,6 +3988,13 @@ function readableTextColor(hexColor: string): string {
     const blue = Number.parseInt(hexColor.slice(5, 7), 16);
     const brightness = (red * 299 + green * 587 + blue * 114) / 1000;
     return brightness > 145 ? "#182026" : "#ffffff";
+}
+
+function withAlpha(hexColor: string, alpha: number): string {
+    const red = Number.parseInt(hexColor.slice(1, 3), 16);
+    const green = Number.parseInt(hexColor.slice(3, 5), 16);
+    const blue = Number.parseInt(hexColor.slice(5, 7), 16);
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
 function getInitialThemeMode(): ThemeMode {

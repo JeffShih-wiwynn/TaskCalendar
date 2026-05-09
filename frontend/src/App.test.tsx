@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
     tasks: [] as Array<Record<string, unknown>>,
     createTask: vi.fn(async () => ({ id: "task-new" })),
     deleteTask: vi.fn(async () => undefined),
+    deleteTaskList: vi.fn(async () => undefined),
     updateTask: vi.fn(async () => ({})),
     settings: {
         id: 1,
@@ -277,7 +278,7 @@ vi.mock("./api/taskLists", () => ({
     listTaskLists: () => Promise.resolve(mocks.taskLists),
     createTaskList: vi.fn(),
     updateTaskList: mocks.updateTaskList,
-    deleteTaskList: vi.fn(),
+    deleteTaskList: mocks.deleteTaskList,
 }));
 
 vi.mock("./api/settings", () => ({
@@ -286,12 +287,29 @@ vi.mock("./api/settings", () => ({
     updateSettings: mocks.updateSettings,
 }));
 
+function mockTaskRowRects(rows: Element[]): void {
+    rows.forEach((row, index) => {
+        vi.spyOn(row, "getBoundingClientRect").mockReturnValue({
+            top: index * 50,
+            height: 40,
+            bottom: index * 50 + 40,
+            left: 0,
+            right: 280,
+            width: 280,
+            x: 0,
+            y: index * 50,
+            toJSON: () => ({}),
+        });
+    });
+}
+
 describe("App", () => {
     beforeEach(() => {
         window.localStorage.clear();
         mocks.tasks = [];
         mocks.createTask.mockClear();
         mocks.deleteTask.mockClear();
+        mocks.deleteTaskList.mockClear();
         mocks.fullCalendarMount.mockClear();
         mocks.fullCalendarProps.events = [];
         mocks.dragRevert.mockClear();
@@ -310,7 +328,7 @@ describe("App", () => {
         ).toHaveTextContent("Today");
         expect(
             screen.getByRole("button", { name: "Task category" }),
-        ).toHaveTextContent("All categories");
+        ).toHaveTextContent("All");
         expect(
             screen.queryByRole("button", { name: "Close" }),
         ).not.toBeInTheDocument();
@@ -407,6 +425,27 @@ describe("App", () => {
                 updated_at: "",
                 completed_at: null,
             },
+            {
+                id: "task-unscheduled-c",
+                user_id: "user-1",
+                list_id: null,
+                title: "Third task",
+                notes: null,
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                created_at: "2026-05-09T00:00:00Z",
+                updated_at: "",
+                completed_at: null,
+            },
         ];
 
         render(<App />);
@@ -420,16 +459,130 @@ describe("App", () => {
         expect(Array.from(taskRows).map((row) => row.textContent)).toEqual([
             expect.stringContaining("First task"),
             expect.stringContaining("Second task"),
+            expect.stringContaining("Third task"),
         ]);
 
-        const reorderHandles = await screen.findAllByRole("button", {
-            name: /Reorder /i,
-        });
+        mockTaskRowRects(Array.from(taskRows));
 
-        fireEvent.dragStart(reorderHandles[1]);
-        fireEvent.dragOver(taskRows[0]);
-        fireEvent.drop(taskRows[0]);
-        fireEvent.dragEnd(reorderHandles[1]);
+        fireEvent.mouseDown(taskRows[1], {
+            button: 0,
+            buttons: 1,
+            clientX: 20,
+            clientY: 80,
+        });
+        fireEvent.mouseMove(taskRows[1], {
+            buttons: 1,
+            clientX: 20,
+            clientY: 10,
+        });
+        fireEvent.mouseUp(taskRows[1]);
+
+        const reorderedRows = document.querySelectorAll(".task-list .task-row");
+        expect(Array.from(reorderedRows).map((row) => row.textContent)).toEqual([
+            expect.stringContaining("Second task"),
+            expect.stringContaining("First task"),
+            expect.stringContaining("Third task"),
+        ]);
+        expect(
+            window.localStorage.getItem("calendar-unscheduled-order"),
+        ).toContain("task-unscheduled-b");
+
+        fireEvent.click(
+            screen.getByRole("button", { name: "Move Second task down" }),
+        );
+
+        const reorderedBackRows = document.querySelectorAll(".task-list .task-row");
+        expect(Array.from(reorderedBackRows).map((row) => row.textContent)).toEqual([
+            expect.stringContaining("First task"),
+            expect.stringContaining("Second task"),
+            expect.stringContaining("Third task"),
+        ]);
+
+        mockTaskRowRects(Array.from(reorderedBackRows));
+        fireEvent.mouseDown(reorderedBackRows[0], {
+            button: 0,
+            buttons: 1,
+            clientX: 20,
+            clientY: 10,
+        });
+        fireEvent.mouseMove(window, {
+            buttons: 1,
+            clientX: 20,
+            clientY: 65,
+        });
+        mockTaskRowRects(
+            Array.from(document.querySelectorAll(".task-list .task-row")),
+        );
+        fireEvent.mouseMove(window, {
+            buttons: 1,
+            clientX: 20,
+            clientY: 130,
+        });
+        fireEvent.mouseUp(window);
+
+        const reorderedDownRows = document.querySelectorAll(".task-list .task-row");
+        expect(Array.from(reorderedDownRows).map((row) => row.textContent)).toEqual([
+            expect.stringContaining("Second task"),
+            expect.stringContaining("Third task"),
+            expect.stringContaining("First task"),
+        ]);
+    });
+
+    it("reorders no time tasks with explicit priority controls", async () => {
+        mocks.tasks = [
+            {
+                id: "task-unscheduled-a",
+                user_id: "user-1",
+                list_id: null,
+                title: "First task",
+                notes: null,
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                created_at: "2026-05-07T00:00:00Z",
+                updated_at: "",
+                completed_at: null,
+            },
+            {
+                id: "task-unscheduled-b",
+                user_id: "user-1",
+                list_id: null,
+                title: "Second task",
+                notes: null,
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                created_at: "2026-05-08T00:00:00Z",
+                updated_at: "",
+                completed_at: null,
+            },
+        ];
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "No time tasks" }),
+        );
+        fireEvent.click(
+            screen.getByRole("button", { name: "Move Second task up" }),
+        );
 
         const reorderedRows = document.querySelectorAll(".task-list .task-row");
         expect(Array.from(reorderedRows).map((row) => row.textContent)).toEqual([
@@ -441,7 +594,153 @@ describe("App", () => {
         ).toContain("task-unscheduled-b");
     });
 
-    it("keeps calendar dragging enabled in the no time tasks view", async () => {
+    it("moves a no time task directly to the top", async () => {
+        mocks.tasks = [
+            {
+                id: "task-unscheduled-a",
+                user_id: "user-1",
+                list_id: null,
+                title: "First task",
+                notes: null,
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                created_at: "2026-05-07T00:00:00Z",
+                updated_at: "",
+                completed_at: null,
+            },
+            {
+                id: "task-unscheduled-b",
+                user_id: "user-1",
+                list_id: null,
+                title: "Second task",
+                notes: null,
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                created_at: "2026-05-08T00:00:00Z",
+                updated_at: "",
+                completed_at: null,
+            },
+            {
+                id: "task-unscheduled-c",
+                user_id: "user-1",
+                list_id: null,
+                title: "Third task",
+                notes: null,
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                created_at: "2026-05-09T00:00:00Z",
+                updated_at: "",
+                completed_at: null,
+            },
+        ];
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "No time tasks" }),
+        );
+        fireEvent.click(
+            screen.getByRole("button", { name: "Move Third task to top" }),
+        );
+
+        const reorderedRows = document.querySelectorAll(".task-list .task-row");
+        expect(Array.from(reorderedRows).map((row) => row.textContent)).toEqual([
+            expect.stringContaining("Third task"),
+            expect.stringContaining("First task"),
+            expect.stringContaining("Second task"),
+        ]);
+    });
+
+    it("ignores category filtering in the no time tasks view", async () => {
+        mocks.tasks = [
+            {
+                id: "task-unscheduled-work",
+                user_id: "user-1",
+                list_id: "list-1",
+                title: "Work inbox",
+                notes: null,
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                created_at: "2026-05-07T00:00:00Z",
+                updated_at: "",
+                completed_at: null,
+            },
+            {
+                id: "task-unscheduled-home",
+                user_id: "user-1",
+                list_id: "list-2",
+                title: "Home inbox",
+                notes: null,
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                created_at: "2026-05-08T00:00:00Z",
+                updated_at: "",
+                completed_at: null,
+            },
+        ];
+
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Task category" }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Work" }));
+        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "No time tasks" }),
+        );
+
+        expect(await screen.findByText("Work inbox")).toBeInTheDocument();
+        expect(screen.getByText("Home inbox")).toBeInTheDocument();
+    });
+
+    it("keeps row dragging dedicated to ordering in the no time tasks view", async () => {
         mocks.tasks = [
             {
                 id: "task-unscheduled",
@@ -475,7 +774,7 @@ describe("App", () => {
             await screen.findByRole("button", { name: "No time tasks" }),
         );
 
-        expect(mocks.draggableConstruct).toHaveBeenCalledTimes(1);
+        expect(mocks.draggableConstruct).not.toHaveBeenCalled();
     });
 
     it("hides and restores the sidebar", async () => {
@@ -559,6 +858,43 @@ describe("App", () => {
         expect(screen.getByLabelText("Edit category name")).toHaveValue("Work");
         expect(screen.getByLabelText("Edit category color")).toHaveValue(
             "#2f80ed",
+        );
+    });
+
+    it("resets category edit mode when the dropdown is folded", async () => {
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Task category" }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Edit Work" }));
+        expect(screen.getByLabelText("Edit category name")).toHaveValue("Work");
+
+        fireEvent.click(screen.getByRole("button", { name: "Task category" }));
+        fireEvent.click(screen.getByRole("button", { name: "Task category" }));
+
+        expect(
+            screen.queryByLabelText("Edit category name"),
+        ).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Add" })).toBeInTheDocument();
+    });
+
+    it("deletes a category from the inline edit form", async () => {
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Task category" }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Edit Work" }));
+        fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+        await waitFor(() =>
+            expect(mocks.deleteTaskList).toHaveBeenCalledWith("list-1"),
+        );
+        await waitFor(() =>
+            expect(
+                screen.queryByLabelText("Edit category name"),
+            ).not.toBeInTheDocument(),
         );
     });
 
@@ -669,7 +1005,7 @@ describe("App", () => {
         fireEvent.change(screen.getByLabelText("Before"), {
             target: { value: "4" },
         });
-        fireEvent.click(screen.getByRole("button", { name: "Create" }));
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
         await waitFor(() =>
             expect(
@@ -694,6 +1030,17 @@ describe("App", () => {
     });
 
     it("closes the edit panel after saving a task", async () => {
+        const now = new Date();
+        const todayAtTen = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+            10,
+            0,
+            0,
+            0,
+        );
+
         mocks.tasks = [
             {
                 id: "task-edit",
@@ -702,13 +1049,15 @@ describe("App", () => {
                 title: "Edit me",
                 notes: null,
                 completed: false,
-                scheduled_start: "2026-05-08T10:00:00Z",
-                scheduled_end: "2026-05-08T11:00:00Z",
+                scheduled_start: todayAtTen.toISOString(),
+                scheduled_end: new Date(
+                    todayAtTen.getTime() + 60 * 60 * 1000,
+                ).toISOString(),
                 due_at: null,
                 timezone: "Asia/Taipei",
                 priority: null,
-                created_at: "2026-05-07T00:00:00Z",
-                updated_at: "2026-05-07T00:00:00Z",
+                created_at: now.toISOString(),
+                updated_at: now.toISOString(),
                 completed_at: null,
             },
         ];
@@ -741,6 +1090,17 @@ describe("App", () => {
     });
 
     it("saves notifications from the dropdown as minutes", async () => {
+        const now = new Date();
+        const todayAtTen = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+            10,
+            0,
+            0,
+            0,
+        );
+
         mocks.tasks = [
             {
                 id: "task-notify-edit",
@@ -749,16 +1109,18 @@ describe("App", () => {
                 title: "Notify me",
                 notes: null,
                 completed: false,
-                scheduled_start: "2026-05-08T10:00:00Z",
-                scheduled_end: "2026-05-08T11:00:00Z",
+                scheduled_start: todayAtTen.toISOString(),
+                scheduled_end: new Date(
+                    todayAtTen.getTime() + 60 * 60 * 1000,
+                ).toISOString(),
                 due_at: null,
                 notification_enabled: true,
                 notification_offset_minutes: 15,
                 notification_channel: "discord",
                 timezone: "Asia/Taipei",
                 priority: null,
-                created_at: "2026-05-07T00:00:00Z",
-                updated_at: "2026-05-07T00:00:00Z",
+                created_at: now.toISOString(),
+                updated_at: now.toISOString(),
                 completed_at: null,
             },
         ];
@@ -1535,6 +1897,10 @@ describe("App", () => {
         await waitFor(() =>
             expect(mocks.fullCalendarProps.events).toHaveLength(1),
         );
+        expect(mocks.fullCalendarProps.events[0]).toMatchObject({
+            backgroundColor: "rgba(47, 128, 237, 0.32)",
+            borderColor: "#2f80ed",
+        });
 
         fireEvent.click(screen.getByLabelText("Show on calendar"));
 
@@ -1550,6 +1916,17 @@ describe("App", () => {
     });
 
     it("deletes a task from the task list context menu on right click", async () => {
+        const now = new Date();
+        const todayAtTen = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+            10,
+            0,
+            0,
+            0,
+        );
+
         mocks.tasks = [
             {
                 id: "task-delete",
@@ -1558,13 +1935,15 @@ describe("App", () => {
                 title: "Delete me",
                 notes: null,
                 completed: false,
-                scheduled_start: "2026-05-08T10:00:00Z",
-                scheduled_end: "2026-05-08T11:00:00Z",
+                scheduled_start: todayAtTen.toISOString(),
+                scheduled_end: new Date(
+                    todayAtTen.getTime() + 60 * 60 * 1000,
+                ).toISOString(),
                 due_at: null,
                 timezone: "Asia/Taipei",
                 priority: null,
-                created_at: "2026-05-07T00:00:00Z",
-                updated_at: "2026-05-07T00:00:00Z",
+                created_at: now.toISOString(),
+                updated_at: now.toISOString(),
                 completed_at: null,
             },
         ];
