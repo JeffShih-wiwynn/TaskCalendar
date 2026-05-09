@@ -14,6 +14,11 @@ This file records the architecture decisions that should stay stable unless the 
 - CalDAV/VTODO is postponed.
 - `.ics` export should come before full CalDAV sync.
 - Local/offline-first sync is postponed until the API and data model are stable.
+- Overdue filtering should be available from both the frontend view model and the backend list endpoint.
+- Recurrence should start as RRULE-compatible storage with concrete, independent task occurrences instead of a full override engine.
+- The current recurrence MVP uses `recurrence_rule` plus `recurrence_series_id` on task rows and materializes concrete occurrences up to a capped horizon.
+- Discord webhook notifications are the first MVP notification channel; push notifications remain future work.
+- `notification_enabled`, `notification_offset_minutes`, `notification_channel`, and `notification_sent_at` are the notification fields to preserve across API layers.
 
 ## Implications
 

@@ -22,10 +22,21 @@ Goal: make the web app pleasant to use on Android browsers before building nativ
 Status: mostly already implemented in the current repository, but keep this phase as a place for refinement and consistency work.
 
 - [x] Add `Today`, `Upcoming`, `Completed`, and `All tasks` views.
+- [x] Add an `Overdue` task view/filter.
 - [x] Show checkbox, title, scheduled range, and due date in each task row where available.
 - [x] Clicking a task opens an edit panel.
 - [x] Task changes PATCH the backend.
 - [ ] Keep polishing keyboard navigation, accessibility, and layout consistency as the sidebar evolves.
+
+## Phase 7.5: Recurrence and notifications MVP
+
+Goal: add the smallest safe recurrence and notification support that still fits the current task model.
+
+- [x] Add RRULE-compatible recurrence storage for daily, weekly, monthly, and yearly intervals.
+- [x] Materialize recurring occurrences as independent tasks so completion stays per occurrence.
+- [x] Keep cross-occurrence edits limited for now instead of trying to implement full override behavior.
+- [x] Add per-task notification fields and a Discord webhook worker.
+- [ ] Remove the one-year open-ended recurrence horizon only if/when we add a real recurrence scheduler.
 
 ## Phase 8: Authentication and multi-user support
 
