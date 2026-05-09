@@ -18,8 +18,15 @@ import interactionPlugin, {
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import {
+    AnimatePresence,
+    motion,
+    useAnimationControls,
+    useReducedMotion,
+} from "framer-motion";
+import {
     useCallback,
     useEffect,
+    useLayoutEffect,
     useMemo,
     useRef,
     useState,
@@ -53,9 +60,10 @@ import {
 } from "./api/tasks";
 
 type TaskState =
-    | { status: "loading" }
+    | { status: "loading"; tasks: ScheduledTask[] }
+    | { status: "refreshing"; tasks: ScheduledTask[] }
     | { status: "ready"; tasks: ScheduledTask[] }
-    | { status: "error"; message: string };
+    | { status: "error"; message: string; tasks: ScheduledTask[] };
 
 type TaskView =
     | "today"
@@ -66,6 +74,7 @@ type TaskView =
     | "all";
 type ThemeMode = "light" | "dark";
 type CalendarView = "dayGridMonth" | "timeGridWeek" | "timeGridDay";
+type CalendarTransitionKind = "neutral" | "view" | "prev" | "next" | "today";
 const unclassifiedCategoryFilter = "__unclassified__";
 const defaultSidebarWidth = 300;
 const minSidebarWidth = 240;
@@ -121,6 +130,13 @@ type DetailPanelMode = "create" | "edit" | null;
 type TaskRowDragEvent =
     | ReactMouseEvent<HTMLElement>
     | ReactPointerEvent<HTMLElement>;
+type TaskRowPointerState = {
+    taskId: string;
+    startX: number;
+    startY: number;
+    dragging: boolean;
+    orderAtStart: string[];
+};
 
 const initialFormState: TaskFormState = {
     title: "",
@@ -160,12 +176,26 @@ const calendarViews: Array<{ id: CalendarView; label: string }> = [
     { id: "timeGridDay", label: "Day" },
 ];
 
+const calendarTransitionEase = [0.22, 1, 0.36, 1] as const;
+const motionTimings = {
+    completion: { duration: 0.24, ease: "easeOut" as const },
+    panel: { duration: 0.26, ease: "easeOut" as const },
+    dropdown: { duration: 0.22, ease: "easeInOut" as const },
+    calendarView: { duration: 0.24, ease: calendarTransitionEase },
+    calendarDate: { duration: 0.2, ease: calendarTransitionEase },
+    calendarEventEnterMs: 190,
+    calendarEventAnimationHoldMs: 300,
+} as const;
+
 export function App() {
+    const prefersReducedMotion = useReducedMotion();
+    const calendarTransitionControls = useAnimationControls();
     const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialThemeMode);
     const [isSidebarOpen, setIsSidebarOpen] = useState(getInitialSidebarOpen);
     const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
     const [taskState, setTaskState] = useState<TaskState>({
         status: "loading",
+        tasks: [],
     });
     const [activeView, setActiveView] = useState<TaskView>("today");
     const [upcomingDays, setUpcomingDays] = useState(7);
@@ -224,34 +254,47 @@ export function App() {
         useState<CalendarView>("timeGridWeek");
     const [calendarTitle, setCalendarTitle] = useState("");
     const [calendarDate, setCalendarDate] = useState(new Date());
-    const [calendarRefreshToken, setCalendarRefreshToken] = useState(0);
     const [isYearPickerOpen, setIsYearPickerOpen] = useState(false);
     const [yearDraft, setYearDraft] = useState(
         String(new Date().getFullYear()),
     );
     const calendarRef = useRef<FullCalendar | null>(null);
+    const calendarTransitionTimeoutRef = useRef<number | null>(null);
+    const calendarEventAnimationKindRef =
+        useRef<CalendarTransitionKind>("neutral");
+    const calendarEventAnimationTimeoutRef = useRef<number | null>(null);
     const appShellRef = useRef<HTMLElement | null>(null);
     const taskListRef = useRef<HTMLElement | null>(null);
     const tasksRef = useRef<ScheduledTask[]>([]);
     const visibleTasksRef = useRef<ScheduledTask[]>([]);
-    const taskRowPointerStateRef = useRef<{
-        taskId: string;
-        startX: number;
-        startY: number;
-        dragging: boolean;
-    } | null>(null);
+    const taskRowPointerStateRef = useRef<TaskRowPointerState | null>(null);
     const taskRowWindowDragCleanupRef = useRef<(() => void) | null>(null);
     const draggedUnscheduledTaskIdRef = useRef<string | null>(null);
     const suppressTaskRowClickRef = useRef<string | null>(null);
+    const unscheduledOrderRef = useRef<string[]>(unscheduledOrder);
+    const unscheduledOrderSaveStateRef = useRef<{
+        saving: boolean;
+        queued: string[] | null;
+    }>({
+        saving: false,
+        queued: null,
+    });
     const titleInputRef = useRef<HTMLInputElement | null>(null);
     const createFormRef = useRef<HTMLFormElement | null>(null);
     const categoryNameInputRef = useRef<HTMLInputElement | null>(null);
     const yearInputRef = useRef<HTMLInputElement | null>(null);
+    const timeGridScrollTopRef = useRef<number | null>(null);
+    const locallyUpdatedTasksRef = useRef<Map<string, ScheduledTask>>(new Map());
 
-    const tasks = useMemo(
-        () => (taskState.status === "ready" ? taskState.tasks : []),
-        [taskState],
-    );
+    const tasks = taskState.tasks;
+    const isInitialTaskLoad =
+        taskState.status === "loading" && tasks.length === 0;
+    const isTaskRefreshing = taskState.status === "refreshing";
+    const taskLoadBannerMessage = isTaskRefreshing
+        ? "Refreshing tasks..."
+        : isInitialTaskLoad
+          ? "Loading tasks..."
+          : null;
     const selectedTask = selectedTaskId
         ? tasks.find((task) => task.id === selectedTaskId)
         : undefined;
@@ -316,6 +359,8 @@ export function App() {
             (task) => showCompletedOnCalendar || !task.completed,
         );
     }, [activeListId, showCompletedOnCalendar, tasks]);
+    const isTimeGridView =
+        calendarView === "timeGridWeek" || calendarView === "timeGridDay";
 
     const events = useMemo<EventInput[]>(() => {
         return calendarTasks
@@ -353,34 +398,83 @@ export function App() {
     }, [selectedTask]);
 
     const refreshTasks = useCallback(async () => {
-        setTaskState({ status: "loading" });
+        setTaskState((current) => ({
+            status: current.tasks.length > 0 ? "refreshing" : "loading",
+            tasks: current.tasks,
+        }));
 
         try {
             const loadedTasks = await listTasks();
-            setTaskState({ status: "ready", tasks: loadedTasks });
-        } catch (error) {
             setTaskState({
+                status: "ready",
+                tasks: mergeLocallyUpdatedTasks(
+                    loadedTasks,
+                    locallyUpdatedTasksRef.current,
+                ),
+            });
+        } catch (error) {
+            setTaskState((current) => ({
                 status: "error",
                 message:
                     error instanceof Error
                         ? error.message
                         : "Unable to load tasks",
-            });
+                tasks: current.tasks,
+            }));
         }
     }, []);
 
     const replaceTaskInState = useCallback((updatedTask: ScheduledTask) => {
+        locallyUpdatedTasksRef.current.set(updatedTask.id, updatedTask);
         setTaskState((current) => {
-            if (current.status !== "ready") {
-                return current;
-            }
+            const hasTask = current.tasks.some(
+                (task) => task.id === updatedTask.id,
+            );
+            const nextTasks = hasTask
+                ? current.tasks.map((task) =>
+                      task.id === updatedTask.id ? updatedTask : task,
+                  )
+                : [...current.tasks, updatedTask];
 
-            return {
-                status: "ready",
-                tasks: current.tasks.map((task) =>
-                    task.id === updatedTask.id ? updatedTask : task,
-                ),
-            };
+            return current.status === "error"
+                ? {
+                      status: "error",
+                      message: current.message,
+                      tasks: nextTasks,
+                  }
+                : {
+                      status: current.status,
+                      tasks: nextTasks,
+                  };
+        });
+    }, []);
+
+    const replaceTasksInState = useCallback((updatedTasks: ScheduledTask[]) => {
+        if (updatedTasks.length === 0) {
+            return;
+        }
+
+        updatedTasks.forEach((updatedTask) => {
+            locallyUpdatedTasksRef.current.set(updatedTask.id, updatedTask);
+        });
+        const updatedTaskById = new Map(
+            updatedTasks.map((updatedTask) => [updatedTask.id, updatedTask]),
+        );
+        setTaskState((current) => {
+            const nextTasks = current.tasks.map(
+                (task) => updatedTaskById.get(task.id) ?? task,
+            );
+
+            return current.status === "error"
+                ? {
+                      status: "error",
+                      message: current.message,
+                      tasks: nextTasks,
+                  }
+                : {
+                      status: current.status,
+                      tasks: nextTasks,
+                  };
         });
     }, []);
 
@@ -441,22 +535,24 @@ export function App() {
             .map((task) => task.id);
         setUnscheduledOrder((current) => {
             const next = reconcileTaskOrder(current, unscheduledTaskIds);
+            unscheduledOrderRef.current = next;
             return areStringArraysEqual(current, next) ? current : next;
         });
     }, [tasks]);
 
     useEffect(() => {
+        unscheduledOrderRef.current = unscheduledOrder;
         saveUnscheduledOrder(unscheduledOrder);
     }, [unscheduledOrder]);
 
     useEffect(() => {
         const taskListElement = taskListRef.current;
-        if (!taskListElement || detailPanelMode || activeView === "unscheduled") {
+        if (!taskListElement || detailPanelMode || activeView !== "unscheduled") {
             return;
         }
 
         const draggable = new Draggable(taskListElement, {
-            itemSelector: ".task-row[data-task-id]",
+            itemSelector: ".task-drag-handle[data-task-id]",
             minDistance: 6,
             eventData(taskRowElement) {
                 const taskId = taskRowElement.getAttribute("data-task-id");
@@ -480,10 +576,137 @@ export function App() {
     }, [activeView, detailPanelMode]);
 
     useEffect(() => {
+        if (!isTimeGridView) {
+            return;
+        }
+
+        const scroller = appShellRef.current?.querySelector<HTMLElement>(
+            ".calendar-panel .fc-timegrid-body .fc-scroller",
+        );
+        if (!scroller) {
+            return;
+        }
+
+        const handleScroll = () => {
+            timeGridScrollTopRef.current = scroller.scrollTop;
+        };
+
+        timeGridScrollTopRef.current = scroller.scrollTop;
+        scroller.addEventListener("scroll", handleScroll, { passive: true });
+
+        return () => {
+            scroller.removeEventListener("scroll", handleScroll);
+        };
+    }, [isTimeGridView]);
+
+    useLayoutEffect(() => {
+        if (!isTimeGridView || timeGridScrollTopRef.current == null) {
+            return;
+        }
+
+        const scroller = appShellRef.current?.querySelector<HTMLElement>(
+            ".calendar-panel .fc-timegrid-body .fc-scroller",
+        );
+        if (!scroller) {
+            return;
+        }
+
+        scroller.scrollTop = timeGridScrollTopRef.current;
+    }, [calendarDate, calendarView, isTimeGridView]);
+
+    useEffect(() => {
         if (isYearPickerOpen) {
             window.setTimeout(() => yearInputRef.current?.focus(), 0);
         }
     }, [isYearPickerOpen]);
+
+    useEffect(() => {
+        return () => {
+            if (calendarTransitionTimeoutRef.current !== null) {
+                window.clearTimeout(calendarTransitionTimeoutRef.current);
+                calendarTransitionTimeoutRef.current = null;
+            }
+            if (calendarEventAnimationTimeoutRef.current !== null) {
+                window.clearTimeout(calendarEventAnimationTimeoutRef.current);
+                calendarEventAnimationTimeoutRef.current = null;
+            }
+            calendarEventAnimationKindRef.current = "neutral";
+            calendarTransitionControls.stop();
+        };
+    }, [calendarTransitionControls]);
+
+    const startCalendarTransition = useCallback(
+        (kind: "view" | "prev" | "next" | "today") => {
+            if (prefersReducedMotion) {
+                calendarEventAnimationKindRef.current = "neutral";
+                return;
+            }
+
+            if (calendarTransitionTimeoutRef.current !== null) {
+                window.clearTimeout(calendarTransitionTimeoutRef.current);
+                calendarTransitionTimeoutRef.current = null;
+            }
+            if (calendarEventAnimationTimeoutRef.current !== null) {
+                window.clearTimeout(calendarEventAnimationTimeoutRef.current);
+                calendarEventAnimationTimeoutRef.current = null;
+            }
+
+            calendarEventAnimationKindRef.current = kind;
+            const startState =
+                kind === "view"
+                    ? {
+                          opacity: 0.94,
+                          x: 0,
+                          y: 4,
+                          scale: 0.994,
+                      }
+                    : kind === "prev"
+                      ? {
+                            opacity: 0.95,
+                            x: 8,
+                            y: 0,
+                            scale: 1,
+                        }
+                      : kind === "next"
+                        ? {
+                              opacity: 0.95,
+                              x: -8,
+                              y: 0,
+                              scale: 1,
+                          }
+                        : {
+                              opacity: 0.96,
+                              x: 0,
+                              y: 0,
+                              scale: 0.996,
+                          };
+
+            const settleTransition =
+                kind === "view"
+                    ? motionTimings.calendarView
+                    : motionTimings.calendarDate;
+
+            calendarTransitionControls.stop();
+            calendarTransitionControls.set(startState);
+
+            calendarTransitionTimeoutRef.current = window.setTimeout(() => {
+                void calendarTransitionControls.start({
+                    opacity: 1,
+                    x: 0,
+                    y: 0,
+                    scale: 1,
+                    transition: settleTransition,
+                });
+                calendarTransitionTimeoutRef.current = null;
+            }, kind === "view" ? 120 : 90);
+
+            calendarEventAnimationTimeoutRef.current = window.setTimeout(() => {
+                calendarEventAnimationKindRef.current = "neutral";
+                calendarEventAnimationTimeoutRef.current = null;
+            }, motionTimings.calendarEventAnimationHoldMs);
+        },
+        [calendarTransitionControls, prefersReducedMotion],
+    );
 
     const handleDatesSet = useCallback(
         (dateInfo: DatesSetArg) => {
@@ -533,6 +756,7 @@ export function App() {
 
             try {
                 await deleteTask(taskId, { deleteScope });
+                locallyUpdatedTasksRef.current.delete(taskId);
                 setPendingTaskDelete(null);
 
                 if (source === "detail") {
@@ -579,9 +803,6 @@ export function App() {
                     await updateTask(taskId, updates);
                 }
                 setPendingTaskEdit(null);
-                if (source === "calendar") {
-                    setCalendarRefreshToken((current) => current + 1);
-                }
                 reloadTasks();
                 if (source === "form") {
                     closeDetailPanel();
@@ -610,20 +831,24 @@ export function App() {
         }
 
         if (direction === "prev") {
+            startCalendarTransition("prev");
             api.prev();
         } else {
+            startCalendarTransition("next");
             api.next();
         }
-    }, []);
+    }, [startCalendarTransition]);
 
     const goToToday = useCallback(() => {
+        startCalendarTransition("today");
         calendarRef.current?.getApi().today();
-    }, []);
+    }, [startCalendarTransition]);
 
     const changeCalendarView = useCallback((nextView: CalendarView) => {
+        startCalendarTransition("view");
         calendarRef.current?.getApi().changeView(nextView);
         setIsYearPickerOpen(false);
-    }, []);
+    }, [startCalendarTransition]);
 
     const submitYearChange = useCallback(
         (event: FormEvent<HTMLFormElement>) => {
@@ -639,10 +864,11 @@ export function App() {
             if (calendarView === "dayGridMonth") {
                 nextDate.setDate(1);
             }
+            startCalendarTransition("today");
             calendarRef.current?.getApi().gotoDate(nextDate);
             setIsYearPickerOpen(false);
         },
-        [calendarDate, calendarView, yearDraft],
+        [calendarDate, calendarView, startCalendarTransition, yearDraft],
     );
 
     const handleEventDrop = useCallback(
@@ -727,7 +953,7 @@ export function App() {
             try {
                 const updatedTask = await updateTask(task.id, updates);
                 replaceTaskInState(updatedTask);
-                setCalendarRefreshToken((current) => current + 1);
+                void refreshTasks();
             } catch (error) {
                 setFormError(
                     error instanceof Error
@@ -736,7 +962,7 @@ export function App() {
                 );
             }
         },
-        [replaceTaskInState],
+        [refreshTasks, replaceTaskInState],
     );
 
     const openCreatePanel = useCallback(
@@ -829,23 +1055,98 @@ export function App() {
         [reloadTasks],
     );
 
+    const completionTransition = useMemo(
+        () =>
+            prefersReducedMotion
+                ? { duration: 0 }
+                : motionTimings.completion,
+        [prefersReducedMotion],
+    );
+    const panelTransition = useMemo(
+        () =>
+            prefersReducedMotion
+                ? { duration: 0 }
+                : motionTimings.panel,
+        [prefersReducedMotion],
+    );
+    const panelVariants = useMemo(
+        () => ({
+            hidden: { opacity: 0, x: 12 },
+            visible: { opacity: 1, x: 0 },
+            exit: { opacity: 0, x: 12 },
+        }),
+        [],
+    );
+    const dropdownTransition = useMemo(
+        () =>
+            prefersReducedMotion
+                ? { duration: 0 }
+                : motionTimings.dropdown,
+        [prefersReducedMotion],
+    );
+    const dropdownVariants = useMemo(
+        () => ({
+            hidden: { opacity: 0, y: -4, scale: 0.98 },
+            visible: { opacity: 1, y: 0, scale: 1 },
+            exit: { opacity: 0, y: -4, scale: 0.98 },
+        }),
+        [],
+    );
+    const taskContentVariants = useMemo(
+        () => ({
+            hidden: { opacity: 0, y: 8 },
+            visible: { opacity: 1, y: 0 },
+            exit: { opacity: 0, y: -8 },
+        }),
+        [],
+    );
+    const taskContentKey = `${activeView}-${activeListId ?? "all"}-${upcomingDays}-${showCompletedOnCalendar ? "completed-on" : "completed-off"}`;
+
     const renderEventContent = useCallback(
         (eventInfo: EventContentArg) => {
-            const task = eventInfo.event.extendedProps.task as ScheduledTask;
+            const task =
+                (eventInfo.event.extendedProps.task as ScheduledTask | undefined) ??
+                tasksRef.current.find((item) => item.id === eventInfo.event.id);
+
+            if (!task) {
+                return (
+                    <div className="calendar-task">
+                        <span className="calendar-task-title task-title">
+                            {eventInfo.event.title}
+                        </span>
+                    </div>
+                );
+            }
 
             return (
                 <div className="calendar-task">
-                    <input
+                    <motion.input
                         type="checkbox"
+                        className="task-checkbox"
                         checked={task.completed}
+                        animate={{
+                            scale: task.completed ? [1, 1.08, 1] : 1,
+                        }}
+                        transition={completionTransition}
                         onChange={() => void handleCheckboxChange(task)}
                         onClick={(event) => event.stopPropagation()}
+                        aria-label={`Toggle ${task.title}`}
                     />
-                    <span>{task.title}</span>
+                    <motion.span
+                        className={
+                            task.completed
+                                ? "calendar-task-title task-title completed"
+                                : "calendar-task-title task-title"
+                        }
+                        animate={{ opacity: task.completed ? 0.72 : 1 }}
+                        transition={completionTransition}
+                    >
+                        {task.title}
+                    </motion.span>
                 </div>
             );
         },
-        [handleCheckboxChange],
+        [completionTransition, handleCheckboxChange],
     );
 
     const handleEventClick = useCallback((clickInfo: EventClickArg) => {
@@ -856,6 +1157,57 @@ export function App() {
         setSelectedTaskId(clickInfo.event.id);
         setContextMenu(null);
     }, []);
+
+    const applyLocalUnscheduledOrder = useCallback((nextOrder: string[]) => {
+        unscheduledOrderRef.current = nextOrder;
+        setUnscheduledOrder(nextOrder);
+    }, []);
+
+    const persistUnscheduledOrder = useCallback(
+        (nextOrder: string[]) => {
+            const saveState = unscheduledOrderSaveStateRef.current;
+            saveState.queued = nextOrder;
+            if (saveState.saving) {
+                return;
+            }
+
+            saveState.saving = true;
+            void (async () => {
+                while (saveState.queued) {
+                    const orderToSave = saveState.queued;
+                    saveState.queued = null;
+
+                    try {
+                        const updates = buildUnscheduledOrderUpdates(
+                            orderToSave,
+                            tasksRef.current,
+                        );
+                        if (updates.length === 0) {
+                            continue;
+                        }
+
+                        const updatedTasks = await Promise.all(
+                            updates.map(({ taskId, unscheduled_order }) =>
+                                updateTask(taskId, { unscheduled_order }),
+                            ),
+                        );
+                        replaceTasksInState(updatedTasks);
+                    } catch (error) {
+                        setFormError(
+                            error instanceof Error
+                                ? error.message
+                                : "Unable to save no time task order",
+                        );
+                        applyLocalUnscheduledOrder([]);
+                        void refreshTasks();
+                    }
+                }
+
+                saveState.saving = false;
+            })();
+        },
+        [applyLocalUnscheduledOrder, refreshTasks, replaceTasksInState],
+    );
 
     const moveTaskRowDuringDrag = useCallback(
         (
@@ -893,18 +1245,21 @@ export function App() {
                 return;
             }
 
-            setUnscheduledOrder((current) =>
-                moveTaskIdRelative(
-                    current,
-                    taskId,
-                    dropTarget.targetTaskId,
-                    dropTarget.position,
-                ),
+            const nextOrder = moveTaskIdRelative(
+                unscheduledOrderRef.current,
+                taskId,
+                dropTarget.targetTaskId,
+                dropTarget.position,
             );
+            if (areStringArraysEqual(unscheduledOrderRef.current, nextOrder)) {
+                return;
+            }
+
+            applyLocalUnscheduledOrder(nextOrder);
             pointerState.startX = clientX;
             pointerState.startY = clientY;
         },
-        [activeView],
+        [activeView, applyLocalUnscheduledOrder],
     );
 
     const handleTaskRowPointerMove = useCallback(
@@ -939,9 +1294,18 @@ export function App() {
             suppressTaskRowClickRef.current = pointerState.dragging
                 ? taskId
                 : null;
+            if (
+                pointerState.dragging &&
+                !areStringArraysEqual(
+                    pointerState.orderAtStart,
+                    unscheduledOrderRef.current,
+                )
+            ) {
+                persistUnscheduledOrder(unscheduledOrderRef.current);
+            }
             taskRowPointerStateRef.current = null;
         },
-        [],
+        [persistUnscheduledOrder],
     );
 
     const handleTaskRowPointerDown = useCallback(
@@ -959,6 +1323,7 @@ export function App() {
                 startX: event.clientX,
                 startY: event.clientY,
                 dragging: false,
+                orderAtStart: unscheduledOrderRef.current,
             };
             suppressTaskRowClickRef.current = null;
             if (
@@ -1003,28 +1368,23 @@ export function App() {
         ],
     );
 
-    const moveUnscheduledTask = useCallback(
-        (taskId: string, offset: -1 | 1) => {
-            if (activeView !== "unscheduled") {
-                return;
-            }
-
-            setUnscheduledOrder((current) =>
-                moveTaskIdByOffset(current, taskId, offset),
-            );
-        },
-        [activeView],
-    );
-
     const moveUnscheduledTaskToTop = useCallback(
         (taskId: string) => {
             if (activeView !== "unscheduled") {
                 return;
             }
 
-            setUnscheduledOrder((current) => moveTaskIdToTop(current, taskId));
+            const nextOrder = moveTaskIdToTop(unscheduledOrderRef.current, taskId);
+            if (
+                areStringArraysEqual(unscheduledOrderRef.current, nextOrder)
+            ) {
+                return;
+            }
+
+            applyLocalUnscheduledOrder(nextOrder);
+            persistUnscheduledOrder(nextOrder);
         },
-        [activeView],
+        [activeView, applyLocalUnscheduledOrder, persistUnscheduledOrder],
     );
 
     const promptRecurringTaskDelete = useCallback(
@@ -1044,6 +1404,19 @@ export function App() {
     );
 
     const handleEventDidMount = useCallback((mountInfo: EventMountArg) => {
+        if (!mountInfo.isMirror) {
+            const animationKind = calendarEventAnimationKindRef.current;
+            mountInfo.el.style.setProperty(
+                "--calendar-task-event-enter-duration",
+                `${motionTimings.calendarEventEnterMs}ms`,
+            );
+            mountInfo.el.classList.add("calendar-task-event");
+            mountInfo.el.classList.add("calendar-task-event--enter");
+            mountInfo.el.classList.add(
+                `calendar-task-event--enter-${animationKind}`,
+            );
+        }
+
         const handleContextMenu = (event: MouseEvent) => {
             event.preventDefault();
             setSelectedTaskId(mountInfo.event.id);
@@ -1128,6 +1501,29 @@ export function App() {
             setIsSaving(false);
         }
     };
+
+    const handleMoveToNoTime = useCallback(() => {
+        if (detailPanelMode === "create") {
+            setFormState((current) => ({
+                ...current,
+                scheduled_start: "",
+                scheduled_end: "",
+            }));
+            return;
+        }
+
+        if (detailPanelMode === "edit") {
+            setEditState((current) =>
+                current
+                    ? {
+                          ...current,
+                          scheduled_start: "",
+                          scheduled_end: "",
+                      }
+                    : current,
+            );
+        }
+    }, [detailPanelMode]);
 
     const handleEditSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -1490,9 +1886,10 @@ export function App() {
         window.addEventListener("pointerup", handlePointerUp);
     };
 
-    const appShellStyle: CSSProperties | undefined = isSidebarOpen
-        ? ({ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties)
-        : undefined;
+    const appShellStyle: CSSProperties = {
+        "--sidebar-width": `${isSidebarOpen ? Math.max(240, sidebarWidth) : 0}px`,
+        "--sidebar-resizer-width": `${isSidebarOpen ? 12 : 0}px`,
+    } as CSSProperties;
 
     return (
         <main
@@ -1506,8 +1903,11 @@ export function App() {
                 setIsCategoryMenuOpen(false);
             }}
         >
-            {isSidebarOpen && (
-                <aside className="task-sidebar">
+            <aside
+                className={`task-sidebar ${isSidebarOpen ? "task-sidebar-open" : "task-sidebar-collapsed"}`}
+                aria-hidden={!isSidebarOpen}
+                inert={!isSidebarOpen}
+            >
                     <div className="sidebar-header">
                     <p className="eyebrow">Scheduled Task Calendar</p>
                     <div className="sidebar-header-actions">
@@ -1528,35 +1928,47 @@ export function App() {
                                 >
                                     <span aria-hidden="true">☰</span>
                                 </button>
-                                {isSettingsMenuOpen && (
-                                    <div className="settings-menu-panel">
-                                        <button
-                                            type="button"
-                                            className="filter-option"
-                                            onClick={() => {
-                                                setThemeMode(
-                                                    themeMode === "dark"
-                                                        ? "light"
-                                                        : "dark",
-                                                );
-                                                setIsSettingsMenuOpen(false);
-                                            }}
+                                <AnimatePresence initial={false}>
+                                    {isSettingsMenuOpen && (
+                                        <motion.div
+                                            key="settings-menu"
+                                            className="settings-menu-panel"
+                                            variants={dropdownVariants}
+                                            initial="hidden"
+                                            animate="visible"
+                                            exit="exit"
+                                            transition={dropdownTransition}
                                         >
-                                            Switch to{" "}
-                                            {themeMode === "dark"
-                                                ? "light"
-                                                : "dark"}{" "}
-                                            mode
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="filter-option"
-                                            onClick={openWebhookSettings}
-                                        >
-                                            Webhook settings
-                                        </button>
-                                </div>
-                            )}
+                                            <button
+                                                type="button"
+                                                className="filter-option"
+                                                onClick={() => {
+                                                    setThemeMode(
+                                                        themeMode === "dark"
+                                                            ? "light"
+                                                            : "dark",
+                                                    );
+                                                    setIsSettingsMenuOpen(
+                                                        false,
+                                                    );
+                                                }}
+                                            >
+                                                Switch to{" "}
+                                                {themeMode === "dark"
+                                                    ? "light"
+                                                    : "dark"}{" "}
+                                                mode
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="filter-option"
+                                                onClick={openWebhookSettings}
+                                            >
+                                                Webhook settings
+                                            </button>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
                         </div>
                         <button
                             type="button"
@@ -1569,9 +1981,17 @@ export function App() {
                     </div>
                 </div>
 
-                    {!detailPanelMode && (
-                        <section className="filter-section">
-                            {isWebhookSettingsOpen && (
+                    <AnimatePresence initial={false} mode="wait">
+                        {!detailPanelMode && isWebhookSettingsOpen && (
+                            <motion.section
+                                key="webhook-settings"
+                                className="filter-section"
+                                variants={panelVariants}
+                                initial="hidden"
+                                animate="visible"
+                                exit="exit"
+                                transition={panelTransition}
+                            >
                                 <form
                                     className="task-form webhook-settings-form"
                                     onSubmit={(event) =>
@@ -1675,9 +2095,9 @@ export function App() {
                                         </button>
                                     </div>
                                 </form>
-                            )}
-                        </section>
-                    )}
+                            </motion.section>
+                        )}
+                    </AnimatePresence>
 
                     {!detailPanelMode && (
                         <section
@@ -1710,29 +2130,41 @@ export function App() {
                                             ▾
                                         </span>
                                     </button>
-                                    {isViewMenuOpen && (
-                                        <div
-                                            className="filter-menu"
-                                            role="listbox"
-                                            aria-label="Task view options"
-                                        >
-                                            {taskViews.map((view) => (
-                                                <button
-                                                    key={view.id}
-                                                    type="button"
-                                                    className={`filter-option ${activeView === view.id ? "active" : ""}`}
-                                                    onClick={() => {
-                                                        setActiveView(view.id);
-                                                        setIsViewMenuOpen(
-                                                            false,
-                                                        );
-                                                    }}
-                                                >
-                                                    {view.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
+                                    <AnimatePresence initial={false}>
+                                        {isViewMenuOpen && (
+                                            <motion.div
+                                                key="view-menu"
+                                                className="filter-menu"
+                                                role="listbox"
+                                                aria-label="Task view options"
+                                                variants={dropdownVariants}
+                                                initial="hidden"
+                                                animate="visible"
+                                                exit="exit"
+                                                transition={
+                                                    dropdownTransition
+                                                }
+                                            >
+                                                {taskViews.map((view) => (
+                                                    <button
+                                                        key={view.id}
+                                                        type="button"
+                                                        className={`filter-option ${activeView === view.id ? "active" : ""}`}
+                                                        onClick={() => {
+                                                            setActiveView(
+                                                                view.id,
+                                                            );
+                                                            setIsViewMenuOpen(
+                                                                false,
+                                                            );
+                                                        }}
+                                                    >
+                                                        {view.label}
+                                                    </button>
+                                                ))}
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
                                 </div>
                             </div>
 
@@ -1812,106 +2244,115 @@ export function App() {
                                             ▾
                                         </span>
                                     </button>
-                                    {isCategoryMenuOpen && (
-                                        <div
-                                            className="filter-menu"
-                                            role="listbox"
-                                            aria-label="Task category options"
-                                        >
-                                            <button
-                                                type="button"
-                                                className={`filter-option ${activeListId === null ? "active" : ""}`}
-                                                onClick={() => {
-                                                    setActiveListId(null);
-                                                    setIsCategoryMenuOpen(
-                                                        false,
-                                                    );
-                                                }}
+                                    <AnimatePresence initial={false}>
+                                        {isCategoryMenuOpen && (
+                                            <motion.div
+                                                key="category-menu"
+                                                className="filter-menu"
+                                                role="listbox"
+                                                aria-label="Task category options"
+                                                variants={dropdownVariants}
+                                                initial="hidden"
+                                                animate="visible"
+                                                exit="exit"
+                                                transition={
+                                                    dropdownTransition
+                                                }
                                             >
-                                                <span
-                                                    className="category-swatch category-swatch-empty"
-                                                    aria-hidden="true"
-                                                />
-                                                <span>All</span>
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className={`filter-option ${activeListId === unclassifiedCategoryFilter ? "active" : ""}`}
-                                                onClick={() => {
-                                                    setActiveListId(
-                                                        unclassifiedCategoryFilter,
-                                                    );
-                                                    setIsCategoryMenuOpen(
-                                                        false,
-                                                    );
-                                                }}
-                                            >
-                                                <span
-                                                    className="category-swatch category-swatch-empty"
-                                                    aria-hidden="true"
-                                                />
-                                                <span>Unclassified</span>
-                                            </button>
-                                            {taskLists.map((taskList) => (
-                                                <div
-                                                    key={taskList.id}
-                                                    className={`filter-option-row ${activeListId === taskList.id ? "active" : ""}`}
+                                                <button
+                                                    type="button"
+                                                    className={`filter-option ${activeListId === null ? "active" : ""}`}
+                                                    onClick={() => {
+                                                        setActiveListId(null);
+                                                        setIsCategoryMenuOpen(
+                                                            false,
+                                                        );
+                                                    }}
                                                 >
-                                                    <button
-                                                        type="button"
-                                                        className={`filter-option ${activeListId === taskList.id ? "active" : ""}`}
-                                                        onClick={() => {
-                                                            setActiveListId(
-                                                                taskList.id,
-                                                            );
-                                                            setIsCategoryMenuOpen(
-                                                                false,
-                                                            );
-                                                        }}
-                                                        onContextMenu={(
-                                                            event,
-                                                        ) => {
-                                                            event.preventDefault();
-                                                            setContextMenu({
-                                                                kind: "category",
-                                                                id: taskList.id,
-                                                                x: event.clientX,
-                                                                y: event.clientY,
-                                                            });
-                                                        }}
+                                                    <span
+                                                        className="category-swatch category-swatch-empty"
+                                                        aria-hidden="true"
+                                                    />
+                                                    <span>All</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={`filter-option ${activeListId === unclassifiedCategoryFilter ? "active" : ""}`}
+                                                    onClick={() => {
+                                                        setActiveListId(
+                                                            unclassifiedCategoryFilter,
+                                                        );
+                                                        setIsCategoryMenuOpen(
+                                                            false,
+                                                        );
+                                                    }}
+                                                >
+                                                    <span
+                                                        className="category-swatch category-swatch-empty"
+                                                        aria-hidden="true"
+                                                    />
+                                                    <span>Unclassified</span>
+                                                </button>
+                                                {taskLists.map((taskList) => (
+                                                    <div
+                                                        key={taskList.id}
+                                                        className={`filter-option-row ${activeListId === taskList.id ? "active" : ""}`}
                                                     >
-                                                        <span
-                                                            className="category-swatch"
-                                                            style={{
-                                                                backgroundColor:
-                                                                    taskList.color,
+                                                        <button
+                                                            type="button"
+                                                            className={`filter-option ${activeListId === taskList.id ? "active" : ""}`}
+                                                            onClick={() => {
+                                                                setActiveListId(
+                                                                    taskList.id,
+                                                                );
+                                                                setIsCategoryMenuOpen(
+                                                                    false,
+                                                                );
                                                             }}
-                                                            aria-hidden="true"
-                                                        />
-                                                        <span>
-                                                            {taskList.name}
-                                                        </span>
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        className="filter-option-action"
-                                                        aria-label={`Edit ${taskList.name}`}
-                                                        onClick={() =>
-                                                            startEditingTaskList(
-                                                                taskList,
-                                                            )
-                                                        }
-                                                    >
-                                                        <span
-                                                            aria-hidden="true"
-                                                            className="filter-option-action-icon"
+                                                            onContextMenu={(
+                                                                event,
+                                                            ) => {
+                                                                event.preventDefault();
+                                                                setContextMenu({
+                                                                    kind: "category",
+                                                                    id: taskList.id,
+                                                                    x: event.clientX,
+                                                                    y: event.clientY,
+                                                                });
+                                                            }}
                                                         >
-                                                            ⚙
-                                                        </span>
-                                                    </button>
-                                                </div>
-                                            ))}
-                                            <div className="filter-menu-footer">
+                                                            <span
+                                                                className="category-swatch"
+                                                                style={{
+                                                                    backgroundColor:
+                                                                        taskList.color,
+                                                                }}
+                                                                aria-hidden="true"
+                                                            />
+                                                            <span>
+                                                                {taskList.name}
+                                                            </span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="filter-option-action"
+                                                            aria-label={`Edit ${taskList.name}`}
+                                                            onClick={() =>
+                                                                startEditingTaskList(
+                                                                    taskList,
+                                                                )
+                                                            }
+                                                        >
+                                                            <span
+                                                                aria-hidden="true"
+                                                                className="filter-option-action-icon"
+                                                            >
+                                                                ⚙
+                                                            </span>
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                                <div className="filter-menu-footer">
                                                 {editingTaskListId ? (
                                                     <form
                                                         className="category-inline-form"
@@ -2062,8 +2503,9 @@ export function App() {
                                                     </button>
                                                 )}
                                             </div>
-                                        </div>
+                                        </motion.div>
                                     )}
+                                </AnimatePresence>
                                 </div>
                             </div>
 
@@ -2080,15 +2522,22 @@ export function App() {
                         </section>
                     )}
 
-                    {detailPanelMode && (
-                        <section
-                            className="task-detail-panel"
-                            aria-label={
-                                detailPanelMode === "create"
-                                    ? "Create task panel"
-                                    : "Edit task panel"
-                            }
-                        >
+                    <AnimatePresence initial={false} mode="wait">
+                        {detailPanelMode && (
+                            <motion.section
+                                key={detailPanelMode}
+                                className="task-detail-panel"
+                                aria-label={
+                                    detailPanelMode === "create"
+                                        ? "Create task panel"
+                                        : "Edit task panel"
+                                }
+                                variants={panelVariants}
+                                initial="hidden"
+                                animate="visible"
+                                exit="exit"
+                                transition={panelTransition}
+                            >
                             <div className="task-detail-header">
                                 <h2>
                                     {detailPanelMode === "create"
@@ -2196,6 +2645,15 @@ export function App() {
                                                 })
                                             }
                                         />
+                                    </div>
+                                    <div className="task-form-row">
+                                        <button
+                                            type="button"
+                                            className="task-form-no-time-button"
+                                            onClick={handleMoveToNoTime}
+                                        >
+                                            Clear time
+                                        </button>
                                     </div>
                                     <div className="task-form-row">
                                         <div className="task-form-recurring-inline">
@@ -2389,6 +2847,15 @@ export function App() {
                                         />
                                     </div>
                                     <div className="task-form-row">
+                                        <button
+                                            type="button"
+                                            className="task-form-no-time-button"
+                                            onClick={handleMoveToNoTime}
+                                        >
+                                            Clear time
+                                        </button>
+                                    </div>
+                                    <div className="task-form-row">
                                         <div className="task-form-recurring-inline">
                                             <div className="task-form-recurring-top">
                                                 <label>
@@ -2516,6 +2983,7 @@ export function App() {
                                             <span>Completed</span>
                                             <input
                                                 type="checkbox"
+                                                className="task-checkbox"
                                                 checked={editState.completed}
                                                 onChange={(event) =>
                                                     setEditState({
@@ -2547,8 +3015,9 @@ export function App() {
                                     Select a task to edit it.
                                 </p>
                             )}
-                        </section>
-                    )}
+                            </motion.section>
+                        )}
+                    </AnimatePresence>
 
                     {!detailPanelMode && (
                         <section
@@ -2556,225 +3025,366 @@ export function App() {
                             className="task-list"
                             aria-label={`${activeView} tasks`}
                         >
-                            {taskState.status === "loading" && (
-                                <p className="muted">Loading tasks...</p>
-                            )}
-                            {taskState.status === "error" && (
-                                <p className="form-error">
-                                    {taskState.message}
-                                </p>
-                            )}
-                            {taskState.status === "ready" &&
-                                orderedVisibleTasks.length === 0 && (
-                                    <p className="muted">
-                                        No tasks in this view.
-                                    </p>
+                            <motion.div
+                                key={taskContentKey}
+                                className="task-list-content"
+                                variants={taskContentVariants}
+                                initial="hidden"
+                                animate="visible"
+                                transition={dropdownTransition}
+                            >
+                                {isInitialTaskLoad && (
+                                    <motion.p
+                                        className="muted"
+                                        variants={dropdownVariants}
+                                        initial="hidden"
+                                        animate="visible"
+                                        transition={dropdownTransition}
+                                    >
+                                        Loading tasks...
+                                    </motion.p>
                                 )}
-                            {orderedVisibleTasks.map((task, taskIndex) => (
-                                <div
-                                    key={task.id}
-                                    role="button"
-                                    tabIndex={0}
-                                    data-task-id={task.id}
-                                    className={`task-row ${activeView === "unscheduled" ? "task-row--reorderable" : ""} ${selectedTaskId === task.id ? "selected" : ""}`}
-                                    style={{
-                                        borderLeftColor: taskCategoryColor(
-                                            task,
-                                            categoryColorById,
-                                        ),
-                                        accentColor: taskCategoryColor(
-                                            task,
-                                            categoryColorById,
-                                        ),
-                                    }}
-                                    onPointerDown={(event) =>
-                                        handleTaskRowPointerDown(task.id, event)
-                                    }
-                                    onMouseDown={(event) =>
-                                        handleTaskRowPointerDown(
-                                            task.id,
-                                            event,
-                                            true,
-                                        )
-                                    }
-                                    onSelectStart={
-                                        activeView === "unscheduled"
-                                            ? (event) => event.preventDefault()
-                                            : undefined
-                                    }
-                                    onPointerMove={(event) =>
-                                        handleTaskRowPointerMove(task.id, event)
-                                    }
-                                    onMouseMove={(event) =>
-                                        handleTaskRowPointerMove(task.id, event)
-                                    }
-                                    onPointerUp={(event) =>
-                                        finishTaskRowPointerInteraction(
-                                            task.id,
-                                            event,
-                                        )
-                                    }
-                                    onMouseUp={(event) =>
-                                        finishTaskRowPointerInteraction(
-                                            task.id,
-                                            event,
-                                        )
-                                    }
-                                    onPointerCancel={(event) => {
-                                        event.currentTarget.releasePointerCapture?.(
-                                            event.pointerId,
-                                        );
-                                        draggedUnscheduledTaskIdRef.current =
-                                            null;
-                                        taskRowPointerStateRef.current = null;
-                                        suppressTaskRowClickRef.current = null;
-                                    }}
-                                    onClick={() => {
-                                        if (
-                                            suppressTaskRowClickRef.current ===
-                                            task.id
-                                        ) {
-                                            suppressTaskRowClickRef.current =
-                                                null;
-                                            return;
-                                        }
-                                        setDetailPanelMode("edit");
-                                        setSelectedTaskId(task.id);
-                                    }}
-                                    onKeyDown={(event) => {
-                                        if (
-                                            event.target !==
-                                                event.currentTarget ||
-                                            (event.key !== "Enter" &&
-                                                event.key !== " ")
-                                        ) {
-                                            return;
-                                        }
-
-                                        event.preventDefault();
-                                        setDetailPanelMode("edit");
-                                        setSelectedTaskId(task.id);
-                                    }}
-                                    onContextMenu={(event) => {
-                                        event.preventDefault();
-                                        setSelectedTaskId(task.id);
-                                        setContextMenu({
-                                            kind: "task",
-                                            id: task.id,
-                                            x: event.clientX,
-                                            y: event.clientY,
-                                        });
-                                    }}
-                                >
-                                    <input
-                                        type="checkbox"
-                                        checked={task.completed}
-                                        onChange={() =>
-                                            void handleCheckboxChange(task)
-                                        }
-                                        onClick={(event) =>
-                                            event.stopPropagation()
-                                        }
-                                        aria-label={`Toggle ${task.title}`}
-                                    />
-                                    <span className="task-row-main">
-                                        <span
-                                            className={
-                                                task.completed
-                                                    ? "task-title completed"
-                                                    : "task-title"
-                                            }
+                                {taskState.status === "error" && (
+                                    <motion.p
+                                        className="form-error"
+                                        variants={dropdownVariants}
+                                        initial="hidden"
+                                        animate="visible"
+                                        transition={dropdownTransition}
+                                    >
+                                        {taskState.message}
+                                    </motion.p>
+                                )}
+                                {taskState.status === "ready" &&
+                                    orderedVisibleTasks.length === 0 && (
+                                        <motion.p
+                                            className="muted"
+                                            variants={dropdownVariants}
+                                            initial="hidden"
+                                            animate="visible"
+                                            transition={dropdownTransition}
                                         >
-                                            {task.title}
-                                        </span>
-                                        <span className="task-meta">
-                                            {formatTaskMeta(task)}
-                                        </span>
-                                    </span>
-                                    {activeView === "unscheduled" && (
-                                        <span className="task-order-actions task-order-actions--aligned">
-                                            <button
-                                                type="button"
-                                                className="task-order-button task-order-button-top"
-                                                aria-label={`Move ${task.title} to top`}
-                                                disabled={taskIndex === 0}
-                                                onPointerDown={(event) =>
-                                                    event.stopPropagation()
-                                                }
-                                                onClick={(event) => {
-                                                    event.stopPropagation();
-                                                    moveUnscheduledTaskToTop(
-                                                        task.id,
-                                                    );
-                                                }}
-                                            >
-                                                ⇡
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="task-order-button"
-                                                aria-label={`Move ${task.title} up`}
-                                                disabled={taskIndex === 0}
-                                                onPointerDown={(event) =>
-                                                    event.stopPropagation()
-                                                }
-                                                onClick={(event) => {
-                                                    event.stopPropagation();
-                                                    moveUnscheduledTask(
-                                                        task.id,
-                                                        -1,
-                                                    );
-                                                }}
-                                            >
-                                                ↑
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="task-order-button"
-                                                aria-label={`Move ${task.title} down`}
-                                                disabled={
-                                                    taskIndex ===
-                                                    orderedVisibleTasks.length -
-                                                        1
-                                                }
-                                                onPointerDown={(event) =>
-                                                    event.stopPropagation()
-                                                }
-                                                onClick={(event) => {
-                                                    event.stopPropagation();
-                                                    moveUnscheduledTask(
-                                                        task.id,
-                                                        1,
-                                                    );
-                                                }}
-                                            >
-                                                ↓
-                                            </button>
-                                        </span>
+                                            No tasks in this view.
+                                        </motion.p>
                                     )}
-                                </div>
-                            ))}
+                                {orderedVisibleTasks.map(
+                                            (task, taskIndex) => (
+                                                <motion.div
+                                                    key={task.id}
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    data-task-id={task.id}
+                                                    layout={
+                                                        activeView ===
+                                                        "unscheduled"
+                                                            ? "position"
+                                                            : undefined
+                                                    }
+                                                    transition={
+                                                        activeView ===
+                                                        "unscheduled"
+                                                            ? {
+                                                                  type: "spring",
+                                                                  stiffness: 420,
+                                                                  damping: 34,
+                                                                  mass: 0.7,
+                                                              }
+                                                            : undefined
+                                                    }
+                                                    className={`task-row ${activeView === "unscheduled" ? "task-row--reorderable" : ""} ${selectedTaskId === task.id ? "selected" : ""}`}
+                                                    style={{
+                                                        borderLeftColor:
+                                                            taskCategoryColor(
+                                                                task,
+                                                                categoryColorById,
+                                                            ),
+                                                        accentColor:
+                                                            taskCategoryColor(
+                                                                task,
+                                                                categoryColorById,
+                                                            ),
+                                                    }}
+                                                    onPointerDown={(event) =>
+                                                        handleTaskRowPointerDown(
+                                                            task.id,
+                                                            event,
+                                                        )
+                                                    }
+                                                    onMouseDown={(event) =>
+                                                        handleTaskRowPointerDown(
+                                                            task.id,
+                                                            event,
+                                                            true,
+                                                        )
+                                                    }
+                                                    onPointerMove={(event) =>
+                                                        handleTaskRowPointerMove(
+                                                            task.id,
+                                                            event,
+                                                        )
+                                                    }
+                                                    onMouseMove={(event) =>
+                                                        handleTaskRowPointerMove(
+                                                            task.id,
+                                                            event,
+                                                        )
+                                                    }
+                                                    onPointerUp={(event) =>
+                                                        finishTaskRowPointerInteraction(
+                                                            task.id,
+                                                            event,
+                                                        )
+                                                    }
+                                                    onMouseUp={(event) =>
+                                                        finishTaskRowPointerInteraction(
+                                                            task.id,
+                                                            event,
+                                                        )
+                                                    }
+                                                    onPointerCancel={(
+                                                        event,
+                                                    ) => {
+                                                        event.currentTarget.releasePointerCapture?.(
+                                                            event.pointerId,
+                                                        );
+                                                        draggedUnscheduledTaskIdRef.current =
+                                                            null;
+                                                        taskRowPointerStateRef.current =
+                                                            null;
+                                                        suppressTaskRowClickRef.current =
+                                                            null;
+                                                    }}
+                                                    onClick={() => {
+                                                        if (
+                                                            suppressTaskRowClickRef.current ===
+                                                            task.id
+                                                        ) {
+                                                            suppressTaskRowClickRef.current =
+                                                                null;
+                                                            return;
+                                                        }
+                                                        setDetailPanelMode(
+                                                            "edit",
+                                                        );
+                                                        setSelectedTaskId(
+                                                            task.id,
+                                                        );
+                                                    }}
+                                                    onKeyDown={(event) => {
+                                                        if (
+                                                            event.target !==
+                                                                event.currentTarget ||
+                                                            (event.key !==
+                                                                "Enter" &&
+                                                                event.key !==
+                                                                    " ")
+                                                        ) {
+                                                            return;
+                                                        }
+
+                                                        event.preventDefault();
+                                                        setDetailPanelMode(
+                                                            "edit",
+                                                        );
+                                                        setSelectedTaskId(
+                                                            task.id,
+                                                        );
+                                                    }}
+                                                    onContextMenu={(event) => {
+                                                        event.preventDefault();
+                                                        setSelectedTaskId(
+                                                            task.id,
+                                                        );
+                                                        setContextMenu({
+                                                            kind: "task",
+                                                            id: task.id,
+                                                            x: event.clientX,
+                                                            y: event.clientY,
+                                                        });
+                                                    }}
+                                                >
+                                                    {activeView ===
+                                                        "unscheduled" && (
+                                                        <button
+                                                            type="button"
+                                                            className="task-drag-handle"
+                                                            data-task-id={
+                                                                task.id
+                                                            }
+                                                            aria-label={`Drag ${task.title} to calendar`}
+                                                            title="Drag onto calendar"
+                                                            onPointerDown={(
+                                                                event,
+                                                            ) =>
+                                                                event.stopPropagation()
+                                                            }
+                                                            onMouseDown={(
+                                                                event,
+                                                            ) =>
+                                                                event.stopPropagation()
+                                                            }
+                                                            onClick={(event) =>
+                                                                event.stopPropagation()
+                                                            }
+                                                        >
+                                                            <span
+                                                                aria-hidden="true"
+                                                                className="task-drag-handle-icon"
+                                                            >
+                                                                <svg
+                                                                    viewBox="0 0 16 16"
+                                                                    fill="none"
+                                                                    aria-hidden="true"
+                                                                >
+                                                                    <path
+                                                                        d="M4 2.5h8A1.5 1.5 0 0 1 13.5 4v7A1.5 1.5 0 0 1 12 12.5H4A1.5 1.5 0 0 1 2.5 11V4A1.5 1.5 0 0 1 4 2.5Z"
+                                                                        stroke="currentColor"
+                                                                        strokeWidth="1.3"
+                                                                        strokeLinejoin="round"
+                                                                    />
+                                                                    <path
+                                                                        d="M2.9 5.3h10.2"
+                                                                        stroke="currentColor"
+                                                                        strokeWidth="1.3"
+                                                                        strokeLinecap="round"
+                                                                    />
+                                                                    <path
+                                                                        d="M6.2 8.7h3.2"
+                                                                        stroke="currentColor"
+                                                                        strokeWidth="1.3"
+                                                                        strokeLinecap="round"
+                                                                    />
+                                                                    <path
+                                                                        d="M9.5 7.1 12 9.6"
+                                                                        stroke="currentColor"
+                                                                        strokeWidth="1.3"
+                                                                        strokeLinecap="round"
+                                                                    />
+                                                                    <path
+                                                                        d="M10.1 9.6H12V7.7"
+                                                                        stroke="currentColor"
+                                                                        strokeWidth="1.3"
+                                                                        strokeLinecap="round"
+                                                                        strokeLinejoin="round"
+                                                                    />
+                                                                </svg>
+                                                            </span>
+                                                        </button>
+                                                    )}
+                                                    <motion.input
+                                                        type="checkbox"
+                                                        className="task-checkbox"
+                                                        checked={task.completed}
+                                                        animate={{
+                                                            scale: task.completed
+                                                                ? [
+                                                                      1,
+                                                                      1.1,
+                                                                      1,
+                                                                  ]
+                                                                : 1,
+                                                        }}
+                                                        transition={
+                                                            completionTransition
+                                                        }
+                                                        onChange={() =>
+                                                            void handleCheckboxChange(
+                                                                task,
+                                                            )
+                                                        }
+                                                        onClick={(event) =>
+                                                            event.stopPropagation()
+                                                        }
+                                                        aria-label={`Toggle ${task.title}`}
+                                                    />
+                                                    <span className="task-row-main">
+                                                        <motion.span
+                                                            className={
+                                                                task.completed
+                                                                    ? "task-title completed"
+                                                                    : "task-title"
+                                                            }
+                                                            animate={{
+                                                                opacity:
+                                                                    task.completed
+                                                                        ? 0.72
+                                                                        : 1,
+                                                            }}
+                                                            transition={
+                                                                completionTransition
+                                                            }
+                                                        >
+                                                            {task.title}
+                                                        </motion.span>
+                                                        <span className="task-meta">
+                                                            {formatTaskMeta(
+                                                                task,
+                                                            )}
+                                                        </span>
+                                                    </span>
+                                                    {activeView ===
+                                                        "unscheduled" && (
+                                                        <span className="task-order-actions task-order-actions--aligned">
+                                                            <button
+                                                                type="button"
+                                                                className="task-order-button task-order-button-top"
+                                                                aria-label={`Move ${task.title} to top`}
+                                                                disabled={
+                                                                    taskIndex ===
+                                                                    0
+                                                                }
+                                                                onPointerDown={(
+                                                                    event,
+                                                                ) =>
+                                                                    event.stopPropagation()
+                                                                }
+                                                                onClick={(
+                                                                    event,
+                                                                ) => {
+                                                                    event.stopPropagation();
+                                                                    moveUnscheduledTaskToTop(
+                                                                        task.id,
+                                                                    );
+                                                                }}
+                                                            >
+                                                                ⇡
+                                                            </button>
+                                                        </span>
+                                                    )}
+                                                </motion.div>
+                                            ),
+                                        )}
+                            </motion.div>
                         </section>
                     )}
-                </aside>
-            )}
-            {isSidebarOpen && (
-                <div
-                    className="sidebar-resizer"
-                    role="separator"
-                    aria-label="Resize sidebar"
-                    aria-orientation="vertical"
-                    onPointerDown={handleSidebarResizeStart}
-                />
-            )}
+            </aside>
+            <div
+                className={`sidebar-resizer ${isSidebarOpen ? "sidebar-resizer-open" : "sidebar-resizer-collapsed"}`}
+                role="separator"
+                aria-label="Resize sidebar"
+                aria-orientation="vertical"
+                onPointerDown={handleSidebarResizeStart}
+            />
 
             <section
                 className="calendar-panel"
                 aria-label="Scheduled tasks calendar"
             >
-                {taskState.status === "loading" && (
-                    <div className="status-banner">Loading tasks...</div>
-                )}
+                <AnimatePresence initial={false}>
+                    {taskLoadBannerMessage && (
+                        <motion.div
+                            key="task-refresh-banner"
+                            className="status-banner"
+                            variants={dropdownVariants}
+                            initial="hidden"
+                            animate="visible"
+                            exit="exit"
+                            transition={dropdownTransition}
+                        >
+                            {taskLoadBannerMessage}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
                 {formError && (
                     <div className="status-banner error">{formError}</div>
                 )}
@@ -2878,43 +3488,49 @@ export function App() {
                     </div>
                 </div>
 
-                <FullCalendar
-                    key={`${calendarView}-${calendarRefreshToken}`}
-                    ref={calendarRef}
-                    plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-                    initialView={calendarView}
-                    initialDate={calendarDate}
-                    headerToolbar={false}
-                    events={events}
-                    eventTimeFormat={{
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        hour12: false,
-                    }}
-                    eventContent={renderEventContent}
-                    eventClick={handleEventClick}
-                    eventDidMount={handleEventDidMount}
-                    dateClick={handleDateClick}
-                    datesSet={handleDatesSet}
-                    eventDrop={handleEventDrop}
-                    eventResize={handleEventResize}
-                    drop={handleExternalTaskDrop}
-                    slotLabelFormat={{
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        hour12: false,
-                    }}
-                    select={handleDateSelect}
-                    editable
-                    droppable
-                    selectable
-                    stickyFooterScrollbar={false}
-                    eventResizableFromStart
-                    nowIndicator
-                    slotMinTime="00:00:00"
-                    slotMaxTime="24:00:00"
-                    height="100%"
-                />
+                <motion.div
+                    className="calendar-transition-shell"
+                    animate={calendarTransitionControls}
+                    initial={false}
+                >
+                    <FullCalendar
+                        ref={calendarRef}
+                        plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+                        initialView={calendarView}
+                        initialDate={calendarDate}
+                        headerToolbar={false}
+                        events={events}
+                        eventTimeFormat={{
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: false,
+                        }}
+                        eventContent={renderEventContent}
+                        eventClick={handleEventClick}
+                        eventDidMount={handleEventDidMount}
+                        dateClick={handleDateClick}
+                        datesSet={handleDatesSet}
+                        eventDrop={handleEventDrop}
+                        eventResize={handleEventResize}
+                        drop={handleExternalTaskDrop}
+                        slotLabelFormat={{
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: false,
+                        }}
+                        select={handleDateSelect}
+                        editable
+                        droppable
+                        selectable
+                        stickyFooterScrollbar={false}
+                        scrollTimeReset={false}
+                        eventResizableFromStart
+                        nowIndicator
+                        slotMinTime="00:00:00"
+                        slotMaxTime="24:00:00"
+                        height="100%"
+                    />
+                </motion.div>
             </section>
 
             {pendingDeleteTask && (
@@ -3415,6 +4031,56 @@ function filterTasksForView(
     return collapseRecurringTasksForList(filteredTasks);
 }
 
+function mergeLocallyUpdatedTasks(
+    loadedTasks: ScheduledTask[],
+    locallyUpdatedTasks: Map<string, ScheduledTask>,
+): ScheduledTask[] {
+    if (locallyUpdatedTasks.size === 0) {
+        return loadedTasks;
+    }
+
+    const mergedTasks = [...loadedTasks];
+
+    for (const [taskId, localTask] of locallyUpdatedTasks) {
+        const loadedTaskIndex = mergedTasks.findIndex(
+            (task) => task.id === taskId,
+        );
+
+        if (loadedTaskIndex === -1) {
+            mergedTasks.push(localTask);
+            continue;
+        }
+
+        const loadedTask = mergedTasks[loadedTaskIndex];
+        if (isTaskAtLeastAsFresh(loadedTask, localTask)) {
+            locallyUpdatedTasks.delete(taskId);
+            continue;
+        }
+
+        mergedTasks[loadedTaskIndex] = localTask;
+    }
+
+    return mergedTasks;
+}
+
+function isTaskAtLeastAsFresh(
+    loadedTask: ScheduledTask,
+    localTask: ScheduledTask,
+): boolean {
+    const loadedUpdatedAt = parseTaskDate(loadedTask.updated_at).getTime();
+    const localUpdatedAt = parseTaskDate(localTask.updated_at).getTime();
+
+    if (!Number.isFinite(loadedUpdatedAt)) {
+        return false;
+    }
+
+    if (!Number.isFinite(localUpdatedAt)) {
+        return true;
+    }
+
+    return loadedUpdatedAt >= localUpdatedAt;
+}
+
 function collapseRecurringTasksForList(
     tasks: ScheduledTask[],
 ): ScheduledTask[] {
@@ -3483,29 +4149,6 @@ function moveTaskIdRelative(
     return nextOrder;
 }
 
-function moveTaskIdByOffset(
-    currentOrder: string[],
-    taskId: string,
-    offset: -1 | 1,
-): string[] {
-    const currentIndex = currentOrder.indexOf(taskId);
-    if (currentIndex === -1) {
-        return currentOrder;
-    }
-
-    const targetIndex = currentIndex + offset;
-    if (targetIndex < 0 || targetIndex >= currentOrder.length) {
-        return currentOrder;
-    }
-
-    const nextOrder = [...currentOrder];
-    [nextOrder[currentIndex], nextOrder[targetIndex]] = [
-        nextOrder[targetIndex],
-        nextOrder[currentIndex],
-    ];
-    return nextOrder;
-}
-
 function moveTaskIdToTop(currentOrder: string[], taskId: string): string[] {
     const currentIndex = currentOrder.indexOf(taskId);
     if (currentIndex <= 0) {
@@ -3515,6 +4158,39 @@ function moveTaskIdToTop(currentOrder: string[], taskId: string): string[] {
     const nextOrder = currentOrder.filter((currentTaskId) => currentTaskId !== taskId);
     nextOrder.unshift(taskId);
     return nextOrder;
+}
+
+function buildUnscheduledOrderUpdates(
+    orderedTaskIds: string[],
+    tasks: ScheduledTask[],
+): Array<{ taskId: string; unscheduled_order: number }> {
+    const unscheduledTasks = tasks.filter(
+        (task) => !task.scheduled_start && !task.scheduled_end,
+    );
+    const taskById = new Map(unscheduledTasks.map((task) => [task.id, task]));
+    const reconciledOrder = reconcileTaskOrder(
+        orderedTaskIds,
+        unscheduledTasks.map((task) => task.id),
+    );
+
+    return reconciledOrder
+        .map((taskId, index) => {
+            const task = taskById.get(taskId);
+            if (!task || task.unscheduled_order === index) {
+                return null;
+            }
+
+            return {
+                taskId,
+                unscheduled_order: index,
+            };
+        })
+        .filter(
+            (
+                update,
+            ): update is { taskId: string; unscheduled_order: number } =>
+                update !== null,
+        );
 }
 
 function getTaskReorderTarget(

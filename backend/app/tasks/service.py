@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import HTTPException, status
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, case, func, select
 from sqlalchemy.orm import Session
 
 from app.models.scheduled_task import ScheduledTask
@@ -35,8 +35,14 @@ def list_tasks(
     list_id: uuid.UUID | None = None,
     view: str | None = None,
 ) -> list[ScheduledTask]:
+    is_unscheduled = (
+        ScheduledTask.scheduled_start.is_(None)
+        & ScheduledTask.scheduled_end.is_(None)
+    )
     statement: Select[tuple[ScheduledTask]] = select(ScheduledTask).order_by(
-        ScheduledTask.scheduled_start.is_(None),
+        is_unscheduled,
+        case((is_unscheduled, ScheduledTask.unscheduled_order.is_(None)), else_=False),
+        case((is_unscheduled, ScheduledTask.unscheduled_order), else_=None),
         ScheduledTask.scheduled_start,
         ScheduledTask.created_at,
     )
@@ -355,6 +361,7 @@ def serialize_task_for_rebuild(task: ScheduledTask) -> dict:
         else None,
         "timezone": task.timezone,
         "priority": task.priority,
+        "unscheduled_order": task.unscheduled_order,
         "recurrence_rule": task.recurrence_rule,
         "notification_enabled": task.notification_enabled,
         "notification_offset_minutes": task.notification_offset_minutes,
@@ -390,6 +397,9 @@ def apply_task_updates(task: ScheduledTask, updates: dict) -> None:
 
     for field, value in updates.items():
         setattr(task, field, value)
+
+    if task.scheduled_start is not None or task.scheduled_end is not None:
+        task.unscheduled_order = None
 
     if task.notification_enabled and task.notification_channel is None:
         task.notification_channel = "discord"

@@ -76,6 +76,10 @@ def missing_scheduled_task_column_statements(
             "notification_sent_at",
             f"ALTER TABLE scheduled_tasks ADD COLUMN notification_sent_at {timestamptz_type}",
         ),
+        (
+            "unscheduled_order",
+            "ALTER TABLE scheduled_tasks ADD COLUMN unscheduled_order INTEGER",
+        ),
     ]
 
     return [

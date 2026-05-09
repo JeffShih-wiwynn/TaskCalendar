@@ -31,8 +31,11 @@ This document summarizes what is already in the repository snapshot and where th
   - Month, week, and day views are available.
   - The sidebar includes a `No time tasks` view for unscheduled tasks.
   - Unscheduled task rows can be reordered directly, and the sidebar includes quick `Move to top`, `Move up`, and `Move down` controls.
+  - `No time tasks` order now persists through the backend with a dedicated `unscheduled_order` field for tasks that have neither `scheduled_start` nor `scheduled_end`.
+  - Reorder changes animate smoothly in the sidebar with Framer Motion layout transitions.
   - Week and day views now show the full `00:00` through `24:00` range.
   - Tasks render as calendar events.
+  - A runtime crash in the FullCalendar `eventContent` path was fixed by making event rendering fall back safely when a transient drag/drop event has no attached task object.
   - Checkbox completion behavior is wired through the UI.
   - Drag-and-drop and resizing work for scheduled tasks.
   - Task creation and editing are available in the left sidebar.
@@ -58,9 +61,13 @@ This document summarizes what is already in the repository snapshot and where th
 - There is no PWA manifest or service worker yet.
 - There is no authentication or multi-user scoping yet; the backend still creates a default user.
 - There is no migration tool yet; the backend creates tables at startup.
+- Existing databases still rely on the startup column-upgrade path rather than a formal migration history.
 - All-day tasks are inferred from midnight-to-midnight ranges in the task timezone rather than from a separate all-day field.
 - Unscheduled tasks now have a dedicated `No time tasks` sidebar view.
+- `No time tasks` order is now stored on each unscheduled task as `unscheduled_order`, with `created_at` as the fallback sort when that field is null.
+- External drag-to-calendar now refreshes through the existing backend-confirmed task reload path, and the calendar event renderer no longer crashes when FullCalendar renders a transient event without a matching task in memory.
 - Completed tasks keep their category color in the calendar and render with lower opacity instead of a fixed pale fill.
+- The task UI now has smoother shared motion timings, a clearer drag-to-calendar handle, and subtle calendar event enter animations for view and date transitions.
 - `due_at` still exists in the backend/data model, but the current edit form hides it.
 - The current UI is more sidebar-based than the original floating-column idea.
 - Recurrence and notifications are now in MVP form, but the series expansion horizon and webhook worker are intentionally limited.

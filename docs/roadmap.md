@@ -26,6 +26,7 @@ Status: mostly already implemented in the current repository, but keep this phas
 - [x] Show checkbox, title, scheduled range, and due date in each task row where available.
 - [x] Clicking a task opens an edit panel.
 - [x] Task changes PATCH the backend.
+- [x] Persist manual `No time tasks` ordering through the backend with a dedicated `unscheduled_order` field.
 - [ ] Keep polishing keyboard navigation, accessibility, and layout consistency as the sidebar evolves.
 
 ## Phase 7.5: Recurrence and notifications MVP

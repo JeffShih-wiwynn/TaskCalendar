@@ -32,6 +32,7 @@ class ScheduledTask(Base):
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     timezone: Mapped[str] = mapped_column(String(100), default="Asia/Taipei")
     priority: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    unscheduled_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
     recurrence_rule: Mapped[str | None] = mapped_column(String(255), nullable=True)
     recurrence_series_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True, index=True)
     notification_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
