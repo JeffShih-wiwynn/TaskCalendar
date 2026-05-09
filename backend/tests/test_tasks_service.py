@@ -13,6 +13,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import missing_scheduled_task_column_statements
 from app.core.database import Base
 from app.models import User
+from app.models.scheduled_task import ScheduledTask
 from app.tasks.notifications import (
     DISCORD_WEBHOOK_USER_AGENT,
     apply_message_template,
@@ -158,6 +159,104 @@ def test_overdue_filtering(db_session: Session, user_id: uuid.UUID) -> None:
     tasks = service.list_tasks(db_session, view="overdue")
 
     assert [task.id for task in tasks] == [due_overdue.id, overdue.id]
+
+
+def test_unscheduled_tasks_sort_by_unscheduled_order_then_created_at(
+    db_session: Session, user_id: uuid.UUID
+) -> None:
+    scheduled = create_task(
+        db_session,
+        user_id,
+        title="Scheduled task",
+        scheduled_start=parse_dt("2026-05-07T08:00:00+00:00"),
+        scheduled_end=parse_dt("2026-05-07T09:00:00+00:00"),
+    )
+    first = create_task(db_session, user_id, title="First unscheduled")
+    second = create_task(db_session, user_id, title="Second unscheduled")
+    third = create_task(db_session, user_id, title="Third unscheduled")
+
+    service.update_task(
+        db_session,
+        third.id,
+        ScheduledTaskUpdate(unscheduled_order=0),
+    )
+    service.update_task(
+        db_session,
+        first.id,
+        ScheduledTaskUpdate(unscheduled_order=1),
+    )
+
+    tasks = service.list_tasks(db_session)
+
+    assert [task.id for task in tasks] == [
+        scheduled.id,
+        third.id,
+        first.id,
+        second.id,
+    ]
+
+
+def test_unscheduled_order_updates_are_persisted_to_the_database(
+    db_session: Session, user_id: uuid.UUID
+) -> None:
+    task = create_task(db_session, user_id, title="Inbox task")
+
+    service.update_task(
+        db_session,
+        task.id,
+        ScheduledTaskUpdate(unscheduled_order=2),
+    )
+
+    verification_session = sessionmaker(
+        bind=db_session.get_bind(),
+        autoflush=False,
+        autocommit=False,
+    )()
+    try:
+        stored_task = verification_session.get(ScheduledTask, task.id)
+        assert stored_task is not None
+        assert stored_task.unscheduled_order == 2
+    finally:
+        verification_session.close()
+
+    tasks = service.list_tasks(db_session)
+    assert [item.id for item in tasks] == [task.id]
+
+
+def test_scheduling_task_clears_unscheduled_order(
+    db_session: Session, user_id: uuid.UUID
+) -> None:
+    task = create_task(db_session, user_id, title="Inbox task")
+    updated = service.update_task(
+        db_session,
+        task.id,
+        ScheduledTaskUpdate(unscheduled_order=4),
+    )
+
+    assert updated.unscheduled_order == 4
+
+    scheduled = service.update_task(
+        db_session,
+        task.id,
+        ScheduledTaskUpdate(
+            scheduled_start=parse_dt("2026-05-07T08:00:00+00:00"),
+            scheduled_end=parse_dt("2026-05-07T09:00:00+00:00"),
+        ),
+    )
+
+    assert scheduled.unscheduled_order is None
+
+    verification_session = sessionmaker(
+        bind=db_session.get_bind(),
+        autoflush=False,
+        autocommit=False,
+    )()
+    try:
+        stored_task = verification_session.get(ScheduledTask, task.id)
+        assert stored_task is not None
+        assert stored_task.unscheduled_order is None
+    finally:
+        verification_session.close()
 
 
 def test_create_recurring_task_materializes_occurrences(
@@ -624,6 +723,7 @@ def test_missing_scheduled_task_column_statements_only_returns_missing_columns()
     assert all("notification_enabled" not in statement for statement in statements)
     assert any("recurrence_series_id" in statement for statement in statements)
     assert any("notification_sent_at" in statement for statement in statements)
+    assert any("unscheduled_order" in statement for statement in statements)
 
 
 def create_task(
@@ -638,6 +738,7 @@ def create_task(
     notification_enabled: bool | None = None,
     notification_offset_minutes: int | None = None,
     notification_channel: str | None = None,
+    unscheduled_order: int | None = None,
 ):
     return service.create_task(
         db_session,
@@ -651,6 +752,7 @@ def create_task(
             notification_enabled=notification_enabled,
             notification_offset_minutes=notification_offset_minutes,
             notification_channel=notification_channel,
+            unscheduled_order=unscheduled_order,
         ),
     )
 

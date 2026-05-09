@@ -1,49 +1,98 @@
 # This is for developer. AI don't need to read this. Please ignore it.
 
-Please improve the app's UI animations without changing the core behavior.
+Please add the first small batch of interaction animations.
 
-Current project:
-- React + TypeScript
-- FullCalendar
-- Scheduled tasks with checkbox
-- Sidebar/task list
-- Task editor
-- Mobile/PWA support planned
+Context:
+This is a self-hosted scheduled task calendar app.
+The frontend uses React + TypeScript.
+Framer Motion is already installed and used for No time tasks reorder layout animation.
+The app has:
+- scheduled tasks
+- no time tasks
+- task checkbox completion
+- task cards
+- reorder arrow buttons
+- dark theme UI
 
-Animation goals:
-1. Make the app feel smoother and more polished.
-2. Keep animations subtle and productivity-focused.
-3. Do not add heavy or distracting animations.
-4. Prefer Framer Motion if it fits the current stack.
-5. Use CSS transitions where Framer Motion is unnecessary.
+Goal:
+Add subtle, polished micro-interactions without changing core behavior.
 
-Please implement animations for:
-1. Task checkbox completion:
-   - checkbox should animate when toggled
-   - completed task title should animate into strikethrough / muted style
+Scope for this pass:
+Only implement these three animation areas:
+1. Checkbox completion animation
+2. Task card hover / active animation
+3. Button press feedback
 
-2. Task list items:
-   - fade/slide in when rendered
-   - hover effect on desktop
-   - smooth transition when completion state changes
+Do not change:
+- calendar drag/drop behavior
+- event resize behavior
+- No time tasks drag reorder logic
+- backend API
+- task data model
+- dropdowns
+- modals/edit panels
+- routing/view logic
 
-3. Sidebar view switching:
-   - Today / Upcoming / Overdue / Completed / All Tasks should transition smoothly
+Requirements:
 
-4. Task editor / modal / bottom sheet:
-   - animate open and close
-   - use a smooth slide/fade transition
-   - keep mobile behavior friendly
+1. Checkbox completion animation
+- When a task is checked, animate the checkbox state.
+- The completed task title should smoothly transition into completed style:
+  - muted color
+  - strikethrough
+  - slight opacity change if appropriate
+- When unchecked, reverse the animation smoothly.
+- Apply this anywhere the shared task row/card checkbox is rendered, if possible.
+- Do not break checkbox click handling.
 
-5. Calendar events:
-   - add subtle hover state
-   - add dragging visual state if possible
-   - completed events should have a visually distinct transition
+2. Task card hover / active animation
+- Add subtle desktop hover feedback:
+  - slight lift or translateY
+  - soft shadow
+  - subtle border/background highlight
+- Add tap/press feedback for mobile:
+  - slight scale down or active state
+- Keep the current dark theme and colored left border/category indicator.
+- Do not cause layout shift.
+- Do not make animations slow or distracting.
 
-Important:
-- Do not rewrite the calendar architecture.
-- Do not fight FullCalendar's internal drag/drop behavior.
-- Keep animations accessible.
+3. Button press feedback
+- Add subtle press/tap feedback for common task buttons, especially:
+  - checkbox area if applicable
+  - reorder up/down/move-to-top buttons
+  - create/add task button
+  - task action buttons
+- Disabled buttons should remain clearly disabled.
+- Do not change button behavior.
+
+Accessibility:
 - Respect prefers-reduced-motion.
-- Do not break eventDrop, eventResize, or checkbox behavior.
-- After changes, explain what was animated and where.
+- Keep keyboard focus visible.
+- Do not remove existing aria-labels or accessibility behavior.
+
+Implementation guidance:
+- Use CSS transitions for simple hover/active states.
+- Use Framer Motion only where it is clearly useful and does not complicate the code.
+- Keep the diff small.
+- Reuse existing class names when possible.
+- Do not rewrite components unless necessary.
+
+Verification:
+After implementing, run:
+- npm run typecheck
+- npm run lint
+- npm test -- App.test.tsx if relevant
+- npm run build
+
+Also manually verify:
+- checking/unchecking tasks still works
+- No time tasks drag reorder still works
+- reorder arrow buttons still work
+- calendar tasks still render correctly
+- completed styles still look correct
+
+After changes, summarize:
+1. What animations were added.
+2. Which files changed.
+3. Whether CSS transitions or Framer Motion were used.
+4. Any limitations or TODOs.

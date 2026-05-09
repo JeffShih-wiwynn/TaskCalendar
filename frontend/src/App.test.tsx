@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    waitForElementToBeRemoved,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { EventInput } from "@fullcalendar/core";
 import {
@@ -7,13 +13,18 @@ import {
     useImperativeHandle,
     useState,
     type ForwardedRef,
+    type ReactNode,
 } from "react";
 
 import { App } from "./App";
 
 const mocks = vi.hoisted(() => ({
-    fullCalendarProps: { events: [] as EventInput[] },
+    fullCalendarProps: {
+        events: [] as EventInput[],
+        scrollTimeReset: undefined as boolean | undefined,
+    },
     fullCalendarMount: vi.fn(),
+    fullCalendarRefetchEvents: vi.fn(),
     dragRevert: vi.fn(),
     draggableConstruct: vi.fn(),
     draggableDestroy: vi.fn(),
@@ -28,10 +39,25 @@ const mocks = vi.hoisted(() => ({
         },
     ],
     tasks: [] as Array<Record<string, unknown>>,
+    listTasks: vi.fn(),
     createTask: vi.fn(async () => ({ id: "task-new" })),
     deleteTask: vi.fn(async () => undefined),
     deleteTaskList: vi.fn(async () => undefined),
-    updateTask: vi.fn(async () => ({})),
+    updateTask: vi.fn(
+        async (taskId: string, input: Record<string, unknown> = {}) => {
+            const currentTask = mocks.tasks.find((task) => task.id === taskId) ?? {
+                id: taskId,
+            };
+            const updatedTask = {
+                ...currentTask,
+                ...input,
+            };
+            mocks.tasks = mocks.tasks.map((task) =>
+                task.id === taskId ? updatedTask : task,
+            );
+            return updatedTask;
+        },
+    ),
     settings: {
         id: 1,
         discord_webhook_url: null,
@@ -89,8 +115,10 @@ vi.mock("@fullcalendar/react", () => ({
             datesSet,
             drop,
             eventDrop,
+            eventContent,
             events,
             initialView,
+            scrollTimeReset,
         }: {
             dateClick?: (arg: { date: Date; allDay: boolean }) => void;
             datesSet?: (arg: {
@@ -122,8 +150,19 @@ vi.mock("@fullcalendar/react", () => ({
                 };
                 revert: () => void;
             }) => void;
+            eventContent?: (arg: {
+                event: {
+                    id: string;
+                    title: string;
+                    start: Date | null;
+                    end: Date | null;
+                    allDay: boolean;
+                    extendedProps: Record<string, unknown>;
+                };
+            }) => ReactNode;
             events?: EventInput[];
             initialView?: string;
+            scrollTimeReset?: boolean;
         },
         ref: ForwardedRef<{
             getApi: () => {
@@ -133,6 +172,7 @@ vi.mock("@fullcalendar/react", () => ({
                 changeView: (view: string) => void;
                 gotoDate: (date: Date) => void;
                 getDate: () => Date;
+                refetchEvents: () => void;
             };
         }>,
     ) {
@@ -140,6 +180,7 @@ vi.mock("@fullcalendar/react", () => ({
         const [currentDate, setCurrentDate] = useState(
             new Date("2026-05-08T00:00:00Z"),
         );
+        const [showExternalMirror, setShowExternalMirror] = useState(false);
 
         useEffect(() => {
             mocks.fullCalendarMount();
@@ -168,6 +209,7 @@ vi.mock("@fullcalendar/react", () => ({
                     changeView: (nextView: string) => setView(nextView),
                     gotoDate: (date: Date) => setCurrentDate(new Date(date)),
                     getDate: () => currentDate,
+                    refetchEvents: () => mocks.fullCalendarRefetchEvents(),
                 }),
             }),
             [currentDate],
@@ -187,6 +229,39 @@ vi.mock("@fullcalendar/react", () => ({
         }, [currentDate, datesSet, view]);
 
         mocks.fullCalendarProps.events = events ?? [];
+        mocks.fullCalendarProps.scrollTimeReset = scrollTimeReset;
+        const renderMockEvent = (
+            event: EventInput & {
+                extendedProps?: Record<string, unknown>;
+            },
+        ) => {
+            const id = String(event.id ?? "");
+            const title = String(event.title ?? "");
+            const start =
+                typeof event.start === "string" || event.start instanceof Date
+                    ? new Date(event.start)
+                    : null;
+            const end =
+                typeof event.end === "string" || event.end instanceof Date
+                    ? new Date(event.end)
+                    : null;
+
+            return (
+                <div key={id} data-testid={`calendar-event-${id}`}>
+                    {eventContent?.({
+                        event: {
+                            id,
+                            title,
+                            start,
+                            end,
+                            allDay: Boolean(event.allDay),
+                            extendedProps: event.extendedProps ?? {},
+                        },
+                    }) ?? title}
+                </div>
+            );
+        };
+
         return (
             <>
                 <button
@@ -246,6 +321,7 @@ vi.mock("@fullcalendar/react", () => ({
                 <button
                     type="button"
                     onClick={() => {
+                        setShowExternalMirror(true);
                         const draggedEl = document.createElement("button");
                         draggedEl.dataset.taskId = "task-external";
                         drop?.({
@@ -259,13 +335,23 @@ vi.mock("@fullcalendar/react", () => ({
                 >
                     Receive external task
                 </button>
+                <div data-testid="calendar-events">
+                    {showExternalMirror &&
+                        renderMockEvent({
+                            id: "external-mirror",
+                            title: "External mirror",
+                        })}
+                    {(events ?? [])
+                        .filter((event) => event.id === "task-external")
+                        .map((event) => renderMockEvent(event))}
+                </div>
             </>
         );
     }),
 }));
 
 vi.mock("./api/tasks", () => ({
-    listTasks: () => Promise.resolve(mocks.tasks),
+    listTasks: mocks.listTasks,
     createTask: mocks.createTask,
     updateTask: mocks.updateTask,
     completeTask: vi.fn(),
@@ -303,14 +389,68 @@ function mockTaskRowRects(rows: Element[]): void {
     });
 }
 
+function sortTasksForApiMock(
+    left: Record<string, unknown>,
+    right: Record<string, unknown>,
+): number {
+    const leftScheduledStart = left.scheduled_start as string | null;
+    const rightScheduledStart = right.scheduled_start as string | null;
+    const leftScheduledEnd = left.scheduled_end as string | null;
+    const rightScheduledEnd = right.scheduled_end as string | null;
+    const leftIsUnscheduled = !leftScheduledStart && !leftScheduledEnd;
+    const rightIsUnscheduled = !rightScheduledStart && !rightScheduledEnd;
+
+    if (leftIsUnscheduled !== rightIsUnscheduled) {
+        return Number(leftIsUnscheduled) - Number(rightIsUnscheduled);
+    }
+
+    if (leftIsUnscheduled && rightIsUnscheduled) {
+        const leftOrder = left.unscheduled_order as number | null;
+        const rightOrder = right.unscheduled_order as number | null;
+        if (leftOrder !== null && rightOrder !== null) {
+            return leftOrder - rightOrder;
+        }
+        if (leftOrder !== null) {
+            return -1;
+        }
+        if (rightOrder !== null) {
+            return 1;
+        }
+    }
+
+    const leftDate = (leftScheduledStart ?? left.created_at) as string | null;
+    const rightDate = (rightScheduledStart ?? right.created_at) as string | null;
+    return String(leftDate).localeCompare(String(rightDate));
+}
+
+function createDeferred<T>(): {
+    promise: Promise<T>;
+    resolve: (value: T) => void;
+    reject: (error: unknown) => void;
+} {
+    let resolve!: (value: T) => void;
+    let reject!: (error: unknown) => void;
+    const promise = new Promise<T>((promiseResolve, promiseReject) => {
+        resolve = promiseResolve;
+        reject = promiseReject;
+    });
+
+    return { promise, resolve, reject };
+}
+
 describe("App", () => {
     beforeEach(() => {
         window.localStorage.clear();
         mocks.tasks = [];
+        mocks.listTasks.mockClear();
+        mocks.listTasks.mockImplementation(() =>
+            Promise.resolve([...mocks.tasks].sort(sortTasksForApiMock)),
+        );
         mocks.createTask.mockClear();
         mocks.deleteTask.mockClear();
         mocks.deleteTaskList.mockClear();
         mocks.fullCalendarMount.mockClear();
+        mocks.fullCalendarRefetchEvents.mockClear();
         mocks.fullCalendarProps.events = [];
         mocks.dragRevert.mockClear();
         mocks.draggableConstruct.mockClear();
@@ -400,6 +540,7 @@ describe("App", () => {
                 notification_channel: null,
                 timezone: "Asia/Taipei",
                 priority: null,
+                unscheduled_order: null,
                 created_at: "2026-05-07T00:00:00Z",
                 updated_at: "",
                 completed_at: null,
@@ -421,6 +562,7 @@ describe("App", () => {
                 notification_channel: null,
                 timezone: "Asia/Taipei",
                 priority: null,
+                unscheduled_order: null,
                 created_at: "2026-05-08T00:00:00Z",
                 updated_at: "",
                 completed_at: null,
@@ -442,6 +584,7 @@ describe("App", () => {
                 notification_channel: null,
                 timezone: "Asia/Taipei",
                 priority: null,
+                unscheduled_order: null,
                 created_at: "2026-05-09T00:00:00Z",
                 updated_at: "",
                 completed_at: null,
@@ -483,49 +626,16 @@ describe("App", () => {
             expect.stringContaining("First task"),
             expect.stringContaining("Third task"),
         ]);
+        await waitFor(() =>
+            expect(mocks.updateTask).toHaveBeenCalledWith(
+                "task-unscheduled-b",
+                { unscheduled_order: 0 },
+            ),
+        );
         expect(
             window.localStorage.getItem("calendar-unscheduled-order"),
         ).toContain("task-unscheduled-b");
 
-        fireEvent.click(
-            screen.getByRole("button", { name: "Move Second task down" }),
-        );
-
-        const reorderedBackRows = document.querySelectorAll(".task-list .task-row");
-        expect(Array.from(reorderedBackRows).map((row) => row.textContent)).toEqual([
-            expect.stringContaining("First task"),
-            expect.stringContaining("Second task"),
-            expect.stringContaining("Third task"),
-        ]);
-
-        mockTaskRowRects(Array.from(reorderedBackRows));
-        fireEvent.mouseDown(reorderedBackRows[0], {
-            button: 0,
-            buttons: 1,
-            clientX: 20,
-            clientY: 10,
-        });
-        fireEvent.mouseMove(window, {
-            buttons: 1,
-            clientX: 20,
-            clientY: 65,
-        });
-        mockTaskRowRects(
-            Array.from(document.querySelectorAll(".task-list .task-row")),
-        );
-        fireEvent.mouseMove(window, {
-            buttons: 1,
-            clientX: 20,
-            clientY: 130,
-        });
-        fireEvent.mouseUp(window);
-
-        const reorderedDownRows = document.querySelectorAll(".task-list .task-row");
-        expect(Array.from(reorderedDownRows).map((row) => row.textContent)).toEqual([
-            expect.stringContaining("Second task"),
-            expect.stringContaining("Third task"),
-            expect.stringContaining("First task"),
-        ]);
     });
 
     it("reorders no time tasks with explicit priority controls", async () => {
@@ -547,6 +657,7 @@ describe("App", () => {
                 notification_channel: null,
                 timezone: "Asia/Taipei",
                 priority: null,
+                unscheduled_order: null,
                 created_at: "2026-05-07T00:00:00Z",
                 updated_at: "",
                 completed_at: null,
@@ -568,6 +679,7 @@ describe("App", () => {
                 notification_channel: null,
                 timezone: "Asia/Taipei",
                 priority: null,
+                unscheduled_order: null,
                 created_at: "2026-05-08T00:00:00Z",
                 updated_at: "",
                 completed_at: null,
@@ -581,7 +693,7 @@ describe("App", () => {
             await screen.findByRole("button", { name: "No time tasks" }),
         );
         fireEvent.click(
-            screen.getByRole("button", { name: "Move Second task up" }),
+            screen.getByRole("button", { name: "Move Second task to top" }),
         );
 
         const reorderedRows = document.querySelectorAll(".task-list .task-row");
@@ -592,6 +704,12 @@ describe("App", () => {
         expect(
             window.localStorage.getItem("calendar-unscheduled-order"),
         ).toContain("task-unscheduled-b");
+        await waitFor(() =>
+            expect(mocks.updateTask).toHaveBeenCalledWith(
+                "task-unscheduled-b",
+                { unscheduled_order: 0 },
+            ),
+        );
     });
 
     it("moves a no time task directly to the top", async () => {
@@ -613,6 +731,7 @@ describe("App", () => {
                 notification_channel: null,
                 timezone: "Asia/Taipei",
                 priority: null,
+                unscheduled_order: null,
                 created_at: "2026-05-07T00:00:00Z",
                 updated_at: "",
                 completed_at: null,
@@ -634,6 +753,7 @@ describe("App", () => {
                 notification_channel: null,
                 timezone: "Asia/Taipei",
                 priority: null,
+                unscheduled_order: null,
                 created_at: "2026-05-08T00:00:00Z",
                 updated_at: "",
                 completed_at: null,
@@ -655,6 +775,7 @@ describe("App", () => {
                 notification_channel: null,
                 timezone: "Asia/Taipei",
                 priority: null,
+                unscheduled_order: null,
                 created_at: "2026-05-09T00:00:00Z",
                 updated_at: "",
                 completed_at: null,
@@ -676,6 +797,202 @@ describe("App", () => {
             expect.stringContaining("Third task"),
             expect.stringContaining("First task"),
             expect.stringContaining("Second task"),
+        ]);
+        await waitFor(() =>
+            expect(mocks.updateTask).toHaveBeenCalledWith(
+                "task-unscheduled-c",
+                { unscheduled_order: 0 },
+            ),
+        );
+    });
+
+    it("keeps no time task order after reload once it is saved", async () => {
+        mocks.tasks = [
+            {
+                id: "task-unscheduled-a",
+                user_id: "user-1",
+                list_id: null,
+                title: "First task",
+                notes: null,
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                unscheduled_order: null,
+                created_at: "2026-05-07T00:00:00Z",
+                updated_at: "",
+                completed_at: null,
+            },
+            {
+                id: "task-unscheduled-b",
+                user_id: "user-1",
+                list_id: null,
+                title: "Second task",
+                notes: null,
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                unscheduled_order: null,
+                created_at: "2026-05-08T00:00:00Z",
+                updated_at: "",
+                completed_at: null,
+            },
+            {
+                id: "task-unscheduled-c",
+                user_id: "user-1",
+                list_id: null,
+                title: "Third task",
+                notes: null,
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                unscheduled_order: null,
+                created_at: "2026-05-09T00:00:00Z",
+                updated_at: "",
+                completed_at: null,
+            },
+        ];
+
+        const rendered = render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "No time tasks" }),
+        );
+        fireEvent.click(
+            screen.getByRole("button", { name: "Move Third task to top" }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.updateTask).toHaveBeenCalledWith(
+                "task-unscheduled-c",
+                { unscheduled_order: 0 },
+            ),
+        );
+
+        rendered.unmount();
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "No time tasks" }),
+        );
+
+        const reorderedRows = document.querySelectorAll(".task-list .task-row");
+        expect(Array.from(reorderedRows).map((row) => row.textContent)).toEqual([
+            expect.stringContaining("Third task"),
+            expect.stringContaining("First task"),
+            expect.stringContaining("Second task"),
+        ]);
+    });
+
+    it("keeps no time task order from the backend after localStorage is cleared", async () => {
+        mocks.tasks = [
+            {
+                id: "task-unscheduled-a",
+                user_id: "user-1",
+                list_id: null,
+                title: "First task",
+                notes: null,
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                unscheduled_order: 2,
+                created_at: "2026-05-07T00:00:00Z",
+                updated_at: "",
+                completed_at: null,
+            },
+            {
+                id: "task-unscheduled-b",
+                user_id: "user-1",
+                list_id: null,
+                title: "Second task",
+                notes: null,
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                unscheduled_order: 0,
+                created_at: "2026-05-08T00:00:00Z",
+                updated_at: "",
+                completed_at: null,
+            },
+            {
+                id: "task-unscheduled-c",
+                user_id: "user-1",
+                list_id: null,
+                title: "Third task",
+                notes: null,
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                unscheduled_order: 1,
+                created_at: "2026-05-09T00:00:00Z",
+                updated_at: "",
+                completed_at: null,
+            },
+        ];
+
+        window.localStorage.removeItem("calendar-unscheduled-order");
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "No time tasks" }),
+        );
+
+        const reorderedRows = document.querySelectorAll(".task-list .task-row");
+        expect(Array.from(reorderedRows).map((row) => row.textContent)).toEqual([
+            expect.stringContaining("Second task"),
+            expect.stringContaining("Third task"),
+            expect.stringContaining("First task"),
         ]);
     });
 
@@ -740,7 +1057,13 @@ describe("App", () => {
         expect(screen.getByText("Home inbox")).toBeInTheDocument();
     });
 
-    it("keeps row dragging dedicated to ordering in the no time tasks view", async () => {
+    it("disables the time-grid scroll reset when navigating dates", async () => {
+        render(<App />);
+
+        expect(mocks.fullCalendarProps.scrollTimeReset).toBe(false);
+    });
+
+    it("sets up an external drag handle in the no time tasks view", async () => {
         mocks.tasks = [
             {
                 id: "task-unscheduled",
@@ -774,7 +1097,20 @@ describe("App", () => {
             await screen.findByRole("button", { name: "No time tasks" }),
         );
 
-        expect(mocks.draggableConstruct).not.toHaveBeenCalled();
+        await waitFor(() =>
+            expect(mocks.draggableConstruct).toHaveBeenCalledTimes(1),
+        );
+        expect(mocks.draggableConstruct).toHaveBeenCalledWith(
+            expect.any(HTMLElement),
+            expect.objectContaining({
+                itemSelector: ".task-drag-handle[data-task-id]",
+            }),
+        );
+        expect(
+            await screen.findByRole("button", {
+                name: "Drag Inbox task to calendar",
+            }),
+        ).toBeInTheDocument();
     });
 
     it("hides and restores the sidebar", async () => {
@@ -973,7 +1309,9 @@ describe("App", () => {
             screen.getByRole("button", { name: "Webhook settings" }),
         );
 
-        expect(screen.queryByRole("heading", { name: "Create task" })).not.toBeInTheDocument();
+        await waitForElementToBeRemoved(() =>
+            screen.queryByRole("heading", { name: "Create task" }),
+        );
         expect(await screen.findByLabelText("Webhook URL")).toBeInTheDocument();
     });
 
@@ -1086,6 +1424,66 @@ describe("App", () => {
         expect(mocks.updateTask).toHaveBeenCalledWith(
             "task-edit",
             expect.objectContaining({ title: "Edited task" }),
+        );
+    });
+
+    it("moves a scheduled task back to no time from the edit form", async () => {
+        const now = new Date();
+        const todayAtTen = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+            10,
+            0,
+            0,
+            0,
+        );
+
+        mocks.tasks = [
+            {
+                id: "task-no-time-edit",
+                user_id: "user-1",
+                list_id: "list-1",
+                title: "Reschedule me",
+                notes: null,
+                completed: false,
+                scheduled_start: todayAtTen.toISOString(),
+                scheduled_end: new Date(
+                    todayAtTen.getTime() + 60 * 60 * 1000,
+                ).toISOString(),
+                due_at: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                created_at: now.toISOString(),
+                updated_at: now.toISOString(),
+                completed_at: null,
+            },
+        ];
+
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: /Reschedule me/i }),
+        );
+        fireEvent.click(
+            screen.getByRole("button", { name: "Clear time" }),
+        );
+
+        expect(screen.getByLabelText("Start date")).toHaveValue("");
+        expect(screen.getByLabelText("Start time")).toHaveValue("");
+        expect(screen.getByLabelText("End date")).toHaveValue("");
+        expect(screen.getByLabelText("End time")).toHaveValue("");
+
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+        await waitFor(() =>
+            expect(mocks.updateTask).toHaveBeenCalledWith(
+                "task-no-time-edit",
+                expect.objectContaining({
+                    scheduled_start: null,
+                    scheduled_end: null,
+                }),
+            ),
         );
     });
 
@@ -1446,9 +1844,7 @@ describe("App", () => {
             ),
         );
 
-        await waitFor(() =>
-            expect(mocks.fullCalendarMount).toHaveBeenCalledTimes(2),
-        );
+        expect(mocks.fullCalendarMount).toHaveBeenCalledTimes(1);
     });
 
     it("shows only the first recurring occurrence in the task list", async () => {
@@ -1649,6 +2045,153 @@ describe("App", () => {
         );
     });
 
+    it("updates the no time list and calendar immediately after dropping a task into the calendar", async () => {
+        mocks.tasks = [
+            {
+                id: "task-external",
+                user_id: "user-1",
+                list_id: null,
+                title: "Inbox task",
+                notes: null,
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                notification_sent_at: null,
+                created_at: "",
+                updated_at: "",
+                completed_at: null,
+            },
+        ];
+        mocks.updateTask.mockImplementationOnce(
+            async (taskId: string, input: Record<string, unknown> = {}) => ({
+                ...mocks.tasks.find((task) => task.id === taskId),
+                ...input,
+            }),
+        );
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "No time tasks" }),
+        );
+        expect(await screen.findByText("Inbox task")).toBeInTheDocument();
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Receive external task" }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.updateTask).toHaveBeenCalledWith("task-external", {
+                scheduled_start: "2026-05-08T13:00:00.000Z",
+                scheduled_end: "2026-05-08T14:00:00.000Z",
+            }),
+        );
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.events).toHaveLength(1),
+        );
+        await waitFor(() =>
+            expect(mocks.listTasks).toHaveBeenCalledTimes(2),
+        );
+        expect(mocks.fullCalendarRefetchEvents).not.toHaveBeenCalled();
+        expect(
+            mocks.fullCalendarProps.events[0],
+        ).toMatchObject({
+            id: "task-external",
+            title: "Inbox task",
+            start: "2026-05-08T13:00:00.000Z",
+            end: "2026-05-08T14:00:00.000Z",
+        });
+        expect(screen.getByTestId("calendar-event-task-external")).toHaveTextContent(
+            "Inbox task",
+        );
+        expect(screen.getByLabelText("unscheduled tasks")).not.toHaveTextContent(
+            "Inbox task",
+        );
+    });
+
+    it("keeps a dropped no time task visible on the calendar when a stale refresh resolves after scheduling", async () => {
+        const unscheduledTask = {
+            id: "task-external",
+            user_id: "user-1",
+            list_id: null,
+            title: "Inbox task",
+            notes: null,
+            completed: false,
+            scheduled_start: null,
+            scheduled_end: null,
+            due_at: null,
+            timezone: "Asia/Taipei",
+            priority: null,
+            unscheduled_order: 0,
+            recurrence_rule: null,
+            recurrence_series_id: null,
+            notification_enabled: false,
+            notification_offset_minutes: 0,
+            notification_channel: null,
+            notification_sent_at: null,
+            created_at: "2026-05-08T00:00:00.000Z",
+            updated_at: "2026-05-08T00:00:00.000Z",
+            completed_at: null,
+        };
+        const scheduledTask = {
+            ...unscheduledTask,
+            scheduled_start: "2026-05-08T13:00:00.000Z",
+            scheduled_end: "2026-05-08T14:00:00.000Z",
+            unscheduled_order: null,
+            updated_at: "2026-05-08T13:00:01.000Z",
+        };
+        const staleRefresh = createDeferred<Array<Record<string, unknown>>>();
+        mocks.tasks = [unscheduledTask];
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "No time tasks" }),
+        );
+        expect(await screen.findByText("Inbox task")).toBeInTheDocument();
+
+        mocks.listTasks.mockImplementationOnce(() => staleRefresh.promise);
+        fireEvent.click(screen.getByRole("button", { name: "Next period" }));
+        expect(await screen.findByText("Refreshing tasks...")).toBeInTheDocument();
+
+        mocks.updateTask.mockResolvedValueOnce(scheduledTask);
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Receive external task" }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.events).toHaveLength(1),
+        );
+
+        staleRefresh.resolve([unscheduledTask]);
+        await waitFor(() =>
+            expect(screen.queryByText("Refreshing tasks...")).not.toBeInTheDocument(),
+        );
+
+        expect(mocks.fullCalendarProps.events).toHaveLength(1);
+        expect(mocks.fullCalendarProps.events[0]).toMatchObject({
+            id: "task-external",
+            start: "2026-05-08T13:00:00.000Z",
+            end: "2026-05-08T14:00:00.000Z",
+        });
+        expect(screen.getByTestId("calendar-event-task-external")).toHaveTextContent(
+            "Inbox task",
+        );
+        expect(screen.getByLabelText("unscheduled tasks")).not.toHaveTextContent(
+            "Inbox task",
+        );
+    });
+
     it("opens the create form with a full-day range when clicking the all-day lane", async () => {
         render(<App />);
 
@@ -1669,6 +2212,26 @@ describe("App", () => {
         expect(screen.getByDisplayValue("2026-05-09")).toBeInTheDocument();
         expect(screen.getByLabelText("End time")).toBeInTheDocument();
         expect(screen.getAllByDisplayValue("00:00")).toHaveLength(2);
+    });
+
+    it("clears scheduled fields in the create form when moving a task to no time", async () => {
+        render(<App />);
+
+        expect(
+            await screen.findByRole("button", { name: "Task view" }),
+        ).toBeInTheDocument();
+        fireEvent.click(
+            screen.getByRole("button", { name: "Open all-day create task" }),
+        );
+
+        fireEvent.click(
+            screen.getByRole("button", { name: "Clear time" }),
+        );
+
+        expect(screen.getByLabelText("Start date")).toHaveValue("");
+        expect(screen.getByLabelText("Start time")).toHaveValue("");
+        expect(screen.getByLabelText("End date")).toHaveValue("");
+        expect(screen.getByLabelText("End time")).toHaveValue("");
     });
 
     it("filters upcoming tasks by a custom day window including today", async () => {

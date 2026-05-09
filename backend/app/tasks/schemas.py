@@ -14,6 +14,7 @@ class ScheduledTaskBase(BaseModel):
     due_at: datetime | None = None
     timezone: str | None = Field(default=None, min_length=1, max_length=100)
     priority: int | None = None
+    unscheduled_order: int | None = None
     recurrence_rule: str | None = Field(default=None, max_length=255)
     notification_enabled: bool | None = None
     notification_offset_minutes: int | None = Field(default=None, ge=0, le=10_080)
@@ -66,6 +67,7 @@ class ScheduledTaskRead(BaseModel):
     due_at: datetime | None
     timezone: str
     priority: int | None
+    unscheduled_order: int | None
     recurrence_rule: str | None
     recurrence_series_id: uuid.UUID | None
     notification_enabled: bool

@@ -14,6 +14,7 @@ export type ScheduledTask = {
   due_at: string | null;
   timezone: string;
   priority: number | null;
+  unscheduled_order: number | null;
   recurrence_rule: string | null;
   recurrence_series_id: string | null;
   notification_enabled: boolean;
@@ -47,6 +48,7 @@ export type UpdateScheduledTaskInput = Partial<
     | 'scheduled_end'
     | 'due_at'
     | 'completed'
+    | 'unscheduled_order'
     | 'recurrence_rule'
     | 'notification_enabled'
     | 'notification_offset_minutes'
