@@ -17,6 +17,7 @@ coverage/
 
 # Local database and editor files
 *.sqlite3
+*.log
 .idea/
 .vscode/
 .calendar-dev/
