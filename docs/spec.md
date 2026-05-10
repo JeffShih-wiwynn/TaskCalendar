@@ -16,6 +16,9 @@ The current app is web-first:
 - Calendar-first task UI with FullCalendar.
 - Month, week, and day calendar views.
 - A `No time tasks` sidebar view for unscheduled tasks that can be reordered and dragged into the calendar.
+- Task rows support a right-click menu with `Duplicate` and `Delete` actions.
+- Drag target cues distinguish no-time reorder from drag-to-calendar scheduling.
+- No-time task drag handles rebind after sidebar and detail-panel re-renders, and the month-view drag mirror stays aligned with the cursor.
 - Clickable month-view year control for jumping by year.
 - Draggable and resizable scheduled task events.
 - Week and day views show a full `00:00` through `24:00` time grid.

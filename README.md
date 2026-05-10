@@ -61,6 +61,9 @@ Current frontend behavior includes:
 - month, week, and day calendar views
 - a `No time tasks` sidebar view for unscheduled tasks
 - unscheduled task rows can be reordered directly, with quick `Move to top`, `Move up`, and `Move down` controls
+- a `Duplicate` action in the task right-click menu
+- distinct drag target cues for no-time reorder and drag-to-calendar scheduling
+- no-time task drag previews stay aligned in month view while dragging into the calendar
 - draggable, resizable, and all-day scheduled tasks
 - a full-day week/day time grid from `00:00` through `24:00`
 - a clickable year control in month view

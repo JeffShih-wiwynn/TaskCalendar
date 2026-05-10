@@ -30,8 +30,13 @@ export type CreateScheduledTaskInput = {
   title: string;
   list_id?: string | null;
   notes?: string | null;
+  completed?: boolean;
   scheduled_start?: string | null;
   scheduled_end?: string | null;
+  due_at?: string | null;
+  timezone?: string;
+  priority?: number | null;
+  unscheduled_order?: number | null;
   recurrence_rule?: string | null;
   notification_enabled?: boolean;
   notification_offset_minutes?: number;

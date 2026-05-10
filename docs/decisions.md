@@ -19,6 +19,7 @@ This file records the architecture decisions that should stay stable unless the 
 - The current recurrence MVP uses `recurrence_rule` plus `recurrence_series_id` on task rows and materializes concrete occurrences up to a capped horizon.
 - Discord webhook notifications are the first MVP notification channel; push notifications remain future work.
 - `notification_enabled`, `notification_offset_minutes`, `notification_channel`, and `notification_sent_at` are the notification fields to preserve across API layers.
+- FullCalendar drag mirrors should avoid transformed ancestors; the calendar uses a body-level fixed mirror parent so month-view external drag previews stay aligned with the cursor.
 
 ## Implications
 
