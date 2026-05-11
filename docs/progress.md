@@ -56,15 +56,19 @@ This document summarizes what is already in the repository snapshot and where th
   - The backend polls for due notifications and marks `notification_sent_at` after a successful send.
   - Discord webhook URL and message template can now be configured from the sidebar settings button.
   - The webhook settings panel can send a one-off test message from the current draft values.
+- [x] Step 9: Backend authentication foundation
+  - Users can register with a username and hashed password.
+  - Users can log in and receive a JWT access token.
+  - The backend has a reusable current-user dependency for future authenticated routes.
 
 ## Current Notes
 
 - The app is still web-first.
 - There is no native Android app yet.
 - There is no PWA manifest or service worker yet.
-- There is no authentication or multi-user scoping yet; the backend still creates a default user.
-- There is no migration tool yet; the backend creates tables at startup.
-- Existing databases still rely on the startup column-upgrade path rather than a formal migration history.
+- The backend authentication foundation exists, but frontend login and task-level authenticated user scoping are not implemented yet.
+- Alembic is now configured for backend schema upgrades and fresh database initialization.
+- Existing databases that already match the baseline schema should be adopted with `alembic stamp head` instead of relying on startup mutation.
 - All-day tasks are inferred from midnight-to-midnight ranges in the task timezone rather than from a separate all-day field.
 - Unscheduled tasks now have a dedicated `No time tasks` sidebar view.
 - `No time tasks` order is now stored on each unscheduled task as `unscheduled_order`, with `created_at` as the fallback sort when that field is null.

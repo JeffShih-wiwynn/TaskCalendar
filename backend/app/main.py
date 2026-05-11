@@ -5,21 +5,19 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.app_settings.router import router as app_settings_router
+from app.auth.router import router as auth_router
 from app.core.config import settings
-from app.core.database import create_db_and_tables
 from app.health.router import router as health_router
 from app.task_lists.router import router as task_lists_router
 from app.tasks.notifications import start_notification_worker
 from app.tasks.router import router as tasks_router
 
 
-def create_app(*, create_tables: bool = True, start_worker: bool = True) -> FastAPI:
+def create_app(*, start_worker: bool = True) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         worker_stop_event = None
         worker_thread = None
-        if create_tables:
-            create_db_and_tables()
         if start_worker:
             worker_stop_event, worker_thread = start_notification_worker()
         yield
@@ -39,6 +37,7 @@ def create_app(*, create_tables: bool = True, start_worker: bool = True) -> Fast
     )
 
     app.include_router(app_settings_router)
+    app.include_router(auth_router)
     app.include_router(health_router)
     app.include_router(task_lists_router)
     app.include_router(tasks_router)

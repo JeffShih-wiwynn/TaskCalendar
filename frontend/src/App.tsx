@@ -37,6 +37,15 @@ import {
 } from "react";
 
 import {
+    clearStoredAuthToken,
+    getCurrentUser,
+    getStoredAuthToken,
+    isAuthError,
+    login,
+    register,
+    type AuthUser,
+} from "./api/auth";
+import {
     getSettings,
     testSettings,
     updateSettings,
@@ -77,6 +86,7 @@ type ThemeMode = "light" | "dark";
 type CalendarView = "dayGridMonth" | "timeGridWeek" | "timeGridDay";
 type CalendarTransitionKind = "neutral" | "view" | "prev" | "next" | "today";
 type DragTargetMode = "reorder" | "schedule" | null;
+type AuthMode = "login" | "register";
 const unclassifiedCategoryFilter = "__unclassified__";
 const defaultSidebarWidth = 300;
 const minSidebarWidth = 240;
@@ -103,6 +113,11 @@ type EditFormState = TaskFormState & {
 type WebhookSettingsFormState = {
     discord_webhook_url: string;
     discord_message_template: string;
+};
+
+type AuthFormState = {
+    username: string;
+    password: string;
 };
 
 type RecurrenceFrequency = "" | "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
@@ -192,6 +207,17 @@ const motionTimings = {
 export function App() {
     const prefersReducedMotion = useReducedMotion();
     const calendarTransitionControls = useAnimationControls();
+    const [authToken, setAuthToken] = useState<string | null>(
+        getStoredAuthToken,
+    );
+    const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+    const [authMode, setAuthMode] = useState<AuthMode>("login");
+    const [authFormState, setAuthFormState] = useState<AuthFormState>({
+        username: "",
+        password: "",
+    });
+    const [authError, setAuthError] = useState<string | null>(null);
+    const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
     const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialThemeMode);
     const [isSidebarOpen, setIsSidebarOpen] = useState(getInitialSidebarOpen);
     const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
@@ -374,6 +400,91 @@ export function App() {
             .map((task) => mapTaskToCalendarEvent(task, categoryColorById));
     }, [calendarTasks, categoryColorById]);
 
+    const resetAppData = useCallback(() => {
+        locallyUpdatedTasksRef.current.clear();
+        setTaskState({ status: "loading", tasks: [] });
+        setTaskLists([]);
+        setSelectedTaskId(null);
+        setDetailPanelMode(null);
+        setFormError(null);
+        setWebhookSettings(null);
+        setWebhookSettingsDraft({
+            discord_webhook_url: "",
+            discord_message_template: "",
+        });
+    }, []);
+
+    const handleAuthExpired = useCallback(() => {
+        clearStoredAuthToken();
+        setAuthToken(null);
+        setCurrentUser(null);
+        setAuthError("Session expired. Please log in again.");
+        resetAppData();
+    }, [resetAppData]);
+
+    const handleLogout = useCallback(() => {
+        clearStoredAuthToken();
+        setAuthToken(null);
+        setCurrentUser(null);
+        setAuthError(null);
+        resetAppData();
+    }, [resetAppData]);
+
+    const handleAuthSubmit = useCallback(
+        async (event: FormEvent<HTMLFormElement>) => {
+            event.preventDefault();
+            setAuthError(null);
+            setIsAuthSubmitting(true);
+
+            try {
+                const credentials = {
+                    username: authFormState.username.trim(),
+                    password: authFormState.password,
+                };
+
+                if (authMode === "register") {
+                    await register(credentials);
+                }
+
+                const token = await login(credentials);
+                setAuthToken(token);
+                setAuthFormState({ username: "", password: "" });
+                setCurrentUser(await getCurrentUser());
+            } catch (error) {
+                setAuthError(
+                    error instanceof Error
+                        ? error.message
+                        : "Unable to authenticate",
+                );
+            } finally {
+                setIsAuthSubmitting(false);
+            }
+        },
+        [authFormState.password, authFormState.username, authMode],
+    );
+
+    useEffect(() => {
+        if (!authToken) {
+            return;
+        }
+
+        void (async () => {
+            try {
+                setCurrentUser(await getCurrentUser());
+            } catch (error) {
+                if (isAuthError(error)) {
+                    handleAuthExpired();
+                    return;
+                }
+                setAuthError(
+                    error instanceof Error
+                        ? error.message
+                        : "Unable to load current user",
+                );
+            }
+        })();
+    }, [authToken, handleAuthExpired]);
+
     useEffect(() => {
         if (calendarTransitionTimeoutRef.current !== null) {
             window.clearTimeout(calendarTransitionTimeoutRef.current);
@@ -438,6 +549,10 @@ export function App() {
                 ),
             });
         } catch (error) {
+            if (isAuthError(error)) {
+                handleAuthExpired();
+                return;
+            }
             setTaskState((current) => ({
                 status: "error",
                 message:
@@ -447,7 +562,7 @@ export function App() {
                 tasks: current.tasks,
             }));
         }
-    }, []);
+    }, [handleAuthExpired]);
 
     const replaceTaskInState = useCallback((updatedTask: ScheduledTask) => {
         locallyUpdatedTasksRef.current.set(updatedTask.id, updatedTask);
@@ -508,13 +623,17 @@ export function App() {
             const loadedTaskLists = await listTaskLists();
             setTaskLists(loadedTaskLists);
         } catch (error) {
+            if (isAuthError(error)) {
+                handleAuthExpired();
+                return;
+            }
             setFormError(
                 error instanceof Error
                     ? error.message
                     : "Unable to load categories",
             );
         }
-    }, []);
+    }, [handleAuthExpired]);
 
     const refreshWebhookSettings = useCallback(async () => {
         try {
@@ -526,21 +645,31 @@ export function App() {
                     loadedSettings.discord_message_template ?? "",
             });
         } catch (error) {
+            if (isAuthError(error)) {
+                handleAuthExpired();
+                return;
+            }
             setFormError(
                 error instanceof Error
                     ? error.message
                     : "Unable to load webhook settings",
             );
         }
-    }, []);
+    }, [handleAuthExpired]);
 
     useEffect(() => {
+        if (!authToken) {
+            return;
+        }
         void refreshTaskLists();
-    }, [refreshTaskLists]);
+    }, [authToken, refreshTaskLists]);
 
     useEffect(() => {
+        if (!authToken) {
+            return;
+        }
         void refreshWebhookSettings();
-    }, [refreshWebhookSettings]);
+    }, [authToken, refreshWebhookSettings]);
 
     useEffect(() => {
         saveThemeMode(themeMode);
@@ -1599,6 +1728,16 @@ export function App() {
             return;
         }
 
+        const recurrenceUntilError = validateRecurrenceUntil(
+            formState.recurrence_frequency,
+            formState.recurrence_until,
+            formState.scheduled_start,
+        );
+        if (recurrenceUntilError) {
+            setFormError(recurrenceUntilError);
+            return;
+        }
+
         setIsSaving(true);
 
         try {
@@ -1694,6 +1833,16 @@ export function App() {
             parsePositiveIntegerOrZero(editState.recurrence_interval) < 1
         ) {
             setFormError("Recurrence interval must be at least 1");
+            return;
+        }
+
+        const recurrenceUntilError = validateRecurrenceUntil(
+            editState.recurrence_frequency,
+            editState.recurrence_until,
+            editState.scheduled_start,
+        );
+        if (recurrenceUntilError) {
+            setFormError(recurrenceUntilError);
             return;
         }
 
@@ -2063,6 +2212,24 @@ export function App() {
         "--sidebar-resizer-width": `${isSidebarOpen ? 12 : 0}px`,
     } as CSSProperties;
 
+    if (!authToken) {
+        return (
+            <AuthScreen
+                authMode={authMode}
+                formState={authFormState}
+                error={authError}
+                isSubmitting={isAuthSubmitting}
+                onSubmit={handleAuthSubmit}
+                onChange={setAuthFormState}
+                onModeChange={(mode) => {
+                    setAuthMode(mode);
+                    setAuthFormState({ username: "", password: "" });
+                    setAuthError(null);
+                }}
+            />
+        );
+    }
+
     return (
         <main
             ref={appShellRef}
@@ -2080,8 +2247,12 @@ export function App() {
                 aria-hidden={!isSidebarOpen}
                 inert={!isSidebarOpen}
             >
-                    <div className="sidebar-header">
-                    <p className="eyebrow">Scheduled Task Calendar</p>
+                <div className="sidebar-header">
+                    {currentUser && (
+                        <p className="sidebar-greeting">
+                            Hello, {currentUser.username}
+                        </p>
+                    )}
                     <div className="sidebar-header-actions">
                         <div
                             className="settings-menu"
@@ -2137,6 +2308,13 @@ export function App() {
                                                 onClick={openWebhookSettings}
                                             >
                                                 Webhook settings
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="filter-option"
+                                                onClick={handleLogout}
+                                            >
+                                                Logout
                                             </button>
                                         </motion.div>
                                     )}
@@ -3909,6 +4087,112 @@ type LabeledInputProps = {
     step?: number;
 };
 
+type AuthScreenProps = {
+    authMode: AuthMode;
+    formState: AuthFormState;
+    error: string | null;
+    isSubmitting: boolean;
+    onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+    onChange: (state: AuthFormState) => void;
+    onModeChange: (mode: AuthMode) => void;
+};
+
+function AuthScreen({
+    authMode,
+    formState,
+    error,
+    isSubmitting,
+    onSubmit,
+    onChange,
+    onModeChange,
+}: AuthScreenProps) {
+    const isRegistering = authMode === "register";
+
+    return (
+        <main className="auth-shell">
+            <section className="auth-panel" aria-labelledby="auth-title">
+                <p className="eyebrow">SCHEDULED TASK CALENDAR</p>
+                <h1 id="auth-title">
+                    {isRegistering ? "Create account" : "Welcome back"}
+                </h1>
+                <p className="auth-subtitle">
+                    {isRegistering ? "Create a new account" : "Sign in to continue"}
+                </p>
+                <div className="auth-mode-switch" role="tablist" aria-label="Authentication mode">
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={!isRegistering}
+                        className={`auth-mode-tab ${!isRegistering ? "auth-mode-tab-active" : ""}`}
+                        onClick={() => {
+                            onModeChange("login");
+                        }}
+                    >
+                        Use an existing account
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={isRegistering}
+                        className={`auth-mode-tab ${isRegistering ? "auth-mode-tab-active" : ""}`}
+                        onClick={() => {
+                            onModeChange("register");
+                        }}
+                    >
+                        Create account
+                    </button>
+                </div>
+                <form className="auth-form" onSubmit={onSubmit}>
+                    <label>
+                        <span>Username</span>
+                        <input
+                            type="text"
+                            value={formState.username}
+                            autoComplete="username"
+                            required
+                            onChange={(event) =>
+                                onChange({
+                                    ...formState,
+                                    username: event.target.value,
+                                })
+                            }
+                        />
+                    </label>
+                    <label>
+                        <span>Password</span>
+                        <input
+                            type="password"
+                            value={formState.password}
+                            autoComplete={
+                                isRegistering
+                                    ? "new-password"
+                                    : "current-password"
+                            }
+                            required
+                            onChange={(event) =>
+                                onChange({
+                                    ...formState,
+                                    password: event.target.value,
+                                })
+                            }
+                        />
+                    </label>
+                    {error && <p className="form-error">{error}</p>}
+                    <button type="submit" disabled={isSubmitting}>
+                        {isSubmitting
+                            ? isRegistering
+                                ? "Creating..."
+                                : "Signing in..."
+                            : isRegistering
+                              ? "Create account"
+                              : "Sign in"}
+                    </button>
+                </form>
+            </section>
+        </main>
+    );
+}
+
 function LabeledInput({
     label,
     value,
@@ -4176,6 +4460,7 @@ function shouldPromptRecurringTaskEdit(
     const supportedSeriesKeys = new Set([
         "title",
         "list_id",
+        "notes",
         "scheduled_start",
         "scheduled_end",
         "recurrence_rule",
@@ -4601,6 +4886,22 @@ function buildRecurrenceRule(state: {
     }
 
     return segments.join(";");
+}
+
+function validateRecurrenceUntil(
+    recurrenceFrequency: RecurrenceFrequency,
+    recurrenceUntil: string,
+    scheduledStart: string,
+): string | null {
+    if (!recurrenceFrequency || !recurrenceUntil || !scheduledStart) {
+        return null;
+    }
+
+    if (new Date(endOfLocalDateToIso(recurrenceUntil)) < new Date(scheduledStart)) {
+        return "Repeat until must be on or after the start date";
+    }
+
+    return null;
 }
 
 function parsePositiveIntegerOrZero(value: string): number {

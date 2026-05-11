@@ -37,8 +37,10 @@ The current app is web-first:
 - Optional completed-task visibility toggle on the calendar while viewing completed tasks.
 - Optional scheduled start/end, so unscheduled tasks are valid.
 - Backend health endpoint.
+- Backend username/password registration and login endpoints with JWT access tokens.
+- Reusable backend current-user dependency for authenticated endpoints.
 - Backend REST endpoints for tasks and task lists.
-- PostgreSQL schema creation at backend startup through SQLAlchemy metadata.
+- Alembic-managed PostgreSQL schema migrations.
 
 ## Intended Future Features
 
@@ -52,7 +54,8 @@ The current app is web-first:
 
 ## Data Model Assumptions
 
-- `User` is present but MVP auth is not implemented yet; service code creates a default user.
+- `User` stores username, password hash, and creation time for the backend auth foundation.
+- Existing task and category services still preserve the default-user path until task queries are fully scoped to authenticated users.
 - `TaskList` represents a category/list with a name and color.
 - `ScheduledTask` is the current task entity and includes both todo state and optional calendar timing.
 - A task can be unscheduled when `scheduled_start` and `scheduled_end` are null.
