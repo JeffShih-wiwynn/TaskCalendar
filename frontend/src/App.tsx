@@ -375,6 +375,25 @@ export function App() {
     }, [calendarTasks, categoryColorById]);
 
     useEffect(() => {
+        if (calendarTransitionTimeoutRef.current !== null) {
+            window.clearTimeout(calendarTransitionTimeoutRef.current);
+            calendarTransitionTimeoutRef.current = null;
+        }
+
+        calendarTransitionTimeoutRef.current = window.setTimeout(() => {
+            calendarTransitionTimeoutRef.current = null;
+            calendarRef.current?.getApi().updateSize();
+        }, prefersReducedMotion ? 0 : 220);
+
+        return () => {
+            if (calendarTransitionTimeoutRef.current !== null) {
+                window.clearTimeout(calendarTransitionTimeoutRef.current);
+                calendarTransitionTimeoutRef.current = null;
+            }
+        };
+    }, [isSidebarOpen, prefersReducedMotion]);
+
+    useEffect(() => {
         if (!selectedTask) {
             setEditState(null);
             return;
