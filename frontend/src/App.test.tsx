@@ -350,6 +350,8 @@ vi.mock("@fullcalendar/react", () => ({
     }),
 }));
 
+let createdTaskCounter = 0;
+
 vi.mock("./api/tasks", () => ({
     listTasks: mocks.listTasks,
     createTask: mocks.createTask,
@@ -449,6 +451,48 @@ describe("App", () => {
         mocks.createTask.mockClear();
         mocks.deleteTask.mockClear();
         mocks.deleteTaskList.mockClear();
+        createdTaskCounter = 0;
+        mocks.createTask.mockImplementation(
+            async (input: Record<string, unknown> = {}) => ({
+                id: `task-new-${++createdTaskCounter}`,
+                user_id: "user-1",
+                list_id:
+                    (input.list_id as string | null | undefined) ?? null,
+                title: String(input.title ?? "New task"),
+                notes: (input.notes as string | null | undefined) ?? null,
+                completed: Boolean(input.completed ?? false),
+                scheduled_start:
+                    (input.scheduled_start as string | null | undefined) ??
+                    null,
+                scheduled_end:
+                    (input.scheduled_end as string | null | undefined) ?? null,
+                due_at: (input.due_at as string | null | undefined) ?? null,
+                timezone:
+                    (input.timezone as string | undefined) ?? "Asia/Taipei",
+                priority:
+                    (input.priority as number | null | undefined) ?? null,
+                unscheduled_order:
+                    (input.unscheduled_order as number | null | undefined) ??
+                    null,
+                recurrence_rule:
+                    (input.recurrence_rule as string | null | undefined) ??
+                    null,
+                recurrence_series_id: null,
+                notification_enabled: Boolean(
+                    input.notification_enabled ?? false,
+                ),
+                notification_offset_minutes: Number(
+                    input.notification_offset_minutes ?? 0,
+                ),
+                notification_channel:
+                    (input.notification_channel as string | null | undefined) ??
+                    null,
+                notification_sent_at: null,
+                created_at: "2026-05-08T00:00:00.000Z",
+                updated_at: "2026-05-08T00:00:00.000Z",
+                completed_at: null,
+            }),
+        );
         mocks.fullCalendarMount.mockClear();
         mocks.fullCalendarRefetchEvents.mockClear();
         mocks.fullCalendarProps.events = [];
@@ -636,6 +680,141 @@ describe("App", () => {
             window.localStorage.getItem("calendar-unscheduled-order"),
         ).toContain("task-unscheduled-b");
 
+    });
+
+    it("highlights the no time list while dragging a task to reorder", async () => {
+        mocks.tasks = [
+            {
+                id: "task-unscheduled-a",
+                user_id: "user-1",
+                list_id: null,
+                title: "First task",
+                notes: null,
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                unscheduled_order: null,
+                created_at: "2026-05-07T00:00:00Z",
+                updated_at: "",
+                completed_at: null,
+            },
+            {
+                id: "task-unscheduled-b",
+                user_id: "user-1",
+                list_id: null,
+                title: "Second task",
+                notes: null,
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                unscheduled_order: null,
+                created_at: "2026-05-08T00:00:00Z",
+                updated_at: "",
+                completed_at: null,
+            },
+        ];
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "No time tasks" }),
+        );
+
+        const taskRows = document.querySelectorAll(".task-list .task-row");
+        mockTaskRowRects(Array.from(taskRows));
+
+        fireEvent.mouseDown(taskRows[1], {
+            button: 0,
+            buttons: 1,
+            clientX: 20,
+            clientY: 80,
+        });
+        fireEvent.mouseMove(taskRows[1], {
+            buttons: 1,
+            clientX: 20,
+            clientY: 10,
+        });
+
+        expect(
+            screen.getByLabelText("unscheduled tasks"),
+        ).toHaveClass("drag-target-list-active");
+        expect(
+            screen.getByLabelText("Scheduled tasks calendar"),
+        ).not.toHaveClass("drag-target-calendar-active");
+    });
+
+    it("moves the drag-to-calendar button to the right and highlights the calendar while pressed", async () => {
+        mocks.tasks = [
+            {
+                id: "task-schedule-a",
+                user_id: "user-1",
+                list_id: null,
+                title: "Schedule me",
+                notes: null,
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                unscheduled_order: null,
+                created_at: "2026-05-07T00:00:00Z",
+                updated_at: "",
+                completed_at: null,
+            },
+        ];
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "No time tasks" }),
+        );
+
+        const taskRow = document.querySelector(
+            '[data-task-id="task-schedule-a"][role="button"]',
+        ) as HTMLElement;
+        const orderButtons = taskRow.querySelectorAll(".task-order-actions button");
+
+        expect(orderButtons).toHaveLength(2);
+        expect(orderButtons[0]).toHaveAttribute("aria-label", "Move Schedule me to top");
+        expect(orderButtons[1]).toHaveAttribute("aria-label", "Drag to calendar");
+
+        fireEvent.pointerDown(screen.getByRole("button", { name: "Drag to calendar" }), {
+            button: 0,
+        });
+        fireEvent.mouseDown(screen.getByRole("button", { name: "Drag to calendar" }), {
+            button: 0,
+        });
+
+        expect(
+            screen.getByLabelText("Scheduled tasks calendar"),
+        ).toHaveClass("drag-target-calendar-active");
+        expect(
+            screen.getByLabelText("unscheduled tasks"),
+        ).not.toHaveClass("drag-target-list-active");
     });
 
     it("reorders no time tasks with explicit priority controls", async () => {
@@ -1108,9 +1287,27 @@ describe("App", () => {
         );
         expect(
             await screen.findByRole("button", {
-                name: "Drag Inbox task to calendar",
+                name: "Drag to calendar",
             }),
         ).toBeInTheDocument();
+
+        fireEvent.click(
+            screen.getByRole("button", { name: "Open create task" }),
+        );
+        expect(
+            await screen.findByRole("heading", { name: "Create task" }),
+        ).toBeInTheDocument();
+        await waitFor(() =>
+            expect(mocks.draggableDestroy).toHaveBeenCalledTimes(1),
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: "Close" }));
+        expect(
+            await screen.findByRole("button", { name: "Task view" }),
+        ).toBeInTheDocument();
+        await waitFor(() =>
+            expect(mocks.draggableConstruct).toHaveBeenCalledTimes(2),
+        );
     });
 
     it("hides and restores the sidebar", async () => {
@@ -1172,9 +1369,11 @@ describe("App", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
-        expect(
-            screen.getByRole("button", { name: "Task view" }),
-        ).toBeInTheDocument();
+        await waitFor(() =>
+            expect(
+                screen.getByRole("button", { name: "Task view" }),
+            ).toBeInTheDocument(),
+        );
         expect(
             screen.getByRole("button", { name: "Task category" }),
         ).toBeInTheDocument();
@@ -2573,6 +2772,14 @@ describe("App", () => {
         );
         await waitFor(() =>
             expect(
+                screen.getByRole("button", { name: "Task view" }),
+            ).toBeInTheDocument(),
+        );
+        expect(
+            screen.getByRole("button", { name: "Task category" }),
+        ).toBeInTheDocument();
+        await waitFor(() =>
+            expect(
                 screen.queryByRole("heading", { name: "Edit task" }),
             ).not.toBeInTheDocument(),
         );
@@ -2581,6 +2788,398 @@ describe("App", () => {
                 screen.queryByRole("button", { name: "Delete" }),
             ).not.toBeInTheDocument(),
         );
+        await waitFor(() =>
+            expect(
+                screen.getByRole("region", { name: "all tasks" }),
+            ).toBeInTheDocument(),
+        );
+    });
+
+    it("duplicates a no time task below the original and closes the context menu", async () => {
+        mocks.tasks = [
+            {
+                id: "task-no-time-a",
+                user_id: "user-1",
+                list_id: "list-1",
+                title: "Inbox A",
+                notes: "Original note",
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: true,
+                notification_offset_minutes: 60,
+                notification_channel: "discord",
+                timezone: "Asia/Taipei",
+                priority: 1,
+                unscheduled_order: 0,
+                notification_sent_at: null,
+                created_at: "2026-05-07T00:00:00.000Z",
+                updated_at: "2026-05-07T00:00:00.000Z",
+                completed_at: null,
+            },
+            {
+                id: "task-no-time-b",
+                user_id: "user-1",
+                list_id: "list-1",
+                title: "Inbox B",
+                notes: null,
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                unscheduled_order: 1,
+                notification_sent_at: null,
+                created_at: "2026-05-08T00:00:00.000Z",
+                updated_at: "2026-05-08T00:00:00.000Z",
+                completed_at: null,
+            },
+        ];
+
+        mocks.createTask.mockImplementationOnce(async (input: Record<string, unknown> = {}) => ({
+            id: "task-no-time-copy",
+            user_id: "user-1",
+            list_id: (input.list_id as string | null | undefined) ?? null,
+            title: String(input.title ?? "Inbox A"),
+            notes: (input.notes as string | null | undefined) ?? null,
+            completed: Boolean(input.completed ?? false),
+            scheduled_start:
+                (input.scheduled_start as string | null | undefined) ?? null,
+            scheduled_end:
+                (input.scheduled_end as string | null | undefined) ?? null,
+            due_at: (input.due_at as string | null | undefined) ?? null,
+            timezone:
+                (input.timezone as string | undefined) ?? "Asia/Taipei",
+            priority: (input.priority as number | null | undefined) ?? null,
+            unscheduled_order:
+                (input.unscheduled_order as number | null | undefined) ?? null,
+            recurrence_rule:
+                (input.recurrence_rule as string | null | undefined) ?? null,
+            recurrence_series_id: null,
+            notification_enabled: Boolean(input.notification_enabled ?? false),
+            notification_offset_minutes: Number(
+                input.notification_offset_minutes ?? 0,
+            ),
+            notification_channel:
+                (input.notification_channel as string | null | undefined) ??
+                null,
+            notification_sent_at: null,
+            created_at: "2026-05-08T00:00:01.000Z",
+            updated_at: "2026-05-08T00:00:01.000Z",
+            completed_at: null,
+        }));
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "No time tasks" }),
+        );
+
+        await waitFor(() =>
+            expect(
+                document.querySelector(
+                    '[data-task-id="task-no-time-a"][role="button"]',
+                ),
+            ).not.toBeNull(),
+        );
+        fireEvent.contextMenu(
+            document.querySelector(
+                '[data-task-id="task-no-time-a"][role="button"]',
+            ) as HTMLElement,
+            { clientX: 120, clientY: 180 },
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+
+        await waitFor(() =>
+            expect(mocks.createTask).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    title: "Inbox A",
+                    list_id: "list-1",
+                    notes: "Original note",
+                    completed: false,
+                    notification_enabled: true,
+                    notification_offset_minutes: 60,
+                    notification_channel: "discord",
+                    unscheduled_order: 0,
+                }),
+            ),
+        );
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("button", { name: "Duplicate" }),
+            ).not.toBeInTheDocument(),
+        );
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.events).toHaveLength(0),
+        );
+        await waitFor(() =>
+            expect(
+                Array.from(
+                    document.querySelectorAll(".task-list .task-row"),
+                ).map((row) => row.getAttribute("data-task-id")),
+            ).toEqual([
+                "task-no-time-a",
+                "task-no-time-copy",
+                "task-no-time-b",
+            ]),
+        );
+    });
+
+    it("duplicates a scheduled task and shows it on the calendar immediately", async () => {
+        const now = new Date();
+        const todayAtTen = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+            10,
+            0,
+            0,
+            0,
+        );
+        const scheduledTask = {
+            id: "task-scheduled-original",
+            user_id: "user-1",
+            list_id: "list-1",
+            title: "Calendar task",
+            notes: "Scheduled note",
+            completed: false,
+            scheduled_start: todayAtTen.toISOString(),
+            scheduled_end: new Date(
+                todayAtTen.getTime() + 60 * 60 * 1000,
+            ).toISOString(),
+            due_at: new Date(
+                todayAtTen.getTime() + 2 * 60 * 60 * 1000,
+            ).toISOString(),
+            recurrence_rule: null,
+            recurrence_series_id: null,
+            notification_enabled: true,
+            notification_offset_minutes: 15,
+            notification_channel: "discord",
+            timezone: "Asia/Taipei",
+            priority: 2,
+            unscheduled_order: null,
+            notification_sent_at: null,
+            created_at: "2026-05-08T00:00:00Z",
+            updated_at: "2026-05-08T00:00:00Z",
+            completed_at: null,
+        };
+        mocks.tasks = [scheduledTask];
+
+        mocks.createTask.mockImplementationOnce(async (input: Record<string, unknown> = {}) => ({
+            id: "task-scheduled-copy",
+            user_id: "user-1",
+            list_id: (input.list_id as string | null | undefined) ?? null,
+            title: String(input.title ?? "Calendar task"),
+            notes: (input.notes as string | null | undefined) ?? null,
+            completed: Boolean(input.completed ?? false),
+            scheduled_start:
+                (input.scheduled_start as string | null | undefined) ?? null,
+            scheduled_end:
+                (input.scheduled_end as string | null | undefined) ?? null,
+            due_at: (input.due_at as string | null | undefined) ?? null,
+            timezone:
+                (input.timezone as string | undefined) ?? "Asia/Taipei",
+            priority: (input.priority as number | null | undefined) ?? null,
+            unscheduled_order:
+                (input.unscheduled_order as number | null | undefined) ?? null,
+            recurrence_rule:
+                (input.recurrence_rule as string | null | undefined) ?? null,
+            recurrence_series_id: null,
+            notification_enabled: Boolean(input.notification_enabled ?? false),
+            notification_offset_minutes: Number(
+                input.notification_offset_minutes ?? 0,
+            ),
+            notification_channel:
+                (input.notification_channel as string | null | undefined) ??
+                null,
+            notification_sent_at: null,
+            created_at: "2026-05-08T00:00:01.000Z",
+            updated_at: "2026-05-08T00:00:01.000Z",
+            completed_at: null,
+        }));
+
+        render(<App />);
+
+        await waitFor(() =>
+            expect(
+                document.querySelector(
+                    '[data-task-id="task-scheduled-original"][role="button"]',
+                ),
+            ).not.toBeNull(),
+        );
+        fireEvent.contextMenu(
+            document.querySelector(
+                '[data-task-id="task-scheduled-original"][role="button"]',
+            ) as HTMLElement,
+            { clientX: 100, clientY: 160 },
+        );
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Duplicate" }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.createTask).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    title: "Calendar task",
+                    scheduled_start: todayAtTen.toISOString(),
+                    scheduled_end: new Date(
+                        todayAtTen.getTime() + 60 * 60 * 1000,
+                    ).toISOString(),
+                    due_at: new Date(
+                        todayAtTen.getTime() + 2 * 60 * 60 * 1000,
+                    ).toISOString(),
+                    completed: false,
+                    notification_enabled: true,
+                    notification_offset_minutes: 15,
+                    notification_channel: "discord",
+                }),
+            ),
+        );
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.events).toHaveLength(2),
+        );
+        expect(
+            mocks.fullCalendarProps.events.some(
+                (event) => event.id === "task-scheduled-copy",
+            ),
+        ).toBe(true);
+        expect(
+            screen.queryByRole("button", { name: "Duplicate" }),
+        ).not.toBeInTheDocument();
+    });
+
+    it("duplicates a recurring task as a normal non-recurring task", async () => {
+        const now = new Date();
+        const todayAtTen = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+            10,
+            0,
+            0,
+            0,
+        );
+        mocks.tasks = [
+            {
+                id: "task-recurring-original",
+                user_id: "user-1",
+                list_id: "list-1",
+                title: "Recurring task",
+                notes: "Keep this note",
+                completed: false,
+                scheduled_start: todayAtTen.toISOString(),
+                scheduled_end: new Date(
+                    todayAtTen.getTime() + 60 * 60 * 1000,
+                ).toISOString(),
+                due_at: null,
+                recurrence_rule: "FREQ=DAILY;INTERVAL=1",
+                recurrence_series_id: "series-1",
+                notification_enabled: true,
+                notification_offset_minutes: 240,
+                notification_channel: "discord",
+                timezone: "Asia/Taipei",
+                priority: null,
+                unscheduled_order: null,
+                notification_sent_at: null,
+                created_at: "2026-05-08T00:00:00Z",
+                updated_at: "2026-05-08T00:00:00Z",
+                completed_at: null,
+            },
+        ];
+
+        mocks.createTask.mockImplementationOnce(async (input: Record<string, unknown> = {}) => ({
+            id: "task-recurring-copy",
+            user_id: "user-1",
+            list_id: (input.list_id as string | null | undefined) ?? null,
+            title: String(input.title ?? "Recurring task"),
+            notes: (input.notes as string | null | undefined) ?? null,
+            completed: Boolean(input.completed ?? false),
+            scheduled_start:
+                (input.scheduled_start as string | null | undefined) ?? null,
+            scheduled_end:
+                (input.scheduled_end as string | null | undefined) ?? null,
+            due_at: (input.due_at as string | null | undefined) ?? null,
+            timezone:
+                (input.timezone as string | undefined) ?? "Asia/Taipei",
+            priority: (input.priority as number | null | undefined) ?? null,
+            unscheduled_order:
+                (input.unscheduled_order as number | null | undefined) ?? null,
+            recurrence_rule:
+                (input.recurrence_rule as string | null | undefined) ?? null,
+            recurrence_series_id: null,
+            notification_enabled: Boolean(input.notification_enabled ?? false),
+            notification_offset_minutes: Number(
+                input.notification_offset_minutes ?? 0,
+            ),
+            notification_channel:
+                (input.notification_channel as string | null | undefined) ??
+                null,
+            notification_sent_at: null,
+            created_at: "2026-05-08T00:00:01.000Z",
+            updated_at: "2026-05-08T00:00:01.000Z",
+            completed_at: null,
+        }));
+
+        render(<App />);
+
+        await waitFor(() =>
+            expect(
+                document.querySelector(
+                    '[data-task-id="task-recurring-original"][role="button"]',
+                ),
+            ).not.toBeNull(),
+        );
+        fireEvent.contextMenu(
+            document.querySelector(
+                '[data-task-id="task-recurring-original"][role="button"]',
+            ) as HTMLElement,
+            { clientX: 100, clientY: 160 },
+        );
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Duplicate" }),
+        );
+
+        await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
+        const duplicateCalls = mocks.createTask.mock.calls as unknown[][];
+        const duplicateCall = duplicateCalls[0];
+        if (!duplicateCall) {
+            throw new Error("Expected duplicate create call");
+        }
+        const duplicateInput = duplicateCall[0] as Record<string, unknown>;
+        expect(duplicateInput.title).toBe("Recurring task");
+        expect(duplicateInput.completed).toBe(false);
+        expect(duplicateInput.notification_enabled).toBe(true);
+        expect(duplicateInput.notification_offset_minutes).toBe(240);
+        expect(duplicateInput.notification_channel).toBe("discord");
+        expect(duplicateInput).not.toHaveProperty("recurrence_rule");
+
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.events).toHaveLength(2),
+        );
+        expect(
+            mocks.fullCalendarProps.events.some(
+                (event) => event.id === "task-recurring-copy",
+            ),
+        ).toBe(true);
+        expect(
+            mocks.fullCalendarProps.events.find(
+                (event) => event.id === "task-recurring-copy",
+            )?.extendedProps?.task?.recurrence_rule,
+        ).toBeNull();
+        expect(
+            screen.queryByRole("button", { name: "Duplicate" }),
+        ).not.toBeInTheDocument();
     });
 
     it("opens a year input from the month view title", async () => {

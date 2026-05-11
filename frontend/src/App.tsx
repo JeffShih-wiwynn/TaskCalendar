@@ -56,6 +56,7 @@ import {
     listTasks,
     uncompleteTask,
     updateTask,
+    type CreateScheduledTaskInput,
     type ScheduledTask,
 } from "./api/tasks";
 
@@ -75,6 +76,7 @@ type TaskView =
 type ThemeMode = "light" | "dark";
 type CalendarView = "dayGridMonth" | "timeGridWeek" | "timeGridDay";
 type CalendarTransitionKind = "neutral" | "view" | "prev" | "next" | "today";
+type DragTargetMode = "reorder" | "schedule" | null;
 const unclassifiedCategoryFilter = "__unclassified__";
 const defaultSidebarWidth = 300;
 const minSidebarWidth = 240;
@@ -225,12 +227,15 @@ export function App() {
     const [isSaving, setIsSaving] = useState(false);
     const [isEditSaving, setIsEditSaving] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [isDuplicating, setIsDuplicating] = useState(false);
+    const [dragTargetMode, setDragTargetMode] = useState<DragTargetMode>(null);
     const [pendingTaskDelete, setPendingTaskDelete] =
         useState<PendingTaskDeleteState | null>(null);
     const [pendingTaskEdit, setPendingTaskEdit] =
         useState<PendingTaskEditState | null>(null);
     const [detailPanelMode, setDetailPanelMode] =
         useState<DetailPanelMode>(null);
+    const [isDetailPanelClosing, setIsDetailPanelClosing] = useState(false);
     const [isWebhookSettingsOpen, setIsWebhookSettingsOpen] = useState(false);
     const [webhookSettings, setWebhookSettings] = useState<AppSettings | null>(
         null,
@@ -271,6 +276,7 @@ export function App() {
     const taskRowWindowDragCleanupRef = useRef<(() => void) | null>(null);
     const draggedUnscheduledTaskIdRef = useRef<string | null>(null);
     const suppressTaskRowClickRef = useRef<string | null>(null);
+    const scheduleDragCleanupRef = useRef<(() => void) | null>(null);
     const unscheduledOrderRef = useRef<string[]>(unscheduledOrder);
     const unscheduledOrderSaveStateRef = useRef<{
         saving: boolean;
@@ -573,7 +579,7 @@ export function App() {
         return () => {
             draggable.destroy();
         };
-    }, [activeView, detailPanelMode]);
+    }, [activeView, detailPanelMode, isDetailPanelClosing]);
 
     useEffect(() => {
         if (!isTimeGridView) {
@@ -736,6 +742,7 @@ export function App() {
         setIsViewMenuOpen(false);
         setIsCategoryMenuOpen(false);
         setContextMenu(null);
+        setIsDetailPanelClosing(true);
         setDetailPanelMode(null);
         setSelectedTaskId(null);
         if (pendingTaskEdit?.source === "calendar") {
@@ -931,40 +938,6 @@ export function App() {
         [reloadTasks, tasks],
     );
 
-    const handleExternalTaskDrop = useCallback(
-        async (dropInfo: DropArg) => {
-            const taskId = dropInfo.draggedEl.getAttribute("data-task-id");
-            const task = tasksRef.current.find((item) => item.id === taskId);
-            if (!task) {
-                return;
-            }
-
-            const updates = getCalendarDropScheduleUpdate(task, dropInfo);
-
-            if (shouldPromptRecurringTaskEdit(task, updates)) {
-                setPendingTaskEdit({
-                    taskId: task.id,
-                    updates,
-                    source: "calendar",
-                });
-                return;
-            }
-
-            try {
-                const updatedTask = await updateTask(task.id, updates);
-                replaceTaskInState(updatedTask);
-                void refreshTasks();
-            } catch (error) {
-                setFormError(
-                    error instanceof Error
-                        ? error.message
-                        : "Unable to schedule task",
-                );
-            }
-        },
-        [refreshTasks, replaceTaskInState],
-    );
-
     const openCreatePanel = useCallback(
         (start: Date, end: Date) => {
             setFormError(null);
@@ -1077,6 +1050,43 @@ export function App() {
         }),
         [],
     );
+    useEffect(() => {
+        if (!isDetailPanelClosing) {
+            return;
+        }
+
+        const fallbackDelay = prefersReducedMotion
+            ? 0
+            : motionTimings.panel.duration * 1000 + 100;
+        const fallbackTimer = window.setTimeout(() => {
+            setIsDetailPanelClosing(false);
+        }, fallbackDelay);
+
+        return () => {
+            window.clearTimeout(fallbackTimer);
+        };
+    }, [isDetailPanelClosing, prefersReducedMotion]);
+    useEffect(() => {
+        if (
+            detailPanelMode !== "edit" ||
+            isDetailPanelClosing ||
+            taskState.status === "loading" ||
+            taskState.status === "refreshing" ||
+            !selectedTaskId ||
+            selectedTask
+        ) {
+            return;
+        }
+
+        closeDetailPanel();
+    }, [
+        closeDetailPanel,
+        detailPanelMode,
+        isDetailPanelClosing,
+        selectedTask,
+        selectedTaskId,
+        taskState.status,
+    ]);
     const dropdownTransition = useMemo(
         () =>
             prefersReducedMotion
@@ -1089,6 +1099,21 @@ export function App() {
             hidden: { opacity: 0, y: -4, scale: 0.98 },
             visible: { opacity: 1, y: 0, scale: 1 },
             exit: { opacity: 0, y: -4, scale: 0.98 },
+        }),
+        [],
+    );
+    const calendarDropTargetLabelTransition = useMemo(
+        () =>
+            prefersReducedMotion
+                ? { duration: 0 }
+                : { duration: 0.24, ease: [0.22, 1, 0.36, 1] as const },
+        [prefersReducedMotion],
+    );
+    const calendarDropTargetLabelVariants = useMemo(
+        () => ({
+            hidden: { opacity: 0, y: -10, scale: 0.985 },
+            visible: { opacity: 1, y: 0, scale: 1 },
+            exit: { opacity: 0, y: -10, scale: 0.985 },
         }),
         [],
     );
@@ -1221,6 +1246,9 @@ export function App() {
             if (!pointerState || pointerState.taskId !== taskId) {
                 return;
             }
+            if (dragTargetMode === "schedule") {
+                return;
+            }
 
             const movedEnough =
                 Math.abs(clientX - pointerState.startX) > 6 ||
@@ -1236,6 +1264,7 @@ export function App() {
                 return;
             }
 
+            setDragTargetMode("reorder");
             preventDefault();
             draggedUnscheduledTaskIdRef.current = taskId;
             suppressTaskRowClickRef.current = taskId;
@@ -1259,7 +1288,7 @@ export function App() {
             pointerState.startX = clientX;
             pointerState.startY = clientY;
         },
-        [activeView, applyLocalUnscheduledOrder],
+        [activeView, applyLocalUnscheduledOrder, dragTargetMode],
     );
 
     const handleTaskRowPointerMove = useCallback(
@@ -1294,6 +1323,9 @@ export function App() {
             suppressTaskRowClickRef.current = pointerState.dragging
                 ? taskId
                 : null;
+            if (pointerState.dragging) {
+                setDragTargetMode(null);
+            }
             if (
                 pointerState.dragging &&
                 !areStringArraysEqual(
@@ -1317,6 +1349,9 @@ export function App() {
             if (typeof event.button === "number" && event.button !== 0) {
                 return;
             }
+            if (isInteractiveTaskRowTarget(event.target)) {
+                return;
+            }
 
             taskRowPointerStateRef.current = {
                 taskId,
@@ -1325,11 +1360,9 @@ export function App() {
                 dragging: false,
                 orderAtStart: unscheduledOrderRef.current,
             };
+            setDragTargetMode(null);
             suppressTaskRowClickRef.current = null;
-            if (
-                activeView === "unscheduled" &&
-                !isInteractiveTaskRowTarget(event.target)
-            ) {
+            if (activeView === "unscheduled") {
                 if ("pointerId" in event) {
                     event.currentTarget.setPointerCapture?.(event.pointerId);
                 }
@@ -1385,6 +1418,82 @@ export function App() {
             persistUnscheduledOrder(nextOrder);
         },
         [activeView, applyLocalUnscheduledOrder, persistUnscheduledOrder],
+    );
+
+    const endScheduleDragHighlight = useCallback(() => {
+        scheduleDragCleanupRef.current?.();
+        scheduleDragCleanupRef.current = null;
+        setDragTargetMode((current) => (current === "schedule" ? null : current));
+    }, []);
+
+    const startScheduleDragHighlight = useCallback(() => {
+        endScheduleDragHighlight();
+        setDragTargetMode("schedule");
+
+        const clear = () => {
+            scheduleDragCleanupRef.current = null;
+            setDragTargetMode((current) =>
+                current === "schedule" ? null : current,
+            );
+        };
+
+        const handlePointerUp = () => clear();
+        const handlePointerCancel = () => clear();
+
+        window.addEventListener("pointerup", handlePointerUp, { once: true });
+        window.addEventListener("mouseup", handlePointerUp, { once: true });
+        window.addEventListener("pointercancel", handlePointerCancel, {
+            once: true,
+        });
+
+        scheduleDragCleanupRef.current = () => {
+            window.removeEventListener("pointerup", handlePointerUp);
+            window.removeEventListener("mouseup", handlePointerUp);
+            window.removeEventListener("pointercancel", handlePointerCancel);
+            clear();
+        };
+    }, [endScheduleDragHighlight]);
+
+    useEffect(() => {
+        return () => {
+            endScheduleDragHighlight();
+        };
+    }, [endScheduleDragHighlight]);
+
+    const handleExternalTaskDrop = useCallback(
+        async (dropInfo: DropArg) => {
+            const taskId = dropInfo.draggedEl.getAttribute("data-task-id");
+            const task = tasksRef.current.find((item) => item.id === taskId);
+            if (!task) {
+                return;
+            }
+
+            const updates = getCalendarDropScheduleUpdate(task, dropInfo);
+
+            if (shouldPromptRecurringTaskEdit(task, updates)) {
+                setPendingTaskEdit({
+                    taskId: task.id,
+                    updates,
+                    source: "calendar",
+                });
+                return;
+            }
+
+            try {
+                const updatedTask = await updateTask(task.id, updates);
+                replaceTaskInState(updatedTask);
+                void refreshTasks();
+            } catch (error) {
+                setFormError(
+                    error instanceof Error
+                        ? error.message
+                        : "Unable to schedule task",
+                );
+            } finally {
+                endScheduleDragHighlight();
+            }
+        },
+        [endScheduleDragHighlight, refreshTasks, replaceTaskInState],
     );
 
     const promptRecurringTaskDelete = useCallback(
@@ -1772,6 +1881,50 @@ export function App() {
         }
     };
 
+    const handleDuplicateFromMenu = async () => {
+        if (!contextMenu || contextMenu.kind !== "task") {
+            return;
+        }
+
+        const sourceTask = tasks.find((item) => item.id === contextMenu.id);
+        if (!sourceTask) {
+            setContextMenu(null);
+            return;
+        }
+
+        setFormError(null);
+        setIsDuplicating(true);
+
+        try {
+            const duplicatedTask = await createTask(
+                buildDuplicateTaskInput(sourceTask),
+            );
+
+            replaceTaskInState(duplicatedTask);
+            setContextMenu(null);
+
+            if (!duplicatedTask.scheduled_start && !duplicatedTask.scheduled_end) {
+                const nextOrder = moveTaskIdRelative(
+                    unscheduledOrderRef.current,
+                    duplicatedTask.id,
+                    sourceTask.id,
+                    "after",
+                );
+                applyLocalUnscheduledOrder(nextOrder);
+            }
+
+            reloadTasks();
+        } catch (error) {
+            setFormError(
+                error instanceof Error
+                    ? error.message
+                    : "Unable to duplicate task",
+            );
+        } finally {
+            setIsDuplicating(false);
+        }
+    };
+
     const handleSaveWebhookSettings = async (
         event: FormEvent<HTMLFormElement>,
     ) => {
@@ -2099,7 +2252,7 @@ export function App() {
                         )}
                     </AnimatePresence>
 
-                    {!detailPanelMode && (
+                    {!detailPanelMode && !isDetailPanelClosing && (
                         <section
                             className="filter-section"
                             aria-label="Task filters"
@@ -2197,6 +2350,7 @@ export function App() {
                                     <span>Show on calendar</span>
                                     <input
                                         type="checkbox"
+                                        className="task-checkbox task-checkbox--compact"
                                         checked={showCompletedOnCalendar}
                                         onChange={(event) =>
                                             setShowCompletedOnCalendar(
@@ -2522,7 +2676,11 @@ export function App() {
                         </section>
                     )}
 
-                    <AnimatePresence initial={false} mode="wait">
+                    <AnimatePresence
+                        initial={false}
+                        mode="wait"
+                        onExitComplete={() => setIsDetailPanelClosing(false)}
+                    >
                         {detailPanelMode && (
                             <motion.section
                                 key={detailPanelMode}
@@ -2983,7 +3141,7 @@ export function App() {
                                             <span>Completed</span>
                                             <input
                                                 type="checkbox"
-                                                className="task-checkbox"
+                                                className="task-checkbox task-checkbox--compact"
                                                 checked={editState.completed}
                                                 onChange={(event) =>
                                                     setEditState({
@@ -3015,16 +3173,16 @@ export function App() {
                                     Select a task to edit it.
                                 </p>
                             )}
-                            </motion.section>
+                                </motion.section>
                         )}
                     </AnimatePresence>
 
-                    {!detailPanelMode && (
-                        <section
-                            ref={taskListRef}
-                            className="task-list"
-                            aria-label={`${activeView} tasks`}
-                        >
+                    {!detailPanelMode && !isDetailPanelClosing && (
+            <section
+                ref={taskListRef}
+                className={`task-list ${dragTargetMode === "reorder" ? "drag-target-list-active" : ""}`}
+                aria-label={`${activeView} tasks`}
+            >
                             <motion.div
                                 key={taskContentKey}
                                 className="task-list-content"
@@ -3153,6 +3311,7 @@ export function App() {
                                                             null;
                                                         suppressTaskRowClickRef.current =
                                                             null;
+                                                        setDragTargetMode(null);
                                                     }}
                                                     onClick={() => {
                                                         if (
@@ -3203,74 +3362,6 @@ export function App() {
                                                         });
                                                     }}
                                                 >
-                                                    {activeView ===
-                                                        "unscheduled" && (
-                                                        <button
-                                                            type="button"
-                                                            className="task-drag-handle"
-                                                            data-task-id={
-                                                                task.id
-                                                            }
-                                                            aria-label={`Drag ${task.title} to calendar`}
-                                                            title="Drag onto calendar"
-                                                            onPointerDown={(
-                                                                event,
-                                                            ) =>
-                                                                event.stopPropagation()
-                                                            }
-                                                            onMouseDown={(
-                                                                event,
-                                                            ) =>
-                                                                event.stopPropagation()
-                                                            }
-                                                            onClick={(event) =>
-                                                                event.stopPropagation()
-                                                            }
-                                                        >
-                                                            <span
-                                                                aria-hidden="true"
-                                                                className="task-drag-handle-icon"
-                                                            >
-                                                                <svg
-                                                                    viewBox="0 0 16 16"
-                                                                    fill="none"
-                                                                    aria-hidden="true"
-                                                                >
-                                                                    <path
-                                                                        d="M4 2.5h8A1.5 1.5 0 0 1 13.5 4v7A1.5 1.5 0 0 1 12 12.5H4A1.5 1.5 0 0 1 2.5 11V4A1.5 1.5 0 0 1 4 2.5Z"
-                                                                        stroke="currentColor"
-                                                                        strokeWidth="1.3"
-                                                                        strokeLinejoin="round"
-                                                                    />
-                                                                    <path
-                                                                        d="M2.9 5.3h10.2"
-                                                                        stroke="currentColor"
-                                                                        strokeWidth="1.3"
-                                                                        strokeLinecap="round"
-                                                                    />
-                                                                    <path
-                                                                        d="M6.2 8.7h3.2"
-                                                                        stroke="currentColor"
-                                                                        strokeWidth="1.3"
-                                                                        strokeLinecap="round"
-                                                                    />
-                                                                    <path
-                                                                        d="M9.5 7.1 12 9.6"
-                                                                        stroke="currentColor"
-                                                                        strokeWidth="1.3"
-                                                                        strokeLinecap="round"
-                                                                    />
-                                                                    <path
-                                                                        d="M10.1 9.6H12V7.7"
-                                                                        stroke="currentColor"
-                                                                        strokeWidth="1.3"
-                                                                        strokeLinecap="round"
-                                                                        strokeLinejoin="round"
-                                                                    />
-                                                                </svg>
-                                                            </span>
-                                                        </button>
-                                                    )}
                                                     <motion.input
                                                         type="checkbox"
                                                         className="task-checkbox"
@@ -3346,8 +3437,66 @@ export function App() {
                                                                         task.id,
                                                                     );
                                                                 }}
-                                                            >
+                                                                >
                                                                 ⇡
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className="task-drag-handle task-schedule-button"
+                                                                data-task-id={
+                                                                    task.id
+                                                                }
+                                                                aria-label="Drag to calendar"
+                                                                title="Drag to calendar"
+                                                                onPointerDown={(
+                                                                    event,
+                                                                ) => {
+                                                                    event.stopPropagation();
+                                                                    startScheduleDragHighlight();
+                                                                }}
+                                                                onMouseDown={(
+                                                                    event,
+                                                                ) =>
+                                                                    event.stopPropagation()
+                                                                }
+                                                                onClick={(
+                                                                    event,
+                                                                ) =>
+                                                                    event.stopPropagation()
+                                                                }
+                                                            >
+                                                                <span
+                                                                    aria-hidden="true"
+                                                                    className="task-drag-handle-icon"
+                                                                >
+                                                                    <svg
+                                                                        viewBox="0 0 16 16"
+                                                                        fill="none"
+                                                                        aria-hidden="true"
+                                                                    >
+                                                                        <rect
+                                                                            x="2.5"
+                                                                            y="3.5"
+                                                                            width="11"
+                                                                            height="10"
+                                                                            rx="2"
+                                                                            stroke="currentColor"
+                                                                            strokeWidth="1.3"
+                                                                        />
+                                                                        <path
+                                                                            d="M2.5 6h11"
+                                                                            stroke="currentColor"
+                                                                            strokeWidth="1.3"
+                                                                            strokeLinecap="round"
+                                                                        />
+                                                                        <path
+                                                                            d="M5 2.5v2M11 2.5v2"
+                                                                            stroke="currentColor"
+                                                                            strokeWidth="1.3"
+                                                                            strokeLinecap="round"
+                                                                        />
+                                                                    </svg>
+                                                                </span>
                                                             </button>
                                                         </span>
                                                     )}
@@ -3367,9 +3516,29 @@ export function App() {
             />
 
             <section
-                className="calendar-panel"
+                className={`calendar-panel ${dragTargetMode === "schedule" ? "drag-target-calendar-active" : ""}`}
                 aria-label="Scheduled tasks calendar"
             >
+                <AnimatePresence initial={false}>
+                    {dragTargetMode === "schedule" && (
+                        <motion.div
+                            key="calendar-drop-target-label"
+                            className="calendar-drop-target-label"
+                            aria-hidden="true"
+                        >
+                            <motion.div
+                                className="calendar-drop-target-label-chip"
+                                variants={calendarDropTargetLabelVariants}
+                                initial="hidden"
+                                animate="visible"
+                                exit="exit"
+                                transition={calendarDropTargetLabelTransition}
+                            >
+                                Drop on calendar to schedule
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
                 <AnimatePresence initial={false}>
                     {taskLoadBannerMessage && (
                         <motion.div
@@ -3498,6 +3667,7 @@ export function App() {
                         plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
                         initialView={calendarView}
                         initialDate={calendarDate}
+                        fixedMirrorParent={document.body}
                         headerToolbar={false}
                         events={events}
                         eventTimeFormat={{
@@ -3681,9 +3851,20 @@ export function App() {
                     style={{ left: contextMenu.x, top: contextMenu.y }}
                     onClick={(event) => event.stopPropagation()}
                 >
+                    {contextMenu.kind === "task" && (
+                        <button
+                            type="button"
+                            disabled={isDuplicating}
+                            className="context-menu-item"
+                            onClick={() => void handleDuplicateFromMenu()}
+                        >
+                            {isDuplicating ? "Duplicating..." : "Duplicate"}
+                        </button>
+                    )}
                     <button
                         type="button"
                         disabled={isDeleting}
+                        className="context-menu-item context-menu-item-danger"
                         onClick={() => void handleDeleteFromMenu()}
                     >
                         {isDeleting
@@ -3869,6 +4050,29 @@ function buildTaskUpdates(
     }
 
     return updates;
+}
+
+function buildDuplicateTaskInput(
+    task: ScheduledTask,
+): CreateScheduledTaskInput {
+    return {
+        title: task.title,
+        list_id: task.list_id,
+        notes: task.notes,
+        completed: false,
+        scheduled_start: task.scheduled_start,
+        scheduled_end: task.scheduled_end,
+        due_at: task.due_at,
+        timezone: task.timezone,
+        priority: task.priority,
+        unscheduled_order:
+            !task.scheduled_start && !task.scheduled_end
+                ? task.unscheduled_order
+                : null,
+        notification_enabled: task.notification_enabled,
+        notification_offset_minutes: task.notification_offset_minutes,
+        notification_channel: task.notification_channel,
+    };
 }
 
 function notificationFormStateFromTask(task: ScheduledTask): Pick<

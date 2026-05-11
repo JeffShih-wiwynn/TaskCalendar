@@ -298,12 +298,15 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 42px;
+  padding-block: 4px;
+  min-height: 0;
+  line-height: 1.2;
 }
 
-.filter-toggle-field input {
-  width: 16px;
-  height: 16px;
+.filter-toggle-field .task-checkbox {
+  --checkbox-size: 16px;
+  --checkbox-radius: 4px;
+  --checkbox-mark-size: 68%;
 }
 
 .task-row {
@@ -544,6 +547,8 @@ h2 {
 }
 
 .task-list {
+  position: relative;
+  isolation: isolate;
   display: grid;
   align-content: start;
   flex: 1 1 auto;
@@ -551,6 +556,63 @@ h2 {
   min-height: 0;
   overflow: auto;
   padding-top: 12px;
+  transition:
+    box-shadow var(--micro-duration-medium) var(--micro-ease),
+    background-color var(--micro-duration-medium) var(--micro-ease),
+    transform var(--micro-duration-medium) var(--micro-ease);
+}
+
+.task-list.drag-target-list-active {
+  border-radius: 12px;
+  background-clip: padding-box;
+  background: linear-gradient(
+      180deg,
+      rgb(72 187 120 / 13%),
+      rgb(72 187 120 / 5%)
+    ),
+    var(--panel-bg);
+}
+
+.task-list.drag-target-list-active::after {
+  content: "Reorder tasks";
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  border-radius: 999px;
+  padding: 5px 10px;
+  color: #ecfff3;
+  background: rgb(10 17 13 / 72%);
+  box-shadow: 0 10px 24px rgb(0 0 0 / 14%);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.calendar-drop-target-label {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.calendar-drop-target-label-chip {
+  border-radius: 999px;
+  padding: 11px 18px;
+  color: #f2fff7;
+  background: rgb(10 17 13 / 76%);
+  box-shadow:
+    0 18px 36px rgb(0 0 0 / 18%),
+    0 0 0 1px rgb(72 187 120 / 10%);
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .task-list-content {
@@ -658,6 +720,23 @@ h2 {
   filter: drop-shadow(0 0 6px rgb(69 181 143 / 12%));
 }
 
+.task-drag-handle.task-schedule-button {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--field-border));
+  color: color-mix(in srgb, var(--accent) 82%, white);
+}
+
+.task-drag-handle.task-schedule-button:hover {
+  border-color: color-mix(in srgb, var(--accent) 58%, white);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 4%), rgb(255 255 255 / 0%)),
+    color-mix(in srgb, var(--accent) 18%, var(--panel-bg));
+  filter: drop-shadow(0 0 8px rgb(23 107 88 / 18%));
+}
+
+.task-drag-handle.task-schedule-button:focus-visible {
+  outline-color: color-mix(in srgb, var(--accent) 62%, white);
+}
+
 .task-drag-handle:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 55%, white);
   outline-offset: 2px;
@@ -693,17 +772,25 @@ h2 {
 }
 
 .task-checkbox {
+  --checkbox-size: 18px;
+  --checkbox-radius: 5px;
+  --checkbox-mark-size: 72%;
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
   display: inline-grid;
   place-items: center;
-  flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
+  flex: 0 0 var(--checkbox-size);
+  inline-size: var(--checkbox-size);
+  block-size: var(--checkbox-size);
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
+  min-width: var(--checkbox-size);
+  min-height: var(--checkbox-size);
+  aspect-ratio: 1 / 1;
   margin: 0;
   border: 1px solid var(--field-border);
-  border-radius: 5px;
+  border-radius: var(--checkbox-radius);
   color: #ffffff;
   background:
     linear-gradient(180deg, rgb(255 255 255 / 3%), rgb(255 255 255 / 0%)),
@@ -715,6 +802,8 @@ h2 {
     inset 0 1px 0 rgb(255 255 255 / 3%),
     0 0 0 rgb(0 0 0 / 0%);
   cursor: pointer;
+  line-height: 0;
+  vertical-align: middle;
   transition:
     border-color var(--micro-duration-fast) ease,
     background-color var(--micro-duration-fast) ease,
@@ -735,7 +824,9 @@ h2 {
   border-color: color-mix(in srgb, var(--accent) 72%, white);
   background-color: var(--accent);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 10' fill='none'%3E%3Cpath d='M1.2 5.4 4.4 8.2 10.6 1.8' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"), linear-gradient(180deg, rgb(255 255 255 / 3%), rgb(255 255 255 / 0%));
-  background-size: 72% 72%, 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: var(--checkbox-mark-size) var(--checkbox-mark-size), 100% 100%;
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 10%),
     0 0 0 1px rgb(69 181 143 / 18%);
@@ -758,10 +849,16 @@ h2 {
   opacity: 0.45;
 }
 
+.task-checkbox--compact {
+  --checkbox-size: 16px;
+  --checkbox-radius: 4px;
+  --checkbox-mark-size: 68%;
+}
+
 .calendar-task .task-checkbox {
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
+  --checkbox-size: 16px;
+  --checkbox-radius: 4px;
+  --checkbox-mark-size: 68%;
   margin-top: 1px;
 }
 
@@ -781,9 +878,8 @@ h2 {
 }
 
 .task-order-actions {
-  display: grid;
-  grid-template-columns: 26px;
-  grid-template-rows: 26px;
+  display: flex;
+  align-items: center;
   gap: 4px;
   flex: 0 0 auto;
   align-self: center;
@@ -969,6 +1065,26 @@ h2 {
   background: var(--panel-bg);
 }
 
+input[type="checkbox"].task-checkbox {
+  flex: 0 0 var(--checkbox-size);
+  inline-size: var(--checkbox-size);
+  block-size: var(--checkbox-size);
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
+  min-width: var(--checkbox-size);
+  min-height: var(--checkbox-size);
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+input[type="checkbox"].task-checkbox:checked {
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: var(--checkbox-mark-size) var(--checkbox-mark-size), 100% 100%;
+}
+
 .task-form input[type="datetime-local"] {
   font-size: 0.92rem;
 }
@@ -977,26 +1093,27 @@ h2 {
   resize: vertical;
 }
 
-.task-form-inline-toggle {
-  width: 100%;
-  display: grid;
-  grid-template-columns: auto auto;
+.task-form label.task-form-inline-toggle {
+  display: flex;
   justify-content: center;
   align-items: center;
   gap: 10px;
-  min-height: 42px;
+  padding-block: 4px;
+  min-height: 0;
+  line-height: 1.2;
 }
 
-.task-form-inline-toggle span {
+.task-form label.task-form-inline-toggle span {
   color: var(--muted);
   font-size: 0.86rem;
   font-weight: 700;
+  line-height: 1.2;
 }
 
-.task-form-inline-toggle input {
-  justify-self: end;
-  width: 16px;
-  height: 16px;
+.task-form label.task-form-inline-toggle .task-checkbox {
+  --checkbox-size: 16px;
+  --checkbox-radius: 4px;
+  --checkbox-mark-size: 68%;
 }
 
 .task-form-actions {
@@ -1076,6 +1193,7 @@ h2 {
 
 .calendar-panel {
   position: relative;
+  isolation: isolate;
   min-width: 0;
   min-height: calc(100vh - 32px);
   display: grid;
@@ -1086,6 +1204,21 @@ h2 {
   border-radius: 8px;
   background: var(--panel-bg);
   box-shadow: 0 10px 28px var(--shadow);
+  transition:
+    box-shadow var(--micro-duration-medium) var(--micro-ease),
+    background-color var(--micro-duration-medium) var(--micro-ease),
+    transform var(--micro-duration-medium) var(--micro-ease);
+}
+
+.calendar-panel.drag-target-calendar-active {
+  border-radius: 24px;
+  background-clip: padding-box;
+  background: linear-gradient(
+      180deg,
+      rgb(72 187 120 / 13%),
+      rgb(72 187 120 / 5%)
+    ),
+    var(--panel-bg);
 }
 
 .calendar-transition-shell {
@@ -1214,7 +1347,7 @@ h2 {
   border: 0;
   border-radius: 4px;
   padding: 8px 10px;
-  color: var(--danger);
+  color: var(--text);
   background: transparent;
   font: inherit;
   text-align: left;
@@ -1222,6 +1355,14 @@ h2 {
 }
 
 .context-menu button:hover {
+  background: var(--accent-soft);
+}
+
+.context-menu button.context-menu-item-danger {
+  color: var(--danger);
+}
+
+.context-menu button.context-menu-item-danger:hover {
   background: var(--danger-soft);
 }
 
@@ -1370,6 +1511,8 @@ h2 {
   .choice-dialog-actions button,
   .task-row,
   .task-drag-handle,
+  .task-list,
+  .calendar-panel,
   .task-checkbox,
   .task-event,
   .task-title,
