@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
     },
     fullCalendarMount: vi.fn(),
     fullCalendarRefetchEvents: vi.fn(),
+    fullCalendarUpdateSize: vi.fn(),
     dragRevert: vi.fn(),
     draggableConstruct: vi.fn(),
     draggableDestroy: vi.fn(),
@@ -173,6 +174,7 @@ vi.mock("@fullcalendar/react", () => ({
                 gotoDate: (date: Date) => void;
                 getDate: () => Date;
                 refetchEvents: () => void;
+                updateSize: () => void;
             };
         }>,
     ) {
@@ -210,6 +212,7 @@ vi.mock("@fullcalendar/react", () => ({
                     gotoDate: (date: Date) => setCurrentDate(new Date(date)),
                     getDate: () => currentDate,
                     refetchEvents: () => mocks.fullCalendarRefetchEvents(),
+                    updateSize: () => mocks.fullCalendarUpdateSize(),
                 }),
             }),
             [currentDate],
@@ -1327,6 +1330,24 @@ describe("App", () => {
         expect(
             await screen.findByRole("button", { name: "Task view" }),
         ).toBeInTheDocument();
+    });
+
+    it("updates the calendar size after the sidebar transition finishes", async () => {
+        render(<App />);
+
+        expect(await screen.findByRole("button", { name: "Hide sidebar" }))
+            .toBeInTheDocument();
+        mocks.fullCalendarUpdateSize.mockClear();
+
+        fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" }));
+        await waitFor(() =>
+            expect(mocks.fullCalendarUpdateSize).toHaveBeenCalledTimes(1),
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: "⇥" }));
+        await waitFor(() =>
+            expect(mocks.fullCalendarUpdateSize).toHaveBeenCalledTimes(2),
+        );
     });
 
     it("restores a saved sidebar width", async () => {
