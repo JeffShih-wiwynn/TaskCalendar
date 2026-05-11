@@ -1450,7 +1450,7 @@ input[type="checkbox"].task-checkbox:checked {
 
 .calendar-task {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 6px;
   min-width: 0;
   width: 100%;
@@ -1461,8 +1461,12 @@ input[type="checkbox"].task-checkbox:checked {
 }
 
 .calendar-task-title {
+  flex: 1 1 auto;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -1534,6 +1538,12 @@ input[type="checkbox"].task-checkbox:checked {
     background-color var(--micro-duration-fast) ease,
     border-color var(--micro-duration-fast) ease,
     color var(--micro-duration-fast) ease;
+}
+
+.task-event.calendar-task-event {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 @keyframes calendar-task-event-enter {
