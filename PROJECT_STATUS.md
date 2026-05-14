@@ -22,6 +22,7 @@ This file summarizes the current repository state for future contributors and AI
 - Backend authentication foundation
 - Frontend login/logout flow with local JWT storage
 - Backend task and category ownership scoping
+- Backend JSON export endpoint for the authenticated user's backup data
 - Alembic migrations and migration smoke tests
 - Drag/drop and resize support for scheduled tasks
 - Overdue and completed task views
@@ -40,6 +41,7 @@ This file summarizes the current repository state for future contributors and AI
 - Cross-user backend isolation tests
 - Login/register screen, logout action, and token-backed frontend API requests
 - Sidebar header icon button sizing refined to keep the hamburger and fold controls visually aligned
+- JSON export payload now returns only the authenticated user's tasks and task lists
 
 ## Work Currently In Progress
 
@@ -48,6 +50,7 @@ This file summarizes the current repository state for future contributors and AI
 ## Known Limitations
 
 - No full JSON backup/import workflow yet
+- No JSON import workflow yet
 - No CalDAV sync
 - No offline sync
 - Deployment portability and production hardening are still in progress

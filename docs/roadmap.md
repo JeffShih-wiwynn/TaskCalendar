@@ -60,7 +60,7 @@ Goal: harden the backend for real-world use and prevent accidental data loss.
 
 Goal: support full app backup, restore, and migration of user-owned data.
 
-- [ ] Add full JSON export endpoint.
+- [x] Add full JSON export endpoint.
 - [ ] Export all user-owned data:
   - tasks
   - categories
@@ -76,6 +76,7 @@ Goal: support full app backup, restore, and migration of user-owned data.
   - merge/import as copy
 - [ ] Add backup/import UI in settings later if needed.
 - [ ] Document manual backup and restore workflow.
+- [ ] Include global app settings only if they become user-scoped later.
 
 ---
 

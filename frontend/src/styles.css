@@ -142,6 +142,19 @@ body {
   cursor: not-allowed;
 }
 
+.backup-summary {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0 4px;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.backup-summary span {
+  color: var(--muted);
+  font-weight: 700;
+}
+
 .app-shell {
   color: var(--text);
   background: var(--page-bg);
