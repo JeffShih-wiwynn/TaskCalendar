@@ -7,10 +7,12 @@ from sqlalchemy import Select, case, func, select
 from sqlalchemy.orm import Session
 
 from app.models.scheduled_task import ScheduledTask
+from app.models.task_list import TaskList
 from app.models.user import User
 from app.tasks.recurrence import parse_recurrence_rule
 from app.tasks.recurrence import build_recurrence_payloads
 from app.tasks.recurrence import ensure_aware_datetime
+from app.tasks.recurrence import validate_recurrence_until_not_before_start
 from app.tasks.schemas import ScheduledTaskCreate, ScheduledTaskUpdate
 
 DEFAULT_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
@@ -29,6 +31,7 @@ SINGLE_OCCURRENCE_INDEPENDENT_FIELDS = {
 def list_tasks(
     db: Session,
     *,
+    user_id: uuid.UUID | None = None,
     range_start: datetime | None = None,
     range_end: datetime | None = None,
     completed: bool | None = None,
@@ -46,6 +49,8 @@ def list_tasks(
         ScheduledTask.scheduled_start,
         ScheduledTask.created_at,
     )
+    if user_id is not None:
+        statement = statement.where(ScheduledTask.user_id == user_id)
 
     if completed is not None:
         statement = statement.where(ScheduledTask.completed.is_(completed))
@@ -102,15 +107,25 @@ def list_tasks(
     return list(db.scalars(statement).all())
 
 
-def create_task(db: Session, data: ScheduledTaskCreate) -> ScheduledTask:
+def create_task(
+    db: Session,
+    data: ScheduledTaskCreate,
+    *,
+    user_id: uuid.UUID | None = None,
+) -> ScheduledTask:
     task_data = data.model_dump()
-    task_data["user_id"] = task_data["user_id"] or get_or_create_default_user(db).id
+    task_data["user_id"] = user_id or task_data["user_id"] or get_or_create_default_user(db).id
+    ensure_task_list_belongs_to_user(db, task_data.get("list_id"), task_data["user_id"])
     if task_data.get("notification_enabled") is None:
         task_data["notification_enabled"] = False
     if task_data.get("notification_offset_minutes") is None:
         task_data["notification_offset_minutes"] = 0
     if task_data.get("notification_enabled") and task_data.get("notification_channel") is None:
         task_data["notification_channel"] = "discord"
+    validate_recurrence_until_not_before_start(
+        task_data.get("recurrence_rule"),
+        task_data.get("scheduled_start"),
+    )
     payloads = build_recurrence_payloads(task_data)
     tasks = [ScheduledTask(**payload) for payload in payloads]
     db.add_all(tasks)
@@ -119,8 +134,16 @@ def create_task(db: Session, data: ScheduledTaskCreate) -> ScheduledTask:
     return tasks[0]
 
 
-def get_task_or_404(db: Session, task_id: uuid.UUID) -> ScheduledTask:
-    task = db.get(ScheduledTask, task_id)
+def get_task_or_404(
+    db: Session,
+    task_id: uuid.UUID,
+    *,
+    user_id: uuid.UUID | None = None,
+) -> ScheduledTask:
+    statement = select(ScheduledTask).where(ScheduledTask.id == task_id)
+    if user_id is not None:
+        statement = statement.where(ScheduledTask.user_id == user_id)
+    task = db.scalar(statement)
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     return task
@@ -130,10 +153,17 @@ def update_task(
     db: Session,
     task_id: uuid.UUID,
     data: ScheduledTaskUpdate,
+    *,
+    user_id: uuid.UUID | None = None,
     update_scope: Literal["single", "series"] = "single",
 ) -> ScheduledTask:
-    task = get_task_or_404(db, task_id)
+    task = get_task_or_404(db, task_id, user_id=user_id)
     updates = data.model_dump(exclude_unset=True)
+    ensure_task_list_belongs_to_user(db, updates.get("list_id"), task.user_id)
+    validate_recurrence_until_not_before_start(
+        updates.get("recurrence_rule", task.recurrence_rule),
+        updates.get("scheduled_start", task.scheduled_start),
+    )
 
     if "recurrence_rule" in updates:
         update_task_recurrence(db, task, updates, update_scope)
@@ -158,7 +188,7 @@ def update_task_recurrence(
     new_rule = updates.get("recurrence_rule")
 
     if update_scope == "series" and task.recurrence_series_id is not None:
-        tasks = list_tasks_in_series(db, task.recurrence_series_id)
+        tasks = list_tasks_in_series(db, task.recurrence_series_id, user_id=task.user_id)
         if new_rule is None:
             collapse_task_series_to_source(db, tasks, task, updates)
         else:
@@ -185,9 +215,11 @@ def update_task_recurrence(
 def delete_task(
     db: Session,
     task_id: uuid.UUID,
+    *,
+    user_id: uuid.UUID | None = None,
     delete_scope: Literal["single", "following"] = "single",
 ) -> None:
-    task = get_task_or_404(db, task_id)
+    task = get_task_or_404(db, task_id, user_id=user_id)
 
     if (
         delete_scope == "single"
@@ -198,12 +230,13 @@ def delete_task(
         db.commit()
         return
 
-    tasks_to_delete = db.scalars(
-        select(ScheduledTask).where(
-            ScheduledTask.recurrence_series_id == task.recurrence_series_id,
-            ScheduledTask.scheduled_start >= task.scheduled_start,
-        )
-    ).all()
+    statement = select(ScheduledTask).where(
+        ScheduledTask.recurrence_series_id == task.recurrence_series_id,
+        ScheduledTask.scheduled_start >= task.scheduled_start,
+    )
+    if user_id is not None:
+        statement = statement.where(ScheduledTask.user_id == user_id)
+    tasks_to_delete = db.scalars(statement).all()
 
     for recurring_task in tasks_to_delete:
         db.delete(recurring_task)
@@ -211,14 +244,21 @@ def delete_task(
     db.commit()
 
 
-def list_tasks_in_series(db: Session, series_id: uuid.UUID) -> list[ScheduledTask]:
+def list_tasks_in_series(db: Session, series_id: uuid.UUID, *, user_id: uuid.UUID) -> list[ScheduledTask]:
     return db.scalars(
-        select(ScheduledTask).where(ScheduledTask.recurrence_series_id == series_id)
+        select(ScheduledTask).where(
+            ScheduledTask.recurrence_series_id == series_id,
+            ScheduledTask.user_id == user_id,
+        )
     ).all()
 
 
 def update_task_series(task_db: Session, source_task: ScheduledTask, updates: dict) -> None:
-    tasks = list_tasks_in_series(task_db, source_task.recurrence_series_id)
+    tasks = list_tasks_in_series(
+        task_db,
+        source_task.recurrence_series_id,
+        user_id=source_task.user_id,
+    )
 
     start_changed = "scheduled_start" in updates
     end_changed = "scheduled_end" in updates
@@ -444,8 +484,13 @@ def shift_recurrence_until(recurrence_rule: str | None, delta: timedelta) -> str
     return ";".join(parts)
 
 
-def complete_task(db: Session, task_id: uuid.UUID) -> ScheduledTask:
-    task = get_task_or_404(db, task_id)
+def complete_task(
+    db: Session,
+    task_id: uuid.UUID,
+    *,
+    user_id: uuid.UUID | None = None,
+) -> ScheduledTask:
+    task = get_task_or_404(db, task_id, user_id=user_id)
     task.completed = True
     task.completed_at = datetime.now(UTC)
     task.updated_at = datetime.now(UTC)
@@ -455,8 +500,13 @@ def complete_task(db: Session, task_id: uuid.UUID) -> ScheduledTask:
     return task
 
 
-def uncomplete_task(db: Session, task_id: uuid.UUID) -> ScheduledTask:
-    task = get_task_or_404(db, task_id)
+def uncomplete_task(
+    db: Session,
+    task_id: uuid.UUID,
+    *,
+    user_id: uuid.UUID | None = None,
+) -> ScheduledTask:
+    task = get_task_or_404(db, task_id, user_id=user_id)
     task.completed = False
     task.completed_at = None
     task.updated_at = datetime.now(UTC)
@@ -476,3 +526,21 @@ def get_or_create_default_user(db: Session) -> User:
     db.commit()
     db.refresh(user)
     return user
+
+
+def ensure_task_list_belongs_to_user(
+    db: Session,
+    task_list_id: uuid.UUID | None,
+    user_id: uuid.UUID,
+) -> None:
+    if task_list_id is None:
+        return
+
+    task_list = db.scalar(
+        select(TaskList).where(
+            TaskList.id == task_list_id,
+            TaskList.user_id == user_id,
+        )
+    )
+    if task_list is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")

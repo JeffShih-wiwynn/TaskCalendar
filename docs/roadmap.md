@@ -1,37 +1,43 @@
 # Roadmap
 
-This roadmap starts after the current web MVP work and tracks the next phases in order.
+This roadmap starts from the current repository state and tracks the next phases in order.
 
 ---
 
 ## Phase 6: Authentication and multi-user support
 
-Goal: remove the default-user assumption and make the API safe for multiple accounts before wider deployment and sync/export features.
+Goal: finish multi-user safety before wider deployment and export work.
 
-- [ ] Add username/password authentication.
-- [ ] Hash passwords securely.
-- [ ] Use JWT or another simple session mechanism.
-- [ ] Scope all tasks to the authenticated user.
-- [ ] Prevent users from accessing other users' tasks.
-- [ ] Add login/logout flow in the frontend.
-- [ ] Keep the initial auth UI simple and stable.
+- [x] Add backend username/password registration and login endpoints.
+- [x] Hash passwords securely.
+- [x] Use JWT access tokens for the backend auth foundation.
+- [x] Make JWT secret configurable.
+- [x] Add a reusable current-user dependency.
+- [x] Add frontend login/logout UI.
+- [x] Store JWT access token in local storage and attach it to API requests.
+- [x] Clear invalid or expired tokens and return to login.
+- [x] Scope task and category routes to the authenticated user.
+- [x] Prevent users from accessing other users' tasks and categories.
+- [x] Add cross-user backend isolation tests.
+- [x] Keep the initial auth UI simple and stable.
 - [ ] Preserve local self-hosted usability.
 
 ---
 
 ## Phase 7: Deployment portability and environment configuration
 
-Goal: make the project portable from Arch Linux development to Ubuntu server deployment.
+Goal: make the project portable and easy to configure across local and server environments.
 
 - [ ] Add or improve Dockerfiles where needed.
-- [x] `docker-compose.yml` exists, but it still needs deployment review for a production posture.
+- [x] `docker-compose.yml` exists; production review is still pending.
 - [x] Frontend API base URL is configurable through `VITE_API_BASE_URL`.
 - [x] Backend database URL and CORS origins are configurable.
 - [x] `backend/.env.example` exists and captures the current backend config shape.
-- [ ] Make JWT secret and timezone configurable.
+- [ ] Make timezone configurable.
 - [ ] Add deployment instructions for Ubuntu production use.
 - [ ] Add reverse proxy examples (Nginx or Caddy).
 - [ ] Keep non-Docker local development working while deployment artifacts are added.
+- [ ] Document the current environment variables and defaults in one place.
 
 ---
 
@@ -39,15 +45,20 @@ Goal: make the project portable from Arch Linux development to Ubuntu server dep
 
 Goal: harden the backend for real-world use and prevent accidental data loss.
 
-- [ ] Add a database migration workflow.
+- [x] Add a database migration workflow.
+- [x] Add a baseline Alembic migration.
+- [x] Stop mutating schema automatically on FastAPI startup.
+- [x] Document migration commands.
+- [x] Add migration smoke tests.
 - [ ] Add backup and restore instructions.
 - [ ] Add basic logging guidance.
 - [ ] Add production environment notes.
+- [ ] Add a production readiness checklist.
 - [x] Health checks exist, but they still need to be part of the production runbook.
 
 ### Full app backup/export
 
-Goal: support full backup, migration, and restore of app data.
+Goal: support full app backup, restore, and migration of user-owned data.
 
 - [ ] Add full JSON export endpoint.
 - [ ] Export all user-owned data:
@@ -112,9 +123,9 @@ Goal: add the smallest safe recurrence and notification support that still fits 
 
 ---
 
-## Phase 11: iCalendar / VTODO export
+## Phase 11: ICS / VTODO export
 
-Goal: support interoperability with external calendar/task systems without implementing full CalDAV sync.
+Goal: support interoperability with external calendar and task systems only.
 
 - [ ] Add an `.ics` export endpoint.
 - [ ] Export tasks as VTODO.
@@ -139,3 +150,25 @@ Goal: plan the native Android client after the backend API is stable.
 - [ ] Reuse the existing backend API instead of replacing it.
 - [ ] Keep the Android app as a client, not a backend replacement.
 - [ ] Plan the Android widget around the same backend-backed task data.
+
+## Phase 13: Undo support
+
+Goal: add a small, safe undo system for recent task changes.
+
+- [ ] Add single-step undo for task updates.
+- [ ] Show a toast with Undo after task edit, drag, resize, complete, and category changes.
+- [ ] Store the previous task snapshot before applying the update.
+- [ ] Restore the previous snapshot if the user clicks Undo.
+- [ ] Add undo for delete by restoring the deleted task.
+- [ ] Keep undo in-memory only at first.
+- [ ] Do not support undo after page refresh in the MVP.
+- [ ] Do not implement full multi-step history yet.
+
+## Phase 14: Shared tasks
+
+- [ ] Add task sharing model.
+- [ ] Support sharing tasks with another user.
+- [ ] Start with view/edit permissions only.
+- [ ] Decide whether completion is shared or per-user.
+- [ ] Decide how recurring shared tasks behave.
+- [ ] Do not implement collaboration/live editing yet.

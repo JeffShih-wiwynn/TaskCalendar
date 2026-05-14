@@ -57,6 +57,28 @@ def parse_recurrence_rule(recurrence_rule: str) -> RecurrenceSpec:
     )
 
 
+def validate_recurrence_until_not_before_start(
+    recurrence_rule: str | None,
+    scheduled_start: datetime | None,
+) -> None:
+    if recurrence_rule is None or scheduled_start is None:
+        return
+
+    spec = parse_recurrence_rule(recurrence_rule)
+    if spec.until is None:
+        return
+
+    start = ensure_aware_datetime(scheduled_start)
+    until = ensure_aware_datetime(spec.until)
+    comparison_tz = start.tzinfo or UTC
+
+    if until.astimezone(comparison_tz).date() < start.astimezone(comparison_tz).date():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="recurrence_rule UNTIL must not be earlier than scheduled_start",
+        )
+
+
 def build_recurrence_payloads(task_data: dict) -> list[dict]:
     recurrence_rule = task_data.get("recurrence_rule")
     if not recurrence_rule:
@@ -74,6 +96,8 @@ def build_recurrence_payloads(task_data: dict) -> list[dict]:
     task_data["scheduled_start"] = scheduled_start
     if task_data.get("scheduled_end") is not None:
         task_data["scheduled_end"] = ensure_aware_datetime(task_data["scheduled_end"])
+
+    validate_recurrence_until_not_before_start(recurrence_rule, scheduled_start)
 
     spec = parse_recurrence_rule(recurrence_rule)
     series_id = uuid.uuid4()

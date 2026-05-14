@@ -96,8 +96,33 @@ Typecheck:
 Database migration:
 
 ```sh
-# No migration tool is configured yet.
-# The backend currently creates tables at startup through SQLAlchemy metadata.
+cd backend
+source .venv/bin/activate
+alembic upgrade head
+```
+
+Create a new migration revision:
+
+```sh
+cd backend
+source .venv/bin/activate
+alembic revision -m "describe change"
+```
+
+Apply a specific upgrade target:
+
+```sh
+cd backend
+source .venv/bin/activate
+alembic upgrade head
+```
+
+Adopt Alembic for an existing database that already matches the baseline schema:
+
+```sh
+cd backend
+source .venv/bin/activate
+alembic stamp head
 ```
 
 ## Database

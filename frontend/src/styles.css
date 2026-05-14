@@ -32,6 +32,116 @@ body {
   background: var(--page-bg);
 }
 
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top, rgb(23 107 88 / 12%), transparent 34%),
+    linear-gradient(180deg, rgb(23 107 88 / 6%), transparent 28%),
+    var(--page-bg);
+}
+
+.auth-panel {
+  width: min(100%, 420px);
+  display: grid;
+  gap: 14px;
+  padding: 30px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--panel-bg);
+  box-shadow: 0 24px 60px rgb(24 32 38 / 10%);
+}
+
+.auth-panel h1 {
+  margin: 0;
+  font-size: 1.7rem;
+  letter-spacing: 0;
+}
+
+.auth-subtitle {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.98rem;
+}
+
+.auth-form {
+  display: grid;
+  gap: 14px;
+}
+
+.auth-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--accent-soft);
+}
+
+.auth-mode-tab {
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 12px;
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background-color var(--micro-duration-fast) ease,
+    color var(--micro-duration-fast) ease,
+    box-shadow var(--micro-duration-fast) ease;
+}
+
+.auth-mode-tab-active {
+  color: var(--accent);
+  background: var(--panel-bg);
+  box-shadow: 0 4px 12px rgb(24 32 38 / 8%);
+}
+
+.auth-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.auth-form input {
+  width: 100%;
+  border: 1px solid var(--field-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: var(--text);
+  background: var(--panel-bg);
+  font: inherit;
+}
+
+.auth-form button,
+.auth-mode-button {
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-form button {
+  color: #fff;
+  background: var(--accent);
+  margin-top: 4px;
+}
+
+.auth-form button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .app-shell {
   color: var(--text);
   background: var(--page-bg);
@@ -77,6 +187,14 @@ body {
     opacity 220ms var(--micro-ease),
     transform 220ms var(--micro-ease),
     padding-right 220ms var(--micro-ease);
+}
+
+.sidebar-greeting {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.96rem;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .task-sidebar-collapsed {

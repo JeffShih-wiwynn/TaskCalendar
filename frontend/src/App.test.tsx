@@ -19,6 +19,12 @@ import {
 import { App } from "./App";
 
 const mocks = vi.hoisted(() => ({
+    AuthError: class MockAuthError extends Error {
+        constructor(message = "Authentication required") {
+            super(message);
+            this.name = "AuthError";
+        }
+    },
     fullCalendarProps: {
         events: [] as EventInput[],
         scrollTimeReset: undefined as boolean | undefined,
@@ -29,6 +35,22 @@ const mocks = vi.hoisted(() => ({
     dragRevert: vi.fn(),
     draggableConstruct: vi.fn(),
     draggableDestroy: vi.fn(),
+    getCurrentUser: vi.fn(async () => ({
+        id: "user-1",
+        username: "alice",
+        created_at: "",
+        updated_at: "",
+    })),
+    login: vi.fn(async () => {
+        window.localStorage.setItem("calendar-auth-token", "test-token");
+        return "test-token";
+    }),
+    register: vi.fn(async () => ({
+        id: "user-1",
+        username: "alice",
+        created_at: "",
+        updated_at: "",
+    })),
     taskLists: [
         {
             id: "list-1",
@@ -378,6 +400,17 @@ vi.mock("./api/settings", () => ({
     updateSettings: mocks.updateSettings,
 }));
 
+vi.mock("./api/auth", () => ({
+    AuthError: mocks.AuthError,
+    clearStoredAuthToken: () =>
+        window.localStorage.removeItem("calendar-auth-token"),
+    getCurrentUser: mocks.getCurrentUser,
+    getStoredAuthToken: () => window.localStorage.getItem("calendar-auth-token"),
+    isAuthError: (error: unknown) => error instanceof mocks.AuthError,
+    login: mocks.login,
+    register: mocks.register,
+}));
+
 function mockTaskRowRects(rows: Element[]): void {
     rows.forEach((row, index) => {
         vi.spyOn(row, "getBoundingClientRect").mockReturnValue({
@@ -446,6 +479,7 @@ function createDeferred<T>(): {
 describe("App", () => {
     beforeEach(() => {
         window.localStorage.clear();
+        window.localStorage.setItem("calendar-auth-token", "test-token");
         mocks.tasks = [];
         mocks.listTasks.mockClear();
         mocks.listTasks.mockImplementation(() =>
@@ -505,6 +539,103 @@ describe("App", () => {
         mocks.updateTask.mockClear();
         mocks.updateSettings.mockClear();
         mocks.testSettings.mockClear();
+        mocks.login.mockClear();
+        mocks.register.mockClear();
+        mocks.getCurrentUser.mockClear();
+        mocks.getCurrentUser.mockResolvedValue({
+            id: "user-1",
+            username: "alice",
+            created_at: "",
+            updated_at: "",
+        });
+    });
+
+    it("shows the auth screen when no token exists", () => {
+        window.localStorage.removeItem("calendar-auth-token");
+
+        render(<App />);
+
+        expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Task view" })).not.toBeInTheDocument();
+    });
+
+    it("logs in and renders the calendar app", async () => {
+        window.localStorage.removeItem("calendar-auth-token");
+
+        render(<App />);
+
+        fireEvent.change(screen.getByLabelText("Username"), {
+            target: { value: "alice" },
+        });
+        fireEvent.change(screen.getByLabelText("Password"), {
+            target: { value: "secret-password" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+        await waitFor(() =>
+            expect(mocks.login).toHaveBeenCalledWith({
+                username: "alice",
+                password: "secret-password",
+            }),
+        );
+        expect(window.localStorage.getItem("calendar-auth-token")).toBe("test-token");
+        expect(
+            await screen.findByRole("button", { name: "Task view" }),
+        ).toHaveTextContent("Today");
+    });
+
+    it("clears an invalid token and returns to login", async () => {
+        mocks.getCurrentUser.mockRejectedValueOnce(
+            new mocks.AuthError("Could not validate credentials"),
+        );
+
+        render(<App />);
+
+        expect(
+            await screen.findByText("Session expired. Please log in again."),
+        ).toBeInTheDocument();
+        expect(window.localStorage.getItem("calendar-auth-token")).toBeNull();
+        expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    });
+
+    it("logs out from the settings menu", async () => {
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(screen.getByRole("button", { name: "Logout" }));
+
+        expect(window.localStorage.getItem("calendar-auth-token")).toBeNull();
+        expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    });
+
+    it("resets auth inputs when switching modes", async () => {
+        window.localStorage.removeItem("calendar-auth-token");
+
+        render(<App />);
+
+        fireEvent.change(screen.getByLabelText("Username"), {
+            target: { value: "alice" },
+        });
+        fireEvent.change(screen.getByLabelText("Password"), {
+            target: { value: "secret-password" },
+        });
+
+        fireEvent.click(screen.getByRole("tab", { name: "Create account" }));
+
+        expect(screen.getByLabelText("Username")).toHaveValue("");
+        expect(screen.getByLabelText("Password")).toHaveValue("");
+
+        fireEvent.change(screen.getByLabelText("Username"), {
+            target: { value: "bob" },
+        });
+        fireEvent.change(screen.getByLabelText("Password"), {
+            target: { value: "another-password" },
+        });
+
+        fireEvent.click(screen.getByRole("tab", { name: "Use an existing account" }));
+
+        expect(screen.getByLabelText("Username")).toHaveValue("");
+        expect(screen.getByLabelText("Password")).toHaveValue("");
     });
 
     it("renders task views and keeps the floating panel hidden by default", async () => {
@@ -1587,6 +1718,34 @@ describe("App", () => {
         );
     });
 
+    it("blocks creating a recurring task when until is before the start date", async () => {
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Open all-day create task" }),
+        );
+        fireEvent.change(screen.getByLabelText("Title"), {
+            target: { value: "New task" },
+        });
+        fireEvent.change(screen.getByLabelText("Repeat"), {
+            target: { value: "DAILY" },
+        });
+        fireEvent.change(screen.getByLabelText("Until"), {
+            target: { value: "2026-05-07" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+        expect(
+            await screen.findByText(
+                "Repeat until must be on or after the start date",
+            ),
+        ).toBeInTheDocument();
+        expect(mocks.createTask).not.toHaveBeenCalled();
+        expect(
+            screen.getByRole("heading", { name: "Create task" }),
+        ).toBeInTheDocument();
+    });
+
     it("closes the edit panel after saving a task", async () => {
         const now = new Date();
         const todayAtTen = new Date(
@@ -1645,6 +1804,66 @@ describe("App", () => {
             "task-edit",
             expect.objectContaining({ title: "Edited task" }),
         );
+    });
+
+    it("blocks saving an edit when repeat until is before the start date", async () => {
+        const now = new Date();
+        const todayAtTen = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+            10,
+            0,
+            0,
+            0,
+        );
+
+        mocks.tasks = [
+            {
+                id: "task-edit-recurring",
+                user_id: "user-1",
+                list_id: "list-1",
+                title: "Recurring task",
+                notes: null,
+                completed: false,
+                scheduled_start: todayAtTen.toISOString(),
+                scheduled_end: new Date(
+                    todayAtTen.getTime() + 60 * 60 * 1000,
+                ).toISOString(),
+                due_at: null,
+                recurrence_rule: "FREQ=DAILY;INTERVAL=1",
+                recurrence_series_id: "series-edit-until",
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                created_at: now.toISOString(),
+                updated_at: now.toISOString(),
+                completed_at: null,
+            },
+        ];
+
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: /^Toggle Recurring task Recurring task/i,
+            }),
+        );
+        await screen.findByRole("heading", { name: "Edit task" });
+        fireEvent.change(screen.getByLabelText("Until"), {
+            target: { value: "2026-05-07" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+        expect(
+            await screen.findByText(
+                "Repeat until must be on or after the start date",
+            ),
+        ).toBeInTheDocument();
+        expect(mocks.updateTask).not.toHaveBeenCalled();
+        expect(screen.getByRole("heading", { name: "Edit task" })).toBeInTheDocument();
     });
 
     it("moves a scheduled task back to no time from the edit form", async () => {
@@ -1964,6 +2183,80 @@ describe("App", () => {
                 "task-recurring-edit",
                 expect.objectContaining({
                     title: "Renamed recurring task",
+                }),
+                { updateScope: "series" },
+            ),
+        );
+    });
+
+    it("asks how to edit a recurring task when changing notes", async () => {
+        const now = new Date();
+        const todayAtTen = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+            10,
+            0,
+            0,
+            0,
+        );
+
+        mocks.tasks = [
+            {
+                id: "task-recurring-notes",
+                user_id: "user-1",
+                list_id: "list-1",
+                title: "Recurring note task",
+                notes: "Original recurring note",
+                completed: false,
+                scheduled_start: todayAtTen.toISOString(),
+                scheduled_end: new Date(
+                    todayAtTen.getTime() + 60 * 60 * 1000,
+                ).toISOString(),
+                due_at: null,
+                recurrence_rule: "FREQ=DAILY;INTERVAL=1",
+                recurrence_series_id: "series-notes-1",
+                notification_enabled: true,
+                notification_offset_minutes: 15,
+                notification_channel: "discord",
+                timezone: "Asia/Taipei",
+                priority: null,
+                unscheduled_order: null,
+                notification_sent_at: null,
+                created_at: "2026-05-08T00:00:00Z",
+                updated_at: "2026-05-08T00:00:00Z",
+                completed_at: null,
+            },
+        ];
+
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: /^Toggle Recurring note task Recurring note task/i,
+            }),
+        );
+        fireEvent.change(await screen.findByLabelText("Notes"), {
+            target: { value: "Updated recurring note" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+        expect(
+            await screen.findByRole("dialog", {
+                name: "Edit recurring task",
+            }),
+        ).toBeInTheDocument();
+        expect(mocks.updateTask).not.toHaveBeenCalled();
+
+        fireEvent.click(
+            screen.getByRole("button", { name: "Edit all recurring tasks" }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.updateTask).toHaveBeenCalledWith(
+                "task-recurring-notes",
+                expect.objectContaining({
+                    notes: "Updated recurring note",
                 }),
                 { updateScope: "series" },
             ),

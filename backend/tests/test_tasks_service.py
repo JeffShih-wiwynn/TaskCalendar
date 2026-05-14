@@ -5,12 +5,12 @@ from datetime import datetime
 from urllib import error
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.core.database import missing_scheduled_task_column_statements
 from app.core.database import Base
 from app.models import User
 from app.models.scheduled_task import ScheduledTask
@@ -86,6 +86,21 @@ def test_reject_invalid_time_range(user_id: uuid.UUID) -> None:
             title="Invalid range",
             scheduled_start=parse_dt("2026-05-07T09:00:00+08:00"),
             scheduled_end=parse_dt("2026-05-07T07:00:00+08:00"),
+        )
+
+
+def test_create_recurring_task_rejects_until_before_start(
+    db_session: Session, user_id: uuid.UUID
+) -> None:
+    with pytest.raises(HTTPException, match="recurrence_rule UNTIL must not be earlier"):
+        service.create_task(
+            db_session,
+            ScheduledTaskCreate(
+                user_id=user_id,
+                title="Invalid recurring task",
+                scheduled_start=parse_dt("2026-05-08T09:00:00+00:00"),
+                recurrence_rule="FREQ=DAILY;INTERVAL=1;UNTIL=2026-05-07T23:59:59+00:00",
+            ),
         )
 
 
@@ -283,6 +298,30 @@ def test_create_recurring_task_materializes_occurrences(
     ]
     assert {item.recurrence_series_id for item in tasks} == {task.recurrence_series_id}
     assert task.recurrence_rule == "FREQ=DAILY;INTERVAL=2;UNTIL=2026-05-12T09:00:00+00:00"
+
+
+def test_update_recurring_task_rejects_until_before_start(
+    db_session: Session, user_id: uuid.UUID
+) -> None:
+    task = service.create_task(
+        db_session,
+        ScheduledTaskCreate(
+            user_id=user_id,
+            title="Recurring task",
+            scheduled_start=parse_dt("2026-05-08T09:00:00+00:00"),
+            scheduled_end=parse_dt("2026-05-08T10:00:00+00:00"),
+            recurrence_rule="FREQ=DAILY;INTERVAL=1;UNTIL=2026-05-10T09:00:00+00:00",
+        ),
+    )
+
+    with pytest.raises(HTTPException, match="recurrence_rule UNTIL must not be earlier"):
+        service.update_task(
+            db_session,
+            task.id,
+            ScheduledTaskUpdate(
+                scheduled_start=parse_dt("2026-05-11T09:00:00+00:00"),
+            ),
+        )
 
 
 def test_delete_recurring_task_only_removes_selected_occurrence(
@@ -707,25 +746,6 @@ def test_send_discord_notification_sets_explicit_headers(monkeypatch: pytest.Mon
     assert lowered_headers["content-type"] == "application/json"
     assert lowered_headers["accept"] == "application/json"
     assert lowered_headers["user-agent"] == DISCORD_WEBHOOK_USER_AGENT
-
-
-def test_missing_scheduled_task_column_statements_only_returns_missing_columns() -> None:
-    statements = missing_scheduled_task_column_statements(
-        {
-            "id",
-            "title",
-            "recurrence_rule",
-            "notification_enabled",
-        }
-    )
-
-    assert all("recurrence_rule" not in statement for statement in statements)
-    assert all("notification_enabled" not in statement for statement in statements)
-    assert any("recurrence_series_id" in statement for statement in statements)
-    assert any("notification_sent_at" in statement for statement in statements)
-    assert any("unscheduled_order" in statement for statement in statements)
-
-
 def create_task(
     db_session: Session,
     user_id: uuid.UUID,

@@ -31,6 +31,7 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 cp .env.example .env
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
@@ -110,6 +111,13 @@ Backend:
 cd backend
 ruff check .
 pytest
+```
+
+Database migrations:
+
+```sh
+cd backend
+alembic upgrade head
 ```
 
 Frontend:
