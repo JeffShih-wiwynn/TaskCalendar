@@ -46,6 +46,11 @@ import {
     type AuthUser,
 } from "./api/auth";
 import {
+    downloadBackupPayload,
+    fetchBackupExport,
+    type BackupExportPayload,
+} from "./api/backup";
+import {
     getSettings,
     testSettings,
     updateSettings,
@@ -278,6 +283,11 @@ export function App() {
     const [webhookTestMessage, setWebhookTestMessage] = useState<string | null>(
         null,
     );
+    const [backupSummary, setBackupSummary] = useState<BackupExportPayload | null>(
+        null,
+    );
+    const [isBackupLoading, setIsBackupLoading] = useState(false);
+    const [isBackupDownloading, setIsBackupDownloading] = useState(false);
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(
         null,
     );
@@ -429,6 +439,43 @@ export function App() {
         setAuthError(null);
         resetAppData();
     }, [resetAppData]);
+
+    const handleOpenBackupSummary = useCallback(async () => {
+        setIsBackupLoading(true);
+        try {
+            const payload = await fetchBackupExport();
+            setBackupSummary(payload);
+        } catch (error) {
+            setFormError(
+                error instanceof Error
+                    ? error.message
+                    : "Unable to load backup summary",
+            );
+        } finally {
+            setIsBackupLoading(false);
+            setIsSettingsMenuOpen(false);
+        }
+    }, []);
+
+    const handleConfirmBackupDownload = useCallback(() => {
+        if (!backupSummary) {
+            return;
+        }
+
+        setIsBackupDownloading(true);
+        try {
+            downloadBackupPayload(backupSummary);
+            setBackupSummary(null);
+        } catch (error) {
+            setFormError(
+                error instanceof Error
+                    ? error.message
+                    : "Unable to export backup",
+            );
+        } finally {
+            setIsBackupDownloading(false);
+        }
+    }, [backupSummary]);
 
     const handleAuthSubmit = useCallback(
         async (event: FormEvent<HTMLFormElement>) => {
@@ -2312,6 +2359,18 @@ export function App() {
                                             <button
                                                 type="button"
                                                 className="filter-option"
+                                                disabled={isBackupLoading}
+                                                onClick={() =>
+                                                    void handleOpenBackupSummary()
+                                                }
+                                            >
+                                                {isBackupLoading
+                                                    ? "Loading backup..."
+                                                    : "Export backup"}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="filter-option"
                                                 onClick={handleLogout}
                                             >
                                                 Logout
@@ -3900,6 +3959,62 @@ export function App() {
                 </motion.div>
             </section>
 
+            {backupSummary && (
+                <div
+                    className="dialog-backdrop"
+                    role="presentation"
+                    onClick={() => setBackupSummary(null)}
+                >
+                    <div
+                        className="choice-dialog"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="backup-summary-title"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <h2 id="backup-summary-title">Backup ready</h2>
+                        <p className="muted">
+                            Review the export summary before downloading.
+                        </p>
+                        <div className="backup-summary">
+                            <div>
+                                <span>Tasks:</span> {backupSummary.tasks.length}
+                            </div>
+                            <div>
+                                <span>Categories:</span>{" "}
+                                {backupSummary.task_lists.length}
+                            </div>
+                            <div>
+                                <span>Schema version:</span>{" "}
+                                {backupSummary.schema_version}
+                            </div>
+                            <div>
+                                <span>Exported:</span>{" "}
+                                {formatBackupDate(backupSummary.exported_at)}
+                            </div>
+                        </div>
+                        <div className="choice-dialog-actions">
+                            <button
+                                type="button"
+                                className="secondary-button"
+                                onClick={() => setBackupSummary(null)}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                disabled={isBackupDownloading}
+                                onClick={() => void handleConfirmBackupDownload()}
+                            >
+                                {isBackupDownloading
+                                    ? "Downloading..."
+                                    : "Download backup"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {pendingDeleteTask && (
                 <div
                     className="dialog-backdrop"
@@ -5290,4 +5405,9 @@ function saveUnscheduledOrder(unscheduledOrder: string[]): void {
 
 function clampNumber(value: number, min: number, max: number): number {
     return Math.min(Math.max(value, min), max);
+}
+
+function formatBackupDate(value: string): string {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value.slice(0, 10) : date.toISOString().slice(0, 10);
 }

@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.app_settings.router import router as app_settings_router
+from app.backup.router import router as backup_router
 from app.auth.router import router as auth_router
 from app.core.config import settings
 from app.health.router import router as health_router
@@ -38,6 +39,7 @@ def create_app(*, start_worker: bool = True) -> FastAPI:
 
     app.include_router(app_settings_router)
     app.include_router(auth_router)
+    app.include_router(backup_router)
     app.include_router(health_router)
     app.include_router(task_lists_router)
     app.include_router(tasks_router)

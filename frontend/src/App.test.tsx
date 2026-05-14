@@ -45,6 +45,23 @@ const mocks = vi.hoisted(() => ({
         window.localStorage.setItem("calendar-auth-token", "test-token");
         return "test-token";
     }),
+    fetchBackupExport: vi.fn(async () => ({
+        schema_version: 1,
+        exported_at: "2026-05-14T00:00:00.000Z",
+        tasks: [
+            {
+                id: "task-1",
+                title: "Alpha",
+            },
+        ],
+        task_lists: [
+            {
+                id: "list-1",
+                name: "Work",
+            },
+        ],
+    })),
+    downloadBackupPayload: vi.fn(),
     register: vi.fn(async () => ({
         id: "user-1",
         username: "alice",
@@ -411,6 +428,11 @@ vi.mock("./api/auth", () => ({
     register: mocks.register,
 }));
 
+vi.mock("./api/backup", () => ({
+    downloadBackupPayload: mocks.downloadBackupPayload,
+    fetchBackupExport: mocks.fetchBackupExport,
+}));
+
 function mockTaskRowRects(rows: Element[]): void {
     rows.forEach((row, index) => {
         vi.spyOn(row, "getBoundingClientRect").mockReturnValue({
@@ -540,6 +562,8 @@ describe("App", () => {
         mocks.updateSettings.mockClear();
         mocks.testSettings.mockClear();
         mocks.login.mockClear();
+        mocks.fetchBackupExport.mockClear();
+        mocks.downloadBackupPayload.mockClear();
         mocks.register.mockClear();
         mocks.getCurrentUser.mockClear();
         mocks.getCurrentUser.mockResolvedValue({
@@ -606,6 +630,30 @@ describe("App", () => {
 
         expect(window.localStorage.getItem("calendar-auth-token")).toBeNull();
         expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    });
+
+    it("shows backup summary before downloading", async () => {
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(screen.getByRole("button", { name: "Export backup" }));
+
+        const dialog = await screen.findByRole("dialog", { name: "Backup ready" });
+        expect(dialog).toHaveTextContent("Tasks: 1");
+        expect(dialog).toHaveTextContent("Categories: 1");
+        expect(dialog).toHaveTextContent("Schema version: 1");
+        expect(dialog).toHaveTextContent("Exported: 2026-05-14");
+
+        fireEvent.click(screen.getByRole("button", { name: "Download backup" }));
+
+        await waitFor(() =>
+            expect(mocks.downloadBackupPayload).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    schema_version: 1,
+                    exported_at: "2026-05-14T00:00:00.000Z",
+                }),
+            ),
+        );
     });
 
     it("resets auth inputs when switching modes", async () => {
