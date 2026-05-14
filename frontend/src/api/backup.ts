@@ -1,6 +1,5 @@
 import { getAuthHeaders } from "./auth";
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+import { resolveApiUrl } from "./base";
 
 export type BackupExportPayload = {
     schema_version: number;
@@ -15,7 +14,7 @@ export async function exportBackup(): Promise<void> {
 }
 
 export async function fetchBackupExport(): Promise<BackupExportPayload> {
-    const response = await fetch(`${API_BASE_URL}/backup/export`, {
+    const response = await fetch(resolveApiUrl("/backup/export"), {
         headers: {
             "Content-Type": "application/json",
             ...getAuthHeaders(),

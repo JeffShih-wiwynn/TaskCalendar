@@ -11,49 +11,45 @@ Self-hosted scheduled task calendar app. The MVP is web-first with a React + Typ
 
 ## Requirements
 
-- Docker and Docker Compose
+- PostgreSQL running locally with database `calendar` and user `calendar`
 - Python 3.12+
 - Node.js 20.19+
 
-## Local Setup
-
-Start PostgreSQL:
+## Local Development
 
 ```sh
-docker compose up -d postgres
+./dev.sh
 ```
 
-Run the backend:
-
-```sh
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-cp .env.example .env
-alembic upgrade head
-uvicorn app.main:app --reload
-```
-
-The backend health check is available at:
+The script starts the backend and frontend from the current source tree:
 
 ```text
-http://localhost:8000/health
+Frontend: http://100.64.0.2:5173
+Backend:  http://100.64.0.2:8000
+Health:   http://100.64.0.2:8000/health
 ```
 
-Run the frontend:
+It writes only local development env files:
 
-```sh
-cd frontend
-npm install
-npm run dev
-```
+- `frontend/.env.local`
+- `backend/.env.local`
 
-The frontend is available at:
+It starts the local PostgreSQL service, waits for it to become ready, and runs migrations before launching the backend.
+
+Login requests should go to:
 
 ```text
-http://localhost:5173
+http://100.64.0.2:8000/auth/login
 ```
+
+Troubleshooting:
+
+- If port `5173` is occupied, stop the old Vite process.
+- If port `8000` is occupied, stop the old backend process.
+- If the backend fails on startup, check whether PostgreSQL is running and whether migrations completed.
+- If migrations fail with duplicate tables, reset the local dev database with `./scripts/dev.sh reset-db`.
+- If login says `Failed to fetch`, check the browser Network request URL.
+- Use `lsof -i :5173` and `lsof -i :8000` to find listeners.
 
 Click a blank calendar slot to open the create-task form in the left sidebar. Click an existing task to open the edit form in the same place. When the form is open, it replaces the sidebar filters and task list until you close it.
 
@@ -75,14 +71,12 @@ Current frontend behavior includes:
 - a completed-task calendar toggle in the `Completed` view
 - right-click delete from calendar events and task-list rows
 
-If port `5173` is already in use, Vite will choose the next available port. The backend allows `http://localhost:5173` through `http://localhost:5178` by default.
-
 ## Convenience Script
 
 Start the local stack:
 
 ```sh
-./scripts/dev.sh start
+./dev.sh
 ```
 
 Stop it:
@@ -97,9 +91,13 @@ Check status:
 ./scripts/dev.sh status
 ```
 
-The script stores logs and PID files in `.calendar-dev/`. It starts PostgreSQL with Docker Compose, waits for it to become ready, then runs the backend and frontend in the background on `8000` and `5173`.
+The script stores logs and PID files in `.calendar-dev/`. It does not read or modify deployment files.
+It also starts or verifies the local PostgreSQL service before backend startup and runs Alembic migrations automatically.
+If the local database is stale or partially initialized, reset it with:
 
-For remote testing over Tailscale or LAN, set `PUBLIC_HOST` once, for example `PUBLIC_HOST=100.64.0.2 ./scripts/dev.sh start`. The script remembers that host in `.calendar-dev/public_host`, so later `./scripts/dev.sh start` runs reuse it until you override it again.
+```sh
+./scripts/dev.sh reset-db
+```
 
 If `start` fails because a port is already in use, run `./scripts/dev.sh stop` and retry. If needed, inspect `.calendar-dev/logs/backend.log` and `.calendar-dev/logs/frontend.log`.
 
