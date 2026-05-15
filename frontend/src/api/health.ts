@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+import { resolveApiUrl } from "./base";
 
 export type HealthResponse = {
   status: string;
@@ -7,7 +7,7 @@ export type HealthResponse = {
 };
 
 export async function getHealth(): Promise<HealthResponse> {
-  const response = await fetch(`${API_BASE_URL}/health`);
+  const response = await fetch(resolveApiUrl("/health"));
 
   if (!response.ok) {
     throw new Error(`Health check failed with ${response.status}`);

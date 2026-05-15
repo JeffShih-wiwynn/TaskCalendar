@@ -42,7 +42,7 @@ describe("exportBackup", () => {
         await exportBackup();
 
         expect(fetch).toHaveBeenCalledWith(
-            "http://localhost:8000/backup/export",
+            `${import.meta.env.VITE_API_BASE_URL}/backup/export`,
             expect.objectContaining({
                 headers: expect.objectContaining({
                     Authorization: "Bearer test-token",

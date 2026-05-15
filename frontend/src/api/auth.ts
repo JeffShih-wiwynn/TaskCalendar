@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+import { resolveApiUrl } from "./base";
 const AUTH_TOKEN_STORAGE_KEY = "calendar-auth-token";
 
 export type AuthCredentials = {
@@ -69,7 +69,7 @@ export async function getCurrentUser(): Promise<AuthUser> {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
+    const response = await fetch(resolveApiUrl(path), {
         ...init,
         headers: {
             "Content-Type": "application/json",

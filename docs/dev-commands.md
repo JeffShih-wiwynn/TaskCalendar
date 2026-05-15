@@ -125,29 +125,15 @@ source .venv/bin/activate
 alembic stamp head
 ```
 
-## Database
-
-Start PostgreSQL:
-
-```sh
-docker compose up -d postgres
-```
-
-Stop PostgreSQL:
-
-```sh
-docker compose down
-```
-
 ## Background Dev Script
 
 Start the full local stack:
 
 ```sh
-./scripts/dev.sh start
+./dev.sh
 ```
 
-Stop the background processes and bring down PostgreSQL:
+Stop the background processes:
 
 ```sh
 ./scripts/dev.sh stop
@@ -159,10 +145,35 @@ Status:
 ./scripts/dev.sh status
 ```
 
-The script writes logs and PID files to `.calendar-dev/` and defaults to binding the frontend and backend to `0.0.0.0`.
+The script writes logs and PID files to `.calendar-dev/` and binds the frontend and backend to `100.64.0.2:5173` and `100.64.0.2:8000`.
 
-For remote testing, start it with a public host value so the frontend calls the correct backend and the backend allows that origin. The script remembers the last value in `.calendar-dev/public_host`:
+Local development uses `backend/.env.local` and `frontend/.env.local` so deployment settings do not leak into development.
+It starts or verifies the local PostgreSQL service, waits for it to accept connections, and runs Alembic migrations before backend startup.
+
+Expected development endpoints:
+
+```text
+Frontend: http://100.64.0.2:5173
+Backend:  http://100.64.0.2:8000
+Health:   http://100.64.0.2:8000/health
+```
+
+The expected login API URL is:
+
+```text
+http://100.64.0.2:8000/auth/login
+```
+
+Troubleshooting:
+
+- If port `5173` is occupied, stop the old Vite process.
+- If port `8000` is occupied, stop the old backend process.
+- If the backend fails on startup, check whether PostgreSQL is running and whether migrations completed.
+- If migrations fail with duplicate tables, reset the local dev database with `./scripts/dev.sh reset-db`.
+- If login says `Failed to fetch`, check the browser Network request URL.
+
+Reset the local dev database:
 
 ```sh
-PUBLIC_HOST=100.64.0.2 ./scripts/dev.sh start
+./scripts/dev.sh reset-db
 ```

@@ -1,6 +1,5 @@
 import { AuthError, getAuthHeaders } from './auth';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+import { resolveApiUrl } from './base';
 
 export type TaskList = {
   id: string;
@@ -37,7 +36,7 @@ export async function deleteTaskList(taskListId: string): Promise<void> {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(resolveApiUrl(path), {
     ...init,
     headers: {
       'Content-Type': 'application/json',
