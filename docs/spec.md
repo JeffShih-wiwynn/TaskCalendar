@@ -31,6 +31,7 @@ The current app is web-first:
 - Recurring-task edit choices for only the selected occurrence or the whole recurring series when editing shared series fields such as title, category, schedule, and notifications. Clearing recurrence while editing the whole series keeps the edited occurrence as a standalone task and deletes the other materialized occurrences in that series.
 - Sidebar webhook settings button that expands inline inputs for the Discord webhook URL and custom notification message format.
 - Webhook settings test button for sending a one-off Discord test message from the current draft values before saving.
+- Sidebar backup menu that exports the current user's calendar data and imports `.json` backups after explicit confirmation.
 - Category/task-list creation, color updates, and deletion.
 - Sidebar filters for Today, Upcoming, Completed, and All tasks.
 - Custom upcoming-day window, including today.
@@ -56,6 +57,7 @@ The current app is web-first:
 
 - `User` stores username, password hash, and creation time for the backend auth foundation.
 - Existing task and category services still preserve the default-user path until task queries are fully scoped to authenticated users.
+- Backup export/import is user-scoped and restore replaces the current user's existing calendar data.
 - `TaskList` represents a category/list with a name and color.
 - `ScheduledTask` is the current task entity and includes both todo state and optional calendar timing.
 - A task can be unscheduled when `scheduled_start` and `scheduled_end` are null.
@@ -67,7 +69,7 @@ The current app is web-first:
 
 ## Important Edge Cases
 
-- Timezone: the backend defaults task timezone to `Asia/Taipei`; the frontend sends datetime-local values as ISO strings. Future work should define user timezone behavior explicitly.
+- Timezone: `APP_TIMEZONE` controls application datetime behavior and defaults to `UTC`. The frontend sends datetime-local values as ISO strings; naive backend datetimes are interpreted in `APP_TIMEZONE`.
 - All-day tasks: stored through scheduled start/end ranges and rendered as all-day calendar events when the range spans local midnight-to-midnight in the task timezone.
 - Timed tasks: both start and end should be present for calendar range behavior. Backend validation rejects end times that are not after start times when both are provided.
 - Recurring tasks: the backend materializes concrete task rows for each occurrence and links them with `recurrence_series_id`. Deleting a recurring task can target only the current occurrence or the current and following occurrences. Switching a whole series to no recurrence removes the sibling occurrences and keeps only the edited task.

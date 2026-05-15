@@ -14,6 +14,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import Base
 from app.models import User
 from app.models.scheduled_task import ScheduledTask
+from app.core.config import settings
 from app.tasks.notifications import (
     DISCORD_WEBHOOK_USER_AGENT,
     apply_message_template,
@@ -24,6 +25,7 @@ from app.tasks.notifications import (
 )
 from app.tasks import service
 from app.tasks.schemas import ScheduledTaskCreate
+from app.tasks.schemas import ScheduledTaskRead
 from app.tasks.schemas import ScheduledTaskUpdate
 
 
@@ -66,8 +68,47 @@ def test_create_task(db_session: Session, user_id: uuid.UUID) -> None:
     assert task.id is not None
     assert task.title == "Plan calendar MVP"
     assert task.completed is False
-    assert task.timezone == "Asia/Taipei"
+    assert task.timezone == "UTC"
     assert task.completed_at is None
+
+
+def test_create_task_uses_configured_default_timezone(
+    db_session: Session,
+    user_id: uuid.UUID,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "app_timezone", "America/New_York")
+
+    task = service.create_task(
+        db_session,
+        ScheduledTaskCreate(user_id=user_id, title="Configured timezone"),
+    )
+
+    assert task.timezone == "America/New_York"
+
+
+def test_task_read_serializes_datetimes_in_configured_timezone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "app_timezone", "America/New_York")
+    task = ScheduledTask(
+        id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        title="Serialized task",
+        completed=False,
+        scheduled_start=parse_dt("2026-05-08T14:00:00+00:00"),
+        scheduled_end=parse_dt("2026-05-08T15:00:00+00:00"),
+        timezone="UTC",
+        notification_enabled=False,
+        notification_offset_minutes=0,
+        created_at=parse_dt("2026-05-08T00:00:00+00:00"),
+        updated_at=parse_dt("2026-05-08T00:00:00+00:00"),
+    )
+
+    payload = ScheduledTaskRead.model_validate(task).model_dump(mode="json")
+
+    assert payload["scheduled_start"] == "2026-05-08T10:00:00-04:00"
+    assert payload["scheduled_end"] == "2026-05-08T11:00:00-04:00"
 
 
 def test_create_task_without_user_uses_default_user(db_session: Session) -> None:
@@ -102,6 +143,32 @@ def test_create_recurring_task_rejects_until_before_start(
                 recurrence_rule="FREQ=DAILY;INTERVAL=1;UNTIL=2026-05-07T23:59:59+00:00",
             ),
         )
+
+
+def test_recurring_until_uses_configured_timezone_for_naive_values(
+    db_session: Session,
+    user_id: uuid.UUID,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "app_timezone", "America/New_York")
+
+    task = service.create_task(
+        db_session,
+        ScheduledTaskCreate(
+            user_id=user_id,
+            title="Naive recurring",
+            scheduled_start=parse_dt("2026-05-08T09:00:00"),
+            scheduled_end=parse_dt("2026-05-08T10:00:00"),
+            recurrence_rule="FREQ=DAILY;UNTIL=2026-05-09T09:00:00",
+        ),
+    )
+
+    series = service.list_tasks_in_series(
+        db_session,
+        task.recurrence_series_id,
+        user_id=user_id,
+    )
+    assert len(series) == 2
 
 
 def test_complete_task(db_session: Session, user_id: uuid.UUID) -> None:
@@ -627,6 +694,7 @@ def test_send_due_notifications_marks_tasks_as_sent(
         due_at=parse_dt("2026-05-08T09:00:00+00:00"),
         scheduled_start=parse_dt("2026-05-08T10:00:00+00:00"),
         scheduled_end=parse_dt("2026-05-08T11:00:00+00:00"),
+        timezone="Asia/Taipei",
     )
     task.notes = "Bring agenda"
     task.notification_enabled = True
@@ -665,6 +733,7 @@ def test_send_due_notifications_uses_custom_message_template(
         user_id,
         title="Notify me",
         scheduled_start=parse_dt("2026-05-08T10:00:00+00:00"),
+        timezone="Asia/Taipei",
     )
     task.notes = "Bring agenda"
     task.notification_enabled = True
@@ -689,6 +758,45 @@ def test_send_due_notifications_uses_custom_message_template(
         "Link https://calendar.example\n"
         "Notes Bring agenda"
     ]
+
+
+def test_send_due_notifications_uses_configured_timezone_for_naive_datetimes(
+    db_session: Session,
+    user_id: uuid.UUID,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "app_timezone", "America/New_York")
+    task = create_task(
+        db_session,
+        user_id,
+        title="Naive notify",
+        scheduled_start=parse_dt("2026-05-08T10:00:00"),
+        notification_enabled=True,
+        notification_channel="discord",
+        timezone="America/New_York",
+    )
+
+    sent_messages: list[str] = []
+    sent_count = send_due_notifications(
+        db_session,
+        now=parse_dt("2026-05-08T09:59:00"),
+        webhook_url="https://discord.example/webhook",
+        app_base_url=None,
+        sender=lambda _url, message: sent_messages.append(message),
+    )
+    assert sent_count == 0
+
+    sent_count = send_due_notifications(
+        db_session,
+        now=parse_dt("2026-05-08T10:00:00"),
+        webhook_url="https://discord.example/webhook",
+        app_base_url=None,
+        sender=lambda _url, message: sent_messages.append(message),
+    )
+
+    assert sent_count == 1
+    assert sent_messages == ["Task due: Naive notify\nWhen: 2026-05-08 10:00"]
+    assert service.get_task_or_404(db_session, task.id).notification_sent_at is not None
 
 
 def test_apply_message_template_preserves_unknown_placeholders() -> None:
@@ -759,6 +867,7 @@ def create_task(
     notification_offset_minutes: int | None = None,
     notification_channel: str | None = None,
     unscheduled_order: int | None = None,
+    timezone: str | None = None,
 ):
     return service.create_task(
         db_session,
@@ -773,6 +882,7 @@ def create_task(
             notification_offset_minutes=notification_offset_minutes,
             notification_channel=notification_channel,
             unscheduled_order=unscheduled_order,
+            timezone=timezone or "UTC",
         ),
     )
 

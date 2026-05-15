@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Callable
 from urllib import error, request
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.app_settings.service import get_app_settings
 from app.core.config import settings
 from app.core.database import SessionLocal
+from app.core.timezone import ensure_aware_datetime, get_app_timezone, now_in_app_timezone
 from app.models.scheduled_task import ScheduledTask
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ def run_notification_worker(stop_event: threading.Event) -> None:
                 app_settings = get_app_settings(db)
                 send_due_notifications(
                     db,
-                    now=datetime.now(UTC),
+                    now=now_in_app_timezone(),
                     webhook_url=(
                         app_settings.discord_webhook_url
                         or settings.discord_webhook_url
@@ -69,8 +70,7 @@ def send_due_notifications(
     if sender is None:
         sender = send_discord_notification
 
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=UTC)
+    now = ensure_aware_datetime(now)
 
     statement: Select[tuple[ScheduledTask]] = select(ScheduledTask).where(
         ScheduledTask.notification_enabled.is_(True),
@@ -114,8 +114,7 @@ def get_notify_at(task: ScheduledTask) -> datetime | None:
 
     offset = max(0, task.notification_offset_minutes or 0)
     start = task.scheduled_start
-    if start.tzinfo is None:
-        start = start.replace(tzinfo=UTC)
+    start = ensure_aware_datetime(start)
     return start - timedelta(minutes=offset)
 
 
@@ -237,10 +236,7 @@ def format_local_datetime(value: datetime | None, timezone_name: str) -> str:
     try:
         timezone = ZoneInfo(timezone_name)
     except ZoneInfoNotFoundError:
-        timezone = ZoneInfo("UTC")
+        timezone = get_app_timezone()
 
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=UTC)
-
-    local_value = value.astimezone(timezone)
+    local_value = ensure_aware_datetime(value).astimezone(timezone)
     return local_value.strftime("%Y-%m-%d %H:%M")

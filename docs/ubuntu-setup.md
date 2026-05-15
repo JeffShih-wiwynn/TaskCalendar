@@ -49,9 +49,9 @@ pip install -e ".[dev]"
 cp .env.example .env
 ```
 
-## Run PostgreSQL
+## Run PostgreSQL For Local Development
 
-The repository provides PostgreSQL through Docker Compose:
+The repository provides PostgreSQL through Docker Compose for local development:
 
 ```sh
 docker compose up -d postgres
@@ -102,6 +102,10 @@ npm run build
 ```
 
 There is no backend build step beyond installing the Python package and running tests/lint.
+
+## Production Notes
+
+For production, use [docs/ubuntu-production.md](docs/ubuntu-production.md) for the primary non-Docker path or [docs/docker-production.md](docs/docker-production.md) for the minimal Compose path. Local development commands in this guide remain unchanged.
 
 ## Ubuntu Troubleshooting
 

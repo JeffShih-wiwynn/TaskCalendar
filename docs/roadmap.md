@@ -28,16 +28,16 @@ Goal: finish multi-user safety before wider deployment and export work.
 
 Goal: make the project portable and easy to configure across local and server environments.
 
-- [ ] Add or improve Dockerfiles where needed.
-- [x] `docker-compose.yml` exists; production review is still pending.
+- [x] Add or improve Dockerfiles where needed.
+- [x] `docker-compose.yml` exists and has a minimal production stack.
 - [x] Frontend API base URL is configurable through `VITE_API_BASE_URL`.
 - [x] Backend database URL and CORS origins are configurable.
 - [x] `backend/.env.example` exists and captures the current backend config shape.
-- [ ] Make timezone configurable.
-- [ ] Add deployment instructions for Ubuntu production use.
-- [ ] Add reverse proxy examples (Nginx or Caddy).
+- [x] Make timezone configurable.
+- [x] Add deployment instructions for Ubuntu production use.
+- [x] Add reverse proxy examples (Nginx or Caddy).
 - [ ] Keep non-Docker local development working while deployment artifacts are added.
-- [ ] Document the current environment variables and defaults in one place.
+- [x] Document the current environment variables and defaults in one place.
 
 ---
 
@@ -69,13 +69,13 @@ Goal: support full app backup, restore, and migration of user-owned data.
   - unscheduled ordering
   - completed state
   - notes
-- [ ] Add JSON import endpoint.
-- [ ] Validate import schema before writing to database.
+- [x] Add JSON import endpoint.
+- [x] Validate import schema before writing to database.
 - [ ] Support conflict behaviors:
   - replace existing data
   - merge/import as copy
 - [x] Add backup/import UI in settings.
-- [ ] Document manual backup and restore workflow.
+- [x] Document manual backup and restore workflow.
 - [ ] Include global app settings only if they become user-scoped later.
 
 ---

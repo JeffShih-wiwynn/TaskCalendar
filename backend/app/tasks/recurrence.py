@@ -7,6 +7,8 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, status
 
+from app.core.timezone import ensure_aware_datetime
+
 
 @dataclass(frozen=True)
 class RecurrenceSpec:
@@ -42,8 +44,7 @@ def parse_recurrence_rule(recurrence_rule: str) -> RecurrenceSpec:
     if until_value is not None:
         try:
             until = datetime.fromisoformat(until_value.replace("Z", "+00:00"))
-            if until.tzinfo is None:
-                until = until.replace(tzinfo=UTC)
+            until = ensure_aware_datetime(until)
         except ValueError as error:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -158,9 +159,3 @@ def add_years(value: datetime, years: int) -> datetime:
     except ValueError:
         # Handle leap day by moving to the last valid day of February.
         return value.replace(month=2, day=28, year=value.year + years)
-
-
-def ensure_aware_datetime(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value

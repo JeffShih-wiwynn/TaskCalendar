@@ -1,0 +1,13 @@
+.calendar-dev
+.git
+.venv
+backend/.venv
+backend/__pycache__
+backend/.pytest_cache
+frontend/node_modules
+frontend/dist
+frontend/.vite
+*.pyc
+*.pyo
+*.pyd
+*.log

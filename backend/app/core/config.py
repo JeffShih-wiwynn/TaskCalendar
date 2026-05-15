@@ -8,6 +8,7 @@ class Settings(BaseSettings):
         "http://localhost:5176,http://localhost:5177,http://localhost:5178"
     )
     app_base_url: str | None = None
+    app_timezone: str = "UTC"
     discord_webhook_url: str | None = None
     jwt_secret_key: str = "change-this-development-secret-at-least-32-bytes"
     jwt_algorithm: str = "HS256"

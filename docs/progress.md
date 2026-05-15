@@ -64,6 +64,10 @@ This document summarizes what is already in the repository snapshot and where th
   - Users can register with a username and hashed password.
   - Users can log in and receive a JWT access token.
   - The backend has a reusable current-user dependency for future authenticated routes.
+- [x] Step 11: Production deployment docs
+  - Ubuntu production deployment is documented.
+  - Docker/Compose production deployment is documented.
+  - Environment variables and backup/timezone behavior are described in the docs.
 
 ## Current Notes
 
@@ -73,6 +77,8 @@ This document summarizes what is already in the repository snapshot and where th
 - The backend authentication foundation exists, but frontend login and task-level authenticated user scoping are not implemented yet.
 - Alembic is now configured for backend schema upgrades and fresh database initialization.
 - Existing databases that already match the baseline schema should be adopted with `alembic stamp head` instead of relying on startup mutation.
+- Application timezone behavior is now configurable with `APP_TIMEZONE`, defaulting to `UTC` when unset.
+- Both Ubuntu and Docker production paths are documented, but Ubuntu remains the primary manual path.
 - All-day tasks are inferred from midnight-to-midnight ranges in the task timezone rather than from a separate all-day field.
 - Unscheduled tasks now have a dedicated `No time tasks` sidebar view.
 - `No time tasks` order is now stored on each unscheduled task as `unscheduled_order`, with `created_at` as the fallback sort when that field is null.
