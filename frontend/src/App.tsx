@@ -2417,11 +2417,11 @@ export function App() {
                                             >
                                                 {isBackupLoading
                                                     ? "Loading backup..."
-                                                    : "Export backup"}
+                                                    : "Export current backup"}
                                             </button>
                                             <div className="backup-import-section">
                                                 <label>
-                                                    <span>Import backup</span>
+                                                    <span>Import backup (.json)</span>
                                                     <input
                                                         type="file"
                                                         accept="application/json,.json"
@@ -2434,8 +2434,9 @@ export function App() {
                                                     />
                                                 </label>
                                                 <p className="muted">
-                                                    Importing will replace your
-                                                    existing calendar data.
+                                                    Importing replaces your
+                                                    current calendar data for
+                                                    this account.
                                                 </p>
                                                 {backupImportFile && (
                                                     <p className="muted">

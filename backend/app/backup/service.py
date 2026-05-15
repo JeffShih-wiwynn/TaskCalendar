@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -10,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.backup.schemas import BackupImportRequest
+from app.core.timezone import ensure_aware_datetime, now_in_app_timezone, to_app_isoformat
 from app.models.scheduled_task import ScheduledTask
 from app.models.task_list import TaskList
 
@@ -26,7 +27,7 @@ def export_user_backup(db: Session, *, user_id: uuid.UUID) -> dict[str, Any]:
 
     return {
         "schema_version": BACKUP_SCHEMA_VERSION,
-        "exported_at": datetime.now(UTC).isoformat(),
+        "exported_at": now_in_app_timezone().isoformat(),
         "tasks": [serialize_task(task) for task in tasks],
         "task_lists": [serialize_task_list(task_list) for task_list in task_lists],
     }
@@ -85,9 +86,9 @@ def import_user_backup(
                     title=task.title,
                     notes=task.notes,
                     completed=task.completed,
-                    scheduled_start=task.scheduled_start,
-                    scheduled_end=task.scheduled_end,
-                    due_at=task.due_at,
+                    scheduled_start=normalize_import_datetime(task.scheduled_start),
+                    scheduled_end=normalize_import_datetime(task.scheduled_end),
+                    due_at=normalize_import_datetime(task.due_at),
                     timezone=task.timezone,
                     priority=task.priority,
                     unscheduled_order=task.unscheduled_order,
@@ -96,10 +97,10 @@ def import_user_backup(
                     notification_enabled=task.notification_enabled,
                     notification_offset_minutes=task.notification_offset_minutes,
                     notification_channel=task.notification_channel,
-                    notification_sent_at=task.notification_sent_at,
-                    created_at=task.created_at,
-                    updated_at=task.updated_at,
-                    completed_at=task.completed_at,
+                    notification_sent_at=normalize_import_datetime(task.notification_sent_at),
+                    created_at=ensure_aware_datetime(task.created_at),
+                    updated_at=ensure_aware_datetime(task.updated_at),
+                    completed_at=normalize_import_datetime(task.completed_at),
                 )
                 for task in backup.tasks
             )
@@ -143,9 +144,9 @@ def serialize_task(task: ScheduledTask) -> dict[str, Any]:
         "title": task.title,
         "notes": task.notes,
         "completed": task.completed,
-        "scheduled_start": to_iso(task.scheduled_start),
-        "scheduled_end": to_iso(task.scheduled_end),
-        "due_at": to_iso(task.due_at),
+        "scheduled_start": to_app_isoformat(task.scheduled_start),
+        "scheduled_end": to_app_isoformat(task.scheduled_end),
+        "due_at": to_app_isoformat(task.due_at),
         "timezone": task.timezone,
         "priority": task.priority,
         "unscheduled_order": task.unscheduled_order,
@@ -156,10 +157,10 @@ def serialize_task(task: ScheduledTask) -> dict[str, Any]:
         "notification_enabled": task.notification_enabled,
         "notification_offset_minutes": task.notification_offset_minutes,
         "notification_channel": task.notification_channel,
-        "notification_sent_at": to_iso(task.notification_sent_at),
-        "created_at": to_iso(task.created_at),
-        "updated_at": to_iso(task.updated_at),
-        "completed_at": to_iso(task.completed_at),
+        "notification_sent_at": to_app_isoformat(task.notification_sent_at),
+        "created_at": to_app_isoformat(task.created_at),
+        "updated_at": to_app_isoformat(task.updated_at),
+        "completed_at": to_app_isoformat(task.completed_at),
     }
 
 
@@ -169,12 +170,12 @@ def serialize_task_list(task_list: TaskList) -> dict[str, Any]:
         "user_id": str(task_list.user_id),
         "name": task_list.name,
         "color": task_list.color,
-        "created_at": to_iso(task_list.created_at),
-        "updated_at": to_iso(task_list.updated_at),
+        "created_at": to_app_isoformat(task_list.created_at),
+        "updated_at": to_app_isoformat(task_list.updated_at),
     }
 
 
-def to_iso(value: datetime | None) -> str | None:
+def normalize_import_datetime(value: datetime | None) -> datetime | None:
     if value is None:
         return None
-    return value.isoformat()
+    return ensure_aware_datetime(value)

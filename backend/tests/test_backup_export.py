@@ -1,5 +1,7 @@
 from collections.abc import Generator
 
+from datetime import UTC, datetime
+
 import pytest
 from pydantic import ValidationError
 from sqlalchemy import create_engine
@@ -8,7 +10,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.backup.router import export_backup, import_backup
 from app.backup.schemas import BackupImportRequest
-from app.backup.service import BACKUP_SCHEMA_VERSION, export_user_backup
+from app.backup.service import BACKUP_SCHEMA_VERSION, export_user_backup, import_user_backup
+from app.core.config import settings
 from app.core.database import Base
 from app.models import User
 from app.task_lists import service as task_list_service
@@ -198,12 +201,180 @@ def test_import_backup_route_isolates_import_to_authenticated_user(
     assert all(task.user_id == bob.id for task in bob_tasks)
 
 
+def test_backup_round_trip_restores_exported_user_data(
+    db_session: Session,
+) -> None:
+    alice = create_user(db_session, "alice")
+    bob = create_user(db_session, "bob")
+
+    alice_work = task_list_service.create_task_list(
+        db_session,
+        TaskListCreate(name="Work", color="#2f80ed"),
+        user_id=alice.id,
+    )
+    alice_personal = task_list_service.create_task_list(
+        db_session,
+        TaskListCreate(name="Personal", color="#27ae60"),
+        user_id=alice.id,
+    )
+    task_service.create_task(
+        db_session,
+        ScheduledTaskCreate(title="No time", notes="Unscheduled task"),
+        user_id=alice.id,
+    )
+    task_service.create_task(
+        db_session,
+        ScheduledTaskCreate(
+            title="Due today",
+            due_at=datetime(2026, 5, 15, tzinfo=UTC),
+            list_id=alice_work.id,
+        ),
+        user_id=alice.id,
+    )
+    task_service.create_task(
+        db_session,
+        ScheduledTaskCreate(
+            title="Calendar block",
+            scheduled_start=datetime(2026, 5, 15, 9, 0, tzinfo=UTC),
+            scheduled_end=datetime(2026, 5, 15, 10, 30, tzinfo=UTC),
+            list_id=alice_personal.id,
+        ),
+        user_id=alice.id,
+    )
+    task_service.create_task(
+        db_session,
+        ScheduledTaskCreate(
+            title="Done task",
+            completed=True,
+            list_id=alice_personal.id,
+        ),
+        user_id=alice.id,
+    )
+
+    bob_list = task_list_service.create_task_list(
+        db_session,
+        TaskListCreate(name="Bob list", color="#f2994a"),
+        user_id=bob.id,
+    )
+    task_service.create_task(
+        db_session,
+        ScheduledTaskCreate(title="Bob task", list_id=bob_list.id),
+        user_id=bob.id,
+    )
+
+    original_alice_export = export_user_backup(db_session, user_id=alice.id)
+    original_bob_export = export_user_backup(db_session, user_id=bob.id)
+
+    alice_work_task = next(
+        task
+        for task in task_service.list_tasks(db_session, user_id=alice.id)
+        if task.title == "Due today"
+    )
+    task_service.delete_task(db_session, task_id=alice_work_task.id, user_id=alice.id)
+    task_list_service.delete_task_list(db_session, task_list_id=alice_personal.id, user_id=alice.id)
+    task_list_service.delete_task_list(db_session, task_list_id=alice_work.id, user_id=alice.id)
+    task_service.create_task(
+        db_session,
+        ScheduledTaskCreate(title="Temporary replacement task"),
+        user_id=alice.id,
+    )
+
+    import_user_backup(
+        db_session,
+        BackupImportRequest.model_validate(original_alice_export),
+        user_id=alice.id,
+    )
+
+    restored_alice_export = export_user_backup(db_session, user_id=alice.id)
+    restored_bob_export = export_user_backup(db_session, user_id=bob.id)
+
+    assert strip_export_metadata(restored_alice_export) == strip_export_metadata(
+        original_alice_export
+    )
+    assert strip_export_metadata(restored_bob_export) == strip_export_metadata(
+        original_bob_export
+    )
+
+    restored_alice_task_titles = sorted(task["title"] for task in restored_alice_export["tasks"])
+    assert restored_alice_task_titles == [
+        "Calendar block",
+        "Done task",
+        "Due today",
+        "No time",
+    ]
+    assert sorted(task_list["name"] for task_list in restored_alice_export["task_lists"]) == [
+        "Personal",
+        "Work",
+    ]
+    assert {task["completed"] for task in restored_alice_export["tasks"]} == {False, True}
+    assert any(task["scheduled_start"] is None and task["scheduled_end"] is None for task in restored_alice_export["tasks"])
+    assert any(task["due_at"] is not None for task in restored_alice_export["tasks"])
+    assert any(task["scheduled_start"] is not None for task in restored_alice_export["tasks"])
+    assert all(item["user_id"] == str(alice.id) for item in restored_alice_export["tasks"])
+    assert all(item["user_id"] == str(alice.id) for item in restored_alice_export["task_lists"])
+
+
+def test_backup_export_serializes_datetimes_in_configured_timezone(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "app_timezone", "America/New_York")
+    user = create_user(db_session, "alice")
+    task = task_service.create_task(
+        db_session,
+        ScheduledTaskCreate(
+            title="Timezone export",
+            scheduled_start=datetime(2026, 5, 15, 14, 0, tzinfo=UTC),
+            scheduled_end=datetime(2026, 5, 15, 15, 0, tzinfo=UTC),
+        ),
+        user_id=user.id,
+    )
+    task.scheduled_start = datetime(2026, 5, 15, 14, 0, tzinfo=UTC)
+    task.scheduled_end = datetime(2026, 5, 15, 15, 0, tzinfo=UTC)
+    db_session.add(task)
+    db_session.commit()
+
+    payload = export_user_backup(db_session, user_id=user.id)
+
+    assert payload["exported_at"].endswith("-04:00")
+    assert payload["tasks"][0]["scheduled_start"] == "2026-05-15T14:00:00-04:00"
+    assert payload["tasks"][0]["scheduled_end"] == "2026-05-15T15:00:00-04:00"
+
+
 def create_user(db_session: Session, username: str) -> User:
     user = User(username=username)
     db_session.add(user)
     db_session.commit()
     db_session.refresh(user)
     return user
+
+
+def strip_export_metadata(payload: dict) -> dict:
+    return {
+        "schema_version": payload["schema_version"],
+        "tasks": sorted(
+            (
+                {
+                    key: value
+                    for key, value in task.items()
+                    if key != "created_at" and key != "updated_at" and key != "completed_at"
+                }
+                for task in payload["tasks"]
+            ),
+            key=lambda item: item["id"],
+        ),
+        "task_lists": sorted(
+            (
+                {
+                    key: value
+                    for key, value in task_list.items()
+                    if key != "created_at" and key != "updated_at"
+                }
+                for task_list in payload["task_lists"]
+            ),
+            key=lambda item: item["id"],
+        ),
+    }
 
 
 @pytest.fixture()

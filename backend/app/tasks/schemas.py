@@ -1,7 +1,9 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
+
+from app.core.timezone import get_app_timezone_name, to_app_timezone
 
 
 class ScheduledTaskBase(BaseModel):
@@ -42,7 +44,7 @@ class ScheduledTaskBase(BaseModel):
 class ScheduledTaskCreate(ScheduledTaskBase):
     user_id: uuid.UUID | None = None
     title: str = Field(min_length=1, max_length=500)
-    timezone: str = Field(default="Asia/Taipei", min_length=1, max_length=100)
+    timezone: str = Field(default_factory=get_app_timezone_name, min_length=1, max_length=100)
 
     @model_validator(mode="after")
     def validate_recurring_task_requires_start(self) -> "ScheduledTaskCreate":
@@ -79,6 +81,20 @@ class ScheduledTaskRead(BaseModel):
     completed_at: datetime | None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer(
+        "scheduled_start",
+        "scheduled_end",
+        "due_at",
+        "notification_sent_at",
+        "created_at",
+        "updated_at",
+        "completed_at",
+    )
+    def serialize_app_datetime(self, value: datetime | None) -> str | None:
+        if value is None:
+            return None
+        return to_app_timezone(value).isoformat()
 
 
 def validate_recurrence_rule_value(recurrence_rule: str) -> None:

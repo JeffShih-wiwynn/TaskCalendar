@@ -8,6 +8,7 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, Uui
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.timezone import get_app_timezone_name
 
 if TYPE_CHECKING:
     from app.models.task_list import TaskList
@@ -30,7 +31,7 @@ class ScheduledTask(Base):
     scheduled_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     scheduled_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    timezone: Mapped[str] = mapped_column(String(100), default="Asia/Taipei")
+    timezone: Mapped[str] = mapped_column(String(100), default=get_app_timezone_name)
     priority: Mapped[int | None] = mapped_column(Integer, nullable=True)
     unscheduled_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
     recurrence_rule: Mapped[str | None] = mapped_column(String(255), nullable=True)

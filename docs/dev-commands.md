@@ -117,6 +117,10 @@ source .venv/bin/activate
 alembic upgrade head
 ```
 
+## Backend Environment
+
+`APP_TIMEZONE` controls application datetime behavior and defaults to `UTC` when unset. It is used for task datetime serialization, recurrence handling, notification scheduling, and backup datetime import/export. Use an IANA timezone name such as `UTC` or `Asia/Taipei`.
+
 Adopt Alembic for an existing database that already matches the baseline schema:
 
 ```sh
@@ -149,6 +153,7 @@ The script writes logs and PID files to `.calendar-dev/` and binds the frontend 
 
 Local development uses `backend/.env.local` and `frontend/.env.local` so deployment settings do not leak into development.
 It starts or verifies the local PostgreSQL service, waits for it to accept connections, and runs Alembic migrations before backend startup.
+Docker deployment uses `docker-compose.yml` and the dedicated production Dockerfiles, but local development stays on `scripts/dev.sh`.
 
 Expected development endpoints:
 

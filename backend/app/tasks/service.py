@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import Select, case, func, select
 from sqlalchemy.orm import Session
 
+from app.core.timezone import now_in_app_timezone
 from app.models.scheduled_task import ScheduledTask
 from app.models.task_list import TaskList
 from app.models.user import User
@@ -60,7 +61,7 @@ def list_tasks(
 
     if view is not None:
         if view == "overdue":
-            now = datetime.now(UTC)
+            now = now_in_app_timezone()
             statement = statement.order_by(None)
             statement = statement.where(
                 ScheduledTask.completed.is_(False),

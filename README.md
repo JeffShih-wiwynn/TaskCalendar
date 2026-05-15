@@ -1,6 +1,6 @@
 # Calendar MVP
 
-Self-hosted scheduled task calendar app. The MVP is web-first with a React + TypeScript frontend, a FastAPI backend, and PostgreSQL for local development.
+Self-hosted scheduled task calendar app. The MVP is web-first with a React + TypeScript frontend, a FastAPI backend, and PostgreSQL for local development and production.
 
 ## Project Status
 
@@ -8,6 +8,8 @@ Self-hosted scheduled task calendar app. The MVP is web-first with a React + Typ
 - [Roadmap](docs/roadmap.md)
 - [Decisions](docs/decisions.md)
 - [Android Plan](docs/android-plan.md)
+- [Ubuntu Production Deployment](docs/ubuntu-production.md)
+- [Docker Production Deployment](docs/docker-production.md)
 
 ## Requirements
 
@@ -34,7 +36,7 @@ It writes only local development env files:
 - `frontend/.env.local`
 - `backend/.env.local`
 
-It starts the local PostgreSQL service, waits for it to become ready, and runs migrations before launching the backend.
+It starts or verifies the local PostgreSQL service, waits for it to become ready, and runs migrations before launching the backend.
 
 Login requests should go to:
 
@@ -52,6 +54,22 @@ Troubleshooting:
 - Use `lsof -i :5173` and `lsof -i :8000` to find listeners.
 
 Click a blank calendar slot to open the create-task form in the left sidebar. Click an existing task to open the edit form in the same place. When the form is open, it replaces the sidebar filters and task list until you close it.
+
+## Production Deployment
+
+For manual Ubuntu deployment, use [docs/ubuntu-production.md](docs/ubuntu-production.md).
+For a minimal Docker/Compose deployment, use [docs/docker-production.md](docs/docker-production.md).
+
+## Backup
+
+- Use the sidebar settings menu to export a backup of the current user's calendar data.
+- Use the same settings menu to import a `.json` backup for the current user.
+- Importing replaces that user's existing calendar data.
+- Backups are user-scoped and do not include other users' data.
+
+## Timezone
+
+Set `APP_TIMEZONE` in `backend/.env` to control application datetime behavior. It defaults to `UTC` when unset and is used for task datetime serialization, recurrence boundaries, notification scheduling, and backup datetime output/import handling. Use an IANA timezone name such as `UTC`, `Asia/Taipei`, or `America/New_York`.
 
 Current frontend behavior includes:
 

@@ -10,6 +10,8 @@ This file summarizes the current repository state for future contributors and AI
 - Auth: JWT authentication with backend register/login/current-user endpoints and a simple frontend login/logout flow
 - Migration: Alembic workflow with baseline and ownership backfill migrations; FastAPI no longer mutates schema on startup
 - Notifications: Discord webhook notifications with per-task notification fields
+- Timezone: application timezone is configurable with `APP_TIMEZONE`, defaulting to `UTC`
+- Deployment: non-Docker Ubuntu deployment and minimal Docker/Compose deployment are both documented
 
 ## Completed Major Features
 
@@ -22,7 +24,7 @@ This file summarizes the current repository state for future contributors and AI
 - Backend authentication foundation
 - Frontend login/logout flow with local JWT storage
 - Backend task and category ownership scoping
-- Backend JSON export endpoint for the authenticated user's backup data
+- Backend JSON export/import endpoints for the authenticated user's backup data
 - Alembic migrations and migration smoke tests
 - Drag/drop and resize support for scheduled tasks
 - Overdue and completed task views
@@ -42,18 +44,19 @@ This file summarizes the current repository state for future contributors and AI
 - Login/register screen, logout action, and token-backed frontend API requests
 - Sidebar header icon button sizing refined to keep the hamburger and fold controls visually aligned
 - JSON export payload now returns only the authenticated user's tasks and task lists
+- Sidebar backup export/import actions now support user-scoped restore with explicit confirmation before import
+- `APP_TIMEZONE` now controls application datetime serialization, recurrence boundaries, notification scheduling, and backup datetime handling
 
 ## Work Currently In Progress
 
-- Production hardening and deployment portability
+- Production hardening and deployment verification
 
 ## Known Limitations
 
-- No full JSON backup/import workflow yet
-- No JSON import workflow yet
+- Full JSON backup/export/import workflow exists for authenticated users
 - No CalDAV sync
 - No offline sync
-- Deployment portability and production hardening are still in progress
+- Docker deployment is documented but not the primary production path yet
 
 ## Next Recommended Priority
 
