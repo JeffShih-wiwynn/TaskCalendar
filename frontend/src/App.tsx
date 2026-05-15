@@ -30,6 +30,7 @@ import {
     useMemo,
     useRef,
     useState,
+    type ChangeEvent,
     type CSSProperties,
     type FormEvent,
     type MouseEvent as ReactMouseEvent,
@@ -48,6 +49,7 @@ import {
 import {
     downloadBackupPayload,
     fetchBackupExport,
+    importBackup,
     type BackupExportPayload,
 } from "./api/backup";
 import {
@@ -288,6 +290,14 @@ export function App() {
     );
     const [isBackupLoading, setIsBackupLoading] = useState(false);
     const [isBackupDownloading, setIsBackupDownloading] = useState(false);
+    const [backupImportFile, setBackupImportFile] = useState<File | null>(null);
+    const [isBackupImporting, setIsBackupImporting] = useState(false);
+    const [backupImportMessage, setBackupImportMessage] = useState<string | null>(
+        null,
+    );
+    const [backupImportError, setBackupImportError] = useState<string | null>(
+        null,
+    );
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(
         null,
     );
@@ -681,6 +691,47 @@ export function App() {
             );
         }
     }, [handleAuthExpired]);
+
+    const handleBackupImportFileChange = useCallback(
+        (event: ChangeEvent<HTMLInputElement>) => {
+            setBackupImportFile(event.target.files?.[0] ?? null);
+            setBackupImportMessage(null);
+            setBackupImportError(null);
+        },
+        [],
+    );
+
+    const handleConfirmBackupImport = useCallback(async () => {
+        if (!backupImportFile) {
+            setBackupImportError("Choose a JSON backup file first.");
+            return;
+        }
+
+        setIsBackupImporting(true);
+        setBackupImportMessage(null);
+        setBackupImportError(null);
+        try {
+            const text = await readBackupFileText(backupImportFile);
+            const payload = JSON.parse(text) as BackupExportPayload;
+            const result = await importBackup(payload);
+            setBackupImportMessage(
+                `Imported ${result.imported_tasks} tasks and ${result.imported_task_lists} categories.`,
+            );
+            setBackupImportFile(null);
+            locallyUpdatedTasksRef.current.clear();
+            await Promise.all([refreshTasks(), refreshTaskLists()]);
+        } catch (error) {
+            setBackupImportError(
+                error instanceof SyntaxError
+                    ? "Backup file must be valid JSON."
+                    : error instanceof Error
+                      ? error.message
+                      : "Unable to import backup",
+            );
+        } finally {
+            setIsBackupImporting(false);
+        }
+    }, [backupImportFile, refreshTaskLists, refreshTasks]);
 
     const refreshWebhookSettings = useCallback(async () => {
         try {
@@ -2368,6 +2419,56 @@ export function App() {
                                                     ? "Loading backup..."
                                                     : "Export backup"}
                                             </button>
+                                            <div className="backup-import-section">
+                                                <label>
+                                                    <span>Import backup</span>
+                                                    <input
+                                                        type="file"
+                                                        accept="application/json,.json"
+                                                        onChange={
+                                                            handleBackupImportFileChange
+                                                        }
+                                                        disabled={
+                                                            isBackupImporting
+                                                        }
+                                                    />
+                                                </label>
+                                                <p className="muted">
+                                                    Importing will replace your
+                                                    existing calendar data.
+                                                </p>
+                                                {backupImportFile && (
+                                                    <p className="muted">
+                                                        Selected:{" "}
+                                                        {backupImportFile.name}
+                                                    </p>
+                                                )}
+                                                {backupImportMessage && (
+                                                    <p className="webhook-test-success">
+                                                        {backupImportMessage}
+                                                    </p>
+                                                )}
+                                                {backupImportError && (
+                                                    <p className="form-error">
+                                                        {backupImportError}
+                                                    </p>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    className="secondary-button"
+                                                    disabled={
+                                                        isBackupImporting ||
+                                                        !backupImportFile
+                                                    }
+                                                    onClick={() =>
+                                                        void handleConfirmBackupImport()
+                                                    }
+                                                >
+                                                    {isBackupImporting
+                                                        ? "Importing..."
+                                                        : "Confirm import"}
+                                                </button>
+                                            </div>
                                             <button
                                                 type="button"
                                                 className="filter-option"
@@ -5405,6 +5506,19 @@ function saveUnscheduledOrder(unscheduledOrder: string[]): void {
 
 function clampNumber(value: number, min: number, max: number): number {
     return Math.min(Math.max(value, min), max);
+}
+
+function readBackupFileText(file: File): Promise<string> {
+    if (typeof file.text === "function") {
+        return file.text();
+    }
+
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ""));
+        reader.onerror = () => reject(new Error("Unable to read backup file"));
+        reader.readAsText(file);
+    });
 }
 
 function formatBackupDate(value: string): string {

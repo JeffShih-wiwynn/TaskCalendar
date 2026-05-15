@@ -332,13 +332,53 @@ body {
   top: calc(100% + 6px);
   right: 0;
   z-index: 14;
-  min-width: 190px;
+  width: min(240px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--panel-bg);
   box-shadow: 0 12px 28px rgb(24 32 38 / 14%);
   overflow: hidden;
   transform-origin: top right;
+}
+
+.backup-import-section {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding: 10px;
+  min-width: 0;
+}
+
+.backup-import-section label {
+  display: grid;
+  gap: 6px;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.backup-import-section input {
+  width: 100%;
+  max-width: 100%;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.84rem;
+}
+
+.backup-import-section .secondary-button {
+  justify-content: center;
+  width: 100%;
+}
+
+@media (max-width: 420px) {
+  .settings-menu-panel {
+    right: auto;
+    left: 0;
+    width: min(240px, calc(100vw - 16px));
+    max-width: calc(100vw - 16px);
+  }
 }
 
 .eyebrow {
