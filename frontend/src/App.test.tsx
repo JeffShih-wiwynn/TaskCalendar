@@ -61,6 +61,10 @@ const mocks = vi.hoisted(() => ({
             },
         ],
     })),
+    importBackup: vi.fn(async () => ({
+        imported_task_lists: 1,
+        imported_tasks: 1,
+    })),
     downloadBackupPayload: vi.fn(),
     register: vi.fn(async () => ({
         id: "user-1",
@@ -431,6 +435,7 @@ vi.mock("./api/auth", () => ({
 vi.mock("./api/backup", () => ({
     downloadBackupPayload: mocks.downloadBackupPayload,
     fetchBackupExport: mocks.fetchBackupExport,
+    importBackup: mocks.importBackup,
 }));
 
 function mockTaskRowRects(rows: Element[]): void {
@@ -563,6 +568,11 @@ describe("App", () => {
         mocks.testSettings.mockClear();
         mocks.login.mockClear();
         mocks.fetchBackupExport.mockClear();
+        mocks.importBackup.mockClear();
+        mocks.importBackup.mockResolvedValue({
+            imported_task_lists: 1,
+            imported_tasks: 1,
+        });
         mocks.downloadBackupPayload.mockClear();
         mocks.register.mockClear();
         mocks.getCurrentUser.mockClear();
@@ -654,6 +664,60 @@ describe("App", () => {
                 }),
             ),
         );
+    });
+
+    it("imports a selected backup after explicit confirmation", async () => {
+        render(<App />);
+        const payload = {
+            schema_version: 1,
+            exported_at: "2026-05-14T00:00:00.000Z",
+            tasks: [],
+            task_lists: [],
+        };
+        const file = new File([JSON.stringify(payload)], "backup.json", {
+            type: "application/json",
+        });
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.change(screen.getByLabelText("Import backup"), {
+            target: { files: [file] },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Confirm import" }));
+
+        await waitFor(() =>
+            expect(mocks.importBackup).toHaveBeenCalledWith(payload),
+        );
+        expect(
+            await screen.findByText("Imported 1 tasks and 1 categories."),
+        ).toBeInTheDocument();
+        expect(mocks.listTasks).toHaveBeenCalledTimes(2);
+    });
+
+    it("shows a readable backup import error and keeps settings usable", async () => {
+        mocks.importBackup.mockRejectedValueOnce(new Error("Backup file is not valid."));
+        render(<App />);
+        const file = new File(
+            [
+                JSON.stringify({
+                    schema_version: 1,
+                    exported_at: "2026-05-14T00:00:00.000Z",
+                    tasks: [],
+                    task_lists: [],
+                }),
+            ],
+            "backup.json",
+            { type: "application/json" },
+        );
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.change(screen.getByLabelText("Import backup"), {
+            target: { files: [file] },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Confirm import" }));
+
+        expect(await screen.findByText("Backup file is not valid.")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Confirm import" })).toBeEnabled();
+        expect(screen.getByRole("button", { name: "Export backup" })).toBeEnabled();
     });
 
     it("resets auth inputs when switching modes", async () => {

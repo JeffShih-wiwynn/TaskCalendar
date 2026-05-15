@@ -56,7 +56,11 @@ This document summarizes what is already in the repository snapshot and where th
   - The backend polls for due notifications and marks `notification_sent_at` after a successful send.
   - Discord webhook URL and message template can now be configured from the sidebar settings button.
   - The webhook settings panel can send a one-off test message from the current draft values.
-- [x] Step 9: Backend authentication foundation
+- [x] Step 9: Backup export/import foundation
+  - Backup export is available from the sidebar settings button.
+  - Backup import is available from the sidebar settings button and requires explicit confirmation before replacing current user data.
+  - Backup import is authenticated and scoped to the current user.
+- [x] Step 10: Backend authentication foundation
   - Users can register with a username and hashed password.
   - Users can log in and receive a JWT access token.
   - The backend has a reusable current-user dependency for future authenticated routes.
@@ -77,6 +81,7 @@ This document summarizes what is already in the repository snapshot and where th
 - Completed tasks keep their category color in the calendar and render with lower opacity instead of a fixed pale fill.
 - The task UI now has smoother shared motion timings, a clearer drag-to-calendar handle, and subtle calendar event enter animations for view and date transitions.
 - No-time and calendar drag targets now use softer drop-zone highlighting and centered helper labeling instead of hard outlines.
+- Backup export and import are now available from the sidebar settings menu, with import restricted to authenticated user data and guarded by an explicit confirmation step.
 - `due_at` still exists in the backend/data model, but the current edit form hides it.
 - The current UI is more sidebar-based than the original floating-column idea.
 - Recurrence and notifications are now in MVP form, but the series expansion horizon and webhook worker are intentionally limited.

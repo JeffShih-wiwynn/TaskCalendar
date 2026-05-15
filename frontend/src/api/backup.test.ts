@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { exportBackup } from "./backup";
+import { exportBackup, importBackup } from "./backup";
 
 describe("exportBackup", () => {
     beforeEach(() => {
@@ -54,5 +54,49 @@ describe("exportBackup", () => {
         vi.useRealTimers();
         revokeObjectURL.mockRestore();
         click.mockRestore();
+    });
+
+    it("posts imported backup json with the auth header", async () => {
+        window.localStorage.setItem("calendar-auth-token", "test-token");
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () =>
+                new Response(
+                    JSON.stringify({
+                        imported_task_lists: 1,
+                        imported_tasks: 2,
+                    }),
+                    {
+                        status: 200,
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                    },
+                ),
+            ) as typeof fetch,
+        );
+        const payload = {
+            schema_version: 1,
+            exported_at: "2026-05-14T00:00:00.000Z",
+            tasks: [],
+            task_lists: [],
+        };
+
+        await expect(importBackup(payload)).resolves.toEqual({
+            imported_task_lists: 1,
+            imported_tasks: 2,
+        });
+
+        expect(fetch).toHaveBeenCalledWith(
+            `${import.meta.env.VITE_API_BASE_URL}/backup/import`,
+            expect.objectContaining({
+                method: "POST",
+                headers: expect.objectContaining({
+                    Authorization: "Bearer test-token",
+                    "Content-Type": "application/json",
+                }),
+                body: JSON.stringify(payload),
+            }),
+        );
     });
 });

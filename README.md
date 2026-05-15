@@ -66,6 +66,7 @@ Current frontend behavior includes:
 - a clickable year control in month view
 - category colors with inline category editing
 - customizable `Upcoming` day ranges
+- backup export and import actions in the sidebar settings menu
 - a webhook settings form with `Test` and `Cancel` actions
 - completed tasks stay category-colored in the calendar with increased transparency
 - a completed-task calendar toggle in the `Completed` view

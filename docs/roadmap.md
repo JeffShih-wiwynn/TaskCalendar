@@ -74,7 +74,7 @@ Goal: support full app backup, restore, and migration of user-owned data.
 - [ ] Support conflict behaviors:
   - replace existing data
   - merge/import as copy
-- [ ] Add backup/import UI in settings later if needed.
+- [x] Add backup/import UI in settings.
 - [ ] Document manual backup and restore workflow.
 - [ ] Include global app settings only if they become user-scoped later.
 

@@ -8,6 +8,11 @@ export type BackupExportPayload = {
     task_lists: Array<Record<string, unknown>>;
 };
 
+export type BackupImportResult = {
+    imported_task_lists: number;
+    imported_tasks: number;
+};
+
 export async function exportBackup(): Promise<void> {
     const payload = await fetchBackupExport();
     downloadBackupPayload(payload);
@@ -28,6 +33,25 @@ export async function fetchBackupExport(): Promise<BackupExportPayload> {
     return response.json() as Promise<BackupExportPayload>;
 }
 
+export async function importBackup(
+    payload: BackupExportPayload,
+): Promise<BackupImportResult> {
+    const response = await fetch(resolveApiUrl("/backup/import"), {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+        },
+        body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+    }
+
+    return response.json() as Promise<BackupImportResult>;
+}
+
 export function downloadBackupPayload(payload: BackupExportPayload): void {
     const json = JSON.stringify(payload, null, 2);
     const blob = new Blob([json], { type: "application/json" });
@@ -42,4 +66,20 @@ export function downloadBackupPayload(payload: BackupExportPayload): void {
     anchor.click();
     anchor.remove();
     window.URL.revokeObjectURL(url);
+}
+
+async function readErrorMessage(response: Response): Promise<string> {
+    try {
+        const body = (await response.json()) as { detail?: unknown };
+        if (typeof body.detail === "string") {
+            return body.detail;
+        }
+        if (Array.isArray(body.detail)) {
+            return "Backup file is not valid.";
+        }
+    } catch {
+        // Fall through to a generic HTTP message.
+    }
+
+    return `Request failed with ${response.status}`;
 }
