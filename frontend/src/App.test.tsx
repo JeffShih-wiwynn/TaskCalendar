@@ -1,4 +1,5 @@
 import {
+    act,
     fireEvent,
     render,
     screen,
@@ -6,7 +7,9 @@ import {
     waitForElementToBeRemoved,
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { EventInput } from "@fullcalendar/core";
+import type {
+    EventInput,
+} from "@fullcalendar/core";
 import {
     forwardRef,
     useEffect,
@@ -27,7 +30,10 @@ const mocks = vi.hoisted(() => ({
     },
     fullCalendarProps: {
         events: [] as EventInput[],
+        scrollTime: undefined as string | undefined,
         scrollTimeReset: undefined as boolean | undefined,
+        slotMinTime: undefined as string | undefined,
+        slotMaxTime: undefined as string | undefined,
     },
     fullCalendarMount: vi.fn(),
     fullCalendarRefetchEvents: vi.fn(),
@@ -86,6 +92,16 @@ const mocks = vi.hoisted(() => ({
     listTasks: vi.fn(),
     createTask: vi.fn(async () => ({ id: "task-new" })),
     deleteTask: vi.fn(async () => undefined),
+    completeTask: vi.fn(
+        async (taskId: string): Promise<Record<string, unknown>> => ({
+            id: taskId,
+        }),
+    ),
+    uncompleteTask: vi.fn(
+        async (taskId: string): Promise<Record<string, unknown>> => ({
+            id: taskId,
+        }),
+    ),
     deleteTaskList: vi.fn(async () => undefined),
     updateTask: vi.fn(
         async (taskId: string, input: Record<string, unknown> = {}) => {
@@ -159,10 +175,14 @@ vi.mock("@fullcalendar/react", () => ({
             datesSet,
             drop,
             eventDrop,
+            eventResize,
             eventContent,
             events,
             initialView,
+            scrollTime,
             scrollTimeReset,
+            slotMinTime,
+            slotMaxTime,
         }: {
             dateClick?: (arg: { date: Date; allDay: boolean }) => void;
             datesSet?: (arg: {
@@ -206,7 +226,10 @@ vi.mock("@fullcalendar/react", () => ({
             }) => ReactNode;
             events?: EventInput[];
             initialView?: string;
+            scrollTime?: string;
             scrollTimeReset?: boolean;
+            slotMinTime?: string;
+            slotMaxTime?: string;
         },
         ref: ForwardedRef<{
             getApi: () => {
@@ -218,6 +241,7 @@ vi.mock("@fullcalendar/react", () => ({
                 getDate: () => Date;
                 refetchEvents: () => void;
                 updateSize: () => void;
+                scrollToTime: (time: string) => void;
             };
         }>,
     ) {
@@ -256,6 +280,9 @@ vi.mock("@fullcalendar/react", () => ({
                     getDate: () => currentDate,
                     refetchEvents: () => mocks.fullCalendarRefetchEvents(),
                     updateSize: () => mocks.fullCalendarUpdateSize(),
+                    scrollToTime: (time: string) => {
+                        mocks.fullCalendarProps.scrollTime = time;
+                    },
                 }),
             }),
             [currentDate],
@@ -275,7 +302,10 @@ vi.mock("@fullcalendar/react", () => ({
         }, [currentDate, datesSet, view]);
 
         mocks.fullCalendarProps.events = events ?? [];
+        mocks.fullCalendarProps.scrollTime = scrollTime;
         mocks.fullCalendarProps.scrollTimeReset = scrollTimeReset;
+        mocks.fullCalendarProps.slotMinTime = slotMinTime;
+        mocks.fullCalendarProps.slotMaxTime = slotMaxTime;
         const renderMockEvent = (
             event: EventInput & {
                 extendedProps?: Record<string, unknown>;
@@ -366,6 +396,22 @@ vi.mock("@fullcalendar/react", () => ({
                 </button>
                 <button
                     type="button"
+                    onClick={() =>
+                        eventResize?.({
+                            event: {
+                                id: "task-1",
+                                start: new Date("2026-05-08T09:00:00Z"),
+                                end: new Date("2026-05-08T11:30:00Z"),
+                                allDay: false,
+                            },
+                            revert: vi.fn(),
+                        })
+                    }
+                >
+                    Resize task
+                </button>
+                <button
+                    type="button"
                     onClick={() => {
                         setShowExternalMirror(true);
                         const draggedEl = document.createElement("button");
@@ -402,8 +448,8 @@ vi.mock("./api/tasks", () => ({
     listTasks: mocks.listTasks,
     createTask: mocks.createTask,
     updateTask: mocks.updateTask,
-    completeTask: vi.fn(),
-    uncompleteTask: vi.fn(),
+    completeTask: mocks.completeTask,
+    uncompleteTask: mocks.uncompleteTask,
     mapTaskToEvent: vi.fn(),
     deleteTask: mocks.deleteTask,
 }));
@@ -503,6 +549,45 @@ function createDeferred<T>(): {
     return { promise, resolve, reject };
 }
 
+function makeTask(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    const now = new Date();
+    const todayAtNine = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        9,
+        0,
+        0,
+        0,
+    );
+    const todayAtTen = new Date(todayAtNine.getTime() + 60 * 60 * 1000);
+
+    return {
+        id: "task-1",
+        user_id: "user-1",
+        list_id: "list-1",
+        title: "Task",
+        notes: null,
+        completed: false,
+        scheduled_start: todayAtNine.toISOString(),
+        scheduled_end: todayAtTen.toISOString(),
+        due_at: null,
+        timezone: "Asia/Taipei",
+        priority: null,
+        unscheduled_order: null,
+        recurrence_rule: null,
+        recurrence_series_id: null,
+        notification_enabled: false,
+        notification_offset_minutes: 0,
+        notification_channel: null,
+        notification_sent_at: null,
+        created_at: now.toISOString(),
+        updated_at: now.toISOString(),
+        completed_at: null,
+        ...overrides,
+    };
+}
+
 describe("App", () => {
     beforeEach(() => {
         window.localStorage.clear();
@@ -517,46 +602,85 @@ describe("App", () => {
         mocks.deleteTaskList.mockClear();
         createdTaskCounter = 0;
         mocks.createTask.mockImplementation(
-            async (input: Record<string, unknown> = {}) => ({
-                id: `task-new-${++createdTaskCounter}`,
-                user_id: "user-1",
-                list_id:
-                    (input.list_id as string | null | undefined) ?? null,
-                title: String(input.title ?? "New task"),
-                notes: (input.notes as string | null | undefined) ?? null,
-                completed: Boolean(input.completed ?? false),
-                scheduled_start:
-                    (input.scheduled_start as string | null | undefined) ??
-                    null,
-                scheduled_end:
-                    (input.scheduled_end as string | null | undefined) ?? null,
-                due_at: (input.due_at as string | null | undefined) ?? null,
-                timezone:
-                    (input.timezone as string | undefined) ?? "Asia/Taipei",
-                priority:
-                    (input.priority as number | null | undefined) ?? null,
-                unscheduled_order:
-                    (input.unscheduled_order as number | null | undefined) ??
-                    null,
-                recurrence_rule:
-                    (input.recurrence_rule as string | null | undefined) ??
-                    null,
-                recurrence_series_id: null,
-                notification_enabled: Boolean(
-                    input.notification_enabled ?? false,
-                ),
-                notification_offset_minutes: Number(
-                    input.notification_offset_minutes ?? 0,
-                ),
-                notification_channel:
-                    (input.notification_channel as string | null | undefined) ??
-                    null,
-                notification_sent_at: null,
-                created_at: "2026-05-08T00:00:00.000Z",
-                updated_at: "2026-05-08T00:00:00.000Z",
-                completed_at: null,
-            }),
+            async (input: Record<string, unknown> = {}) => {
+                const createdTask = {
+                    id: `task-new-${++createdTaskCounter}`,
+                    user_id: "user-1",
+                    list_id:
+                        (input.list_id as string | null | undefined) ?? null,
+                    title: String(input.title ?? "New task"),
+                    notes: (input.notes as string | null | undefined) ?? null,
+                    completed: Boolean(input.completed ?? false),
+                    scheduled_start:
+                        (input.scheduled_start as string | null | undefined) ??
+                        null,
+                    scheduled_end:
+                        (input.scheduled_end as string | null | undefined) ??
+                        null,
+                    due_at: (input.due_at as string | null | undefined) ?? null,
+                    timezone:
+                        (input.timezone as string | undefined) ?? "Asia/Taipei",
+                    priority:
+                        (input.priority as number | null | undefined) ?? null,
+                    unscheduled_order:
+                        (input.unscheduled_order as
+                            | number
+                            | null
+                            | undefined) ?? null,
+                    recurrence_rule:
+                        (input.recurrence_rule as string | null | undefined) ??
+                        null,
+                    recurrence_series_id: null,
+                    notification_enabled: Boolean(
+                        input.notification_enabled ?? false,
+                    ),
+                    notification_offset_minutes: Number(
+                        input.notification_offset_minutes ?? 0,
+                    ),
+                    notification_channel:
+                        (input.notification_channel as
+                            | string
+                            | null
+                            | undefined) ?? null,
+                    notification_sent_at: null,
+                    created_at: "2026-05-08T00:00:00.000Z",
+                    updated_at: "2026-05-08T00:00:00.000Z",
+                    completed_at: null,
+                };
+                mocks.tasks = [...mocks.tasks, createdTask];
+                return createdTask;
+            },
         );
+        mocks.completeTask.mockClear();
+        mocks.completeTask.mockImplementation(async (taskId: string) => {
+            const currentTask = mocks.tasks.find((task) => task.id === taskId) ?? {
+                id: taskId,
+            };
+            const updatedTask = {
+                ...currentTask,
+                completed: true,
+                completed_at: "2026-05-08T00:00:00.000Z",
+            };
+            mocks.tasks = mocks.tasks.map((task) =>
+                task.id === taskId ? updatedTask : task,
+            );
+            return updatedTask;
+        });
+        mocks.uncompleteTask.mockClear();
+        mocks.uncompleteTask.mockImplementation(async (taskId: string) => {
+            const currentTask = mocks.tasks.find((task) => task.id === taskId) ?? {
+                id: taskId,
+            };
+            const updatedTask = {
+                ...currentTask,
+                completed: false,
+                completed_at: null,
+            };
+            mocks.tasks = mocks.tasks.map((task) =>
+                task.id === taskId ? updatedTask : task,
+            );
+            return updatedTask;
+        });
         mocks.fullCalendarMount.mockClear();
         mocks.fullCalendarRefetchEvents.mockClear();
         mocks.fullCalendarProps.events = [];
@@ -642,19 +766,224 @@ describe("App", () => {
         expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
     });
 
+    it("toggles dark mode from the sidebar settings menu", async () => {
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        const darkModeSwitch = screen.getByRole("switch", {
+            name: "Dark mode",
+        });
+
+        expect(darkModeSwitch).toHaveAttribute("aria-checked", "false");
+        fireEvent.click(darkModeSwitch);
+
+        await waitFor(() =>
+            expect(
+                screen.getByRole("switch", { name: "Dark mode" }),
+            ).toHaveAttribute("aria-checked", "true"),
+        );
+        expect(
+            screen.getByRole("switch", { name: "Dark mode" }),
+        ).toHaveClass("sidebar-switch-on");
+        expect(window.localStorage.getItem("calendar-theme")).toBe("dark");
+    });
+
+    it("shows completed tasks toggle in settings and defaults it on", async () => {
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        const showCompletedSwitch = screen.getByRole("switch", {
+            name: "Show completed tasks",
+        });
+
+        expect(showCompletedSwitch).toHaveAttribute("aria-checked", "true");
+        expect(showCompletedSwitch).toHaveClass("sidebar-switch-on");
+    });
+
+    it("shows working hours settings with default values", async () => {
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(
+            screen.getByRole("button", { name: "Working hours" }),
+        );
+
+        expect(
+            await screen.findByRole("heading", { name: "Working hours" }),
+        ).toBeInTheDocument();
+        expect(screen.getByLabelText("Start time")).toHaveValue("08:00");
+        expect(screen.getByLabelText("End time")).toHaveValue("22:00");
+        expect(screen.getByLabelText("Start time")).toHaveAttribute(
+            "type",
+            "time",
+        );
+        expect(screen.getByLabelText("Start time")).toHaveAttribute(
+            "step",
+            "3600",
+        );
+        expect(screen.getByLabelText("Start time")).toHaveAttribute(
+            "lang",
+            "en-GB",
+        );
+        expect(
+            screen.getByRole("button", { name: "Return to sidebar" }),
+        ).toHaveTextContent("☰");
+        expect(screen.queryByRole("button", { name: "Task view" })).toBeNull();
+        expect(
+            screen.queryByRole("heading", { name: "Task filters" }),
+        ).toBeNull();
+    });
+
+    it("loads persisted working hours from localStorage", async () => {
+        window.localStorage.setItem(
+            "calendar-working-hours",
+            JSON.stringify({ start: "09:00", end: "18:00" }),
+        );
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(
+            screen.getByRole("button", { name: "Working hours" }),
+        );
+
+        await screen.findByRole("heading", { name: "Working hours" });
+        expect(screen.getByLabelText("Start time")).toHaveValue("09:00");
+        expect(screen.getByLabelText("End time")).toHaveValue("18:00");
+    });
+
+    it("returns from working hours to the settings menu and sidebar", async () => {
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(
+            screen.getByRole("button", { name: "Working hours" }),
+        );
+
+        await screen.findByRole("heading", { name: "Working hours" });
+        fireEvent.click(screen.getByRole("button", { name: "Back" }));
+        expect(
+            await screen.findByRole("button", { name: "Working hours" }),
+        ).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: "Return to sidebar" }));
+        expect(
+            screen.getByRole("button", { name: "Settings" }),
+        ).toBeInTheDocument();
+    });
+
+    it("focuses the calendar on the configured working-hours start time", async () => {
+        window.localStorage.setItem(
+            "calendar-working-hours",
+            JSON.stringify({ start: "09:00", end: "18:00" }),
+        );
+
+        render(<App />);
+
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.scrollTime).toBe("09:00:00"),
+        );
+    });
+
+    it("updates the calendar focus when working hours change", async () => {
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(
+            screen.getByRole("button", { name: "Working hours" }),
+        );
+
+        await screen.findByRole("heading", { name: "Working hours" });
+        fireEvent.change(screen.getByLabelText("Start time"), {
+            target: { value: "09:00" },
+        });
+
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.scrollTime).toBe("09:00:00"),
+        );
+    });
+
+    it("uses the configured working-hours range as the default calendar viewport", async () => {
+        window.localStorage.setItem(
+            "calendar-working-hours",
+            JSON.stringify({ start: "08:00", end: "22:00" }),
+        );
+
+        render(<App />);
+
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.slotMinTime).toBe("08:00:00"),
+        );
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.slotMaxTime).toBe("22:00:00"),
+        );
+        expect(
+            screen.getByRole("button", { name: "Work" }),
+        ).toBeInTheDocument();
+    });
+
+    it("toggles between working-hours and full-day calendar viewport", async () => {
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Work" }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.slotMinTime).toBe("00:00:00"),
+        );
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.slotMaxTime).toBe("24:00:00"),
+        );
+        expect(
+            screen.getByRole("button", { name: "Full" }),
+        ).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: "Full" }));
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.slotMinTime).toBe("08:00:00"),
+        );
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.slotMaxTime).toBe("22:00:00"),
+        );
+    });
+
+    it("hides the working-hours toggle in month view", async () => {
+        render(<App />);
+
+        await act(async () => {
+            fireEvent.click(await screen.findByRole("button", { name: "Week" }));
+        });
+        await waitFor(() =>
+            expect(screen.getByRole("button", { name: "Day" })).toBeInTheDocument(),
+        );
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole("button", { name: "Day" }));
+        });
+        await waitFor(() =>
+            expect(screen.getByRole("button", { name: "Month" })).toBeInTheDocument(),
+        );
+
+        expect(
+            screen.queryByRole("button", { name: "Work" }),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Full" }),
+        ).not.toBeInTheDocument();
+    });
+
     it("shows backup summary before downloading", async () => {
         render(<App />);
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
-        fireEvent.click(screen.getByRole("button", { name: "Export backup" }));
+        fireEvent.click(screen.getByRole("button", { name: "Backup & Restore" }));
+        fireEvent.click(await screen.findByRole("button", { name: "Backup" }));
 
-        const dialog = await screen.findByRole("dialog", { name: "Backup ready" });
-        expect(dialog).toHaveTextContent("Tasks: 1");
-        expect(dialog).toHaveTextContent("Categories: 1");
-        expect(dialog).toHaveTextContent("Schema version: 1");
-        expect(dialog).toHaveTextContent("Exported: 2026-05-14");
-
-        fireEvent.click(screen.getByRole("button", { name: "Download backup" }));
+        expect(await screen.findByText("Tasks:")).toBeInTheDocument();
+        expect(screen.getByText("Categories:")).toBeInTheDocument();
+        expect(screen.getByText("Schema version:")).toBeInTheDocument();
+        expect(screen.getByText("Exported:")).toBeInTheDocument();
 
         await waitFor(() =>
             expect(mocks.downloadBackupPayload).toHaveBeenCalledWith(
@@ -679,10 +1008,16 @@ describe("App", () => {
         });
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
-        fireEvent.change(screen.getByLabelText("Import backup"), {
+        fireEvent.click(screen.getByRole("button", { name: "Backup & Restore" }));
+        fireEvent.change(await screen.findByLabelText("Import backup (.json)"), {
             target: { files: [file] },
         });
-        fireEvent.click(screen.getByRole("button", { name: "Confirm import" }));
+        expect(
+            await screen.findByText(
+                /replace existing calendar and account data/i,
+            ),
+        ).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Confirm restore" }));
 
         await waitFor(() =>
             expect(mocks.importBackup).toHaveBeenCalledWith(payload),
@@ -710,14 +1045,15 @@ describe("App", () => {
         );
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
-        fireEvent.change(screen.getByLabelText("Import backup"), {
+        fireEvent.click(screen.getByRole("button", { name: "Backup & Restore" }));
+        fireEvent.change(await screen.findByLabelText("Import backup (.json)"), {
             target: { files: [file] },
         });
-        fireEvent.click(screen.getByRole("button", { name: "Confirm import" }));
+        fireEvent.click(screen.getByRole("button", { name: "Confirm restore" }));
 
         expect(await screen.findByText("Backup file is not valid.")).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "Confirm import" })).toBeEnabled();
-        expect(screen.getByRole("button", { name: "Export backup" })).toBeEnabled();
+        expect(screen.getByRole("button", { name: "Backup" })).toBeEnabled();
+        expect(screen.getByRole("button", { name: "Confirm restore" })).toBeEnabled();
     });
 
     it("resets auth inputs when switching modes", async () => {
@@ -759,10 +1095,30 @@ describe("App", () => {
         expect(
             screen.getByRole("button", { name: "Task category" }),
         ).toHaveTextContent("All");
+        fireEvent.click(screen.getByRole("button", { name: "Task view" }));
+        expect(
+            screen
+                .getAllByRole("button", { name: "Today" })
+                .some((button) => button.classList.contains("filter-option")),
+        ).toBe(true);
+        expect(
+            screen.getByRole("button", { name: "Upcoming" }),
+        ).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Inbox" })).toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "All tasks" }),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Completed" }),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Overdue" }),
+        ).not.toBeInTheDocument();
         expect(
             screen.queryByRole("button", { name: "Close" }),
         ).not.toBeInTheDocument();
         expect(screen.queryByText("Create task")).not.toBeInTheDocument();
+        expect(screen.queryByText("Show on calendar")).not.toBeInTheDocument();
     });
 
     it("shows a no time tasks view with a create task button", async () => {
@@ -794,7 +1150,7 @@ describe("App", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
         fireEvent.click(
-            await screen.findByRole("button", { name: "No time tasks" }),
+            await screen.findByRole("button", { name: "Inbox" }),
         );
 
         expect(
@@ -885,7 +1241,7 @@ describe("App", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
         fireEvent.click(
-            await screen.findByRole("button", { name: "No time tasks" }),
+            await screen.findByRole("button", { name: "Inbox" }),
         );
 
         const taskRows = document.querySelectorAll(".task-list .task-row");
@@ -980,7 +1336,7 @@ describe("App", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
         fireEvent.click(
-            await screen.findByRole("button", { name: "No time tasks" }),
+            await screen.findByRole("button", { name: "Inbox" }),
         );
 
         const taskRows = document.querySelectorAll(".task-list .task-row");
@@ -1036,7 +1392,7 @@ describe("App", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
         fireEvent.click(
-            await screen.findByRole("button", { name: "No time tasks" }),
+            await screen.findByRole("button", { name: "Inbox" }),
         );
 
         const taskRow = document.querySelector(
@@ -1061,6 +1417,82 @@ describe("App", () => {
         expect(
             screen.getByLabelText("unscheduled tasks"),
         ).not.toHaveClass("drag-target-list-active");
+    });
+
+    it("shows the drag-to-calendar affordance in today, upcoming, and inbox rows", async () => {
+        const now = new Date();
+        const todayStart = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+            10,
+            0,
+            0,
+            0,
+        );
+        const upcomingStart = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate() + 1,
+            10,
+            0,
+            0,
+            0,
+        );
+        mocks.tasks = [
+            makeTask({
+                id: "task-today-drag",
+                title: "Today draggable",
+                scheduled_start: todayStart.toISOString(),
+                scheduled_end: new Date(
+                    todayStart.getTime() + 60 * 60 * 1000,
+                ).toISOString(),
+            }),
+            makeTask({
+                id: "task-upcoming-drag",
+                title: "Upcoming draggable",
+                scheduled_start: upcomingStart.toISOString(),
+                scheduled_end: new Date(
+                    upcomingStart.getTime() + 60 * 60 * 1000,
+                ).toISOString(),
+            }),
+            makeTask({
+                id: "task-inbox-drag",
+                title: "Inbox draggable",
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                list_id: null,
+            }),
+        ];
+
+        render(<App />);
+
+        const todayRow = await screen.findByRole("button", {
+            name: /Today draggable/i,
+        });
+        expect(
+            todayRow.querySelector(".task-drag-handle"),
+        ).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: "Task view" }));
+        fireEvent.click(screen.getByRole("button", { name: "Upcoming" }));
+        const upcomingRow = await screen.findByRole("button", {
+            name: /Upcoming draggable/i,
+        });
+        expect(
+            upcomingRow.querySelector(".task-drag-handle"),
+        ).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: "Task view" }));
+        fireEvent.click(screen.getByRole("button", { name: "Inbox" }));
+        await screen.findByText("Inbox draggable");
+        const inboxRow = document.querySelector(
+            '[data-task-id="task-inbox-drag"][role="button"]',
+        ) as HTMLElement;
+        expect(
+            inboxRow.querySelector(".task-drag-handle"),
+        ).toBeInTheDocument();
     });
 
     it("reorders no time tasks with explicit priority controls", async () => {
@@ -1115,7 +1547,7 @@ describe("App", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
         fireEvent.click(
-            await screen.findByRole("button", { name: "No time tasks" }),
+            await screen.findByRole("button", { name: "Inbox" }),
         );
         fireEvent.click(
             screen.getByRole("button", { name: "Move Second task to top" }),
@@ -1211,7 +1643,7 @@ describe("App", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
         fireEvent.click(
-            await screen.findByRole("button", { name: "No time tasks" }),
+            await screen.findByRole("button", { name: "Inbox" }),
         );
         fireEvent.click(
             screen.getByRole("button", { name: "Move Third task to top" }),
@@ -1305,7 +1737,7 @@ describe("App", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
         fireEvent.click(
-            await screen.findByRole("button", { name: "No time tasks" }),
+            await screen.findByRole("button", { name: "Inbox" }),
         );
         fireEvent.click(
             screen.getByRole("button", { name: "Move Third task to top" }),
@@ -1323,7 +1755,7 @@ describe("App", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
         fireEvent.click(
-            await screen.findByRole("button", { name: "No time tasks" }),
+            await screen.findByRole("button", { name: "Inbox" }),
         );
 
         const reorderedRows = document.querySelectorAll(".task-list .task-row");
@@ -1410,7 +1842,7 @@ describe("App", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
         fireEvent.click(
-            await screen.findByRole("button", { name: "No time tasks" }),
+            await screen.findByRole("button", { name: "Inbox" }),
         );
 
         const reorderedRows = document.querySelectorAll(".task-list .task-row");
@@ -1421,7 +1853,7 @@ describe("App", () => {
         ]);
     });
 
-    it("ignores category filtering in the no time tasks view", async () => {
+    it("applies category visibility filtering in the inbox view", async () => {
         mocks.tasks = [
             {
                 id: "task-unscheduled-work",
@@ -1472,14 +1904,15 @@ describe("App", () => {
         fireEvent.click(
             await screen.findByRole("button", { name: "Task category" }),
         );
-        fireEvent.click(screen.getByRole("button", { name: "Work" }));
+        fireEvent.click(screen.getByRole("switch", { name: "All" }));
+        fireEvent.click(screen.getByRole("switch", { name: "Work" }));
         fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
         fireEvent.click(
-            await screen.findByRole("button", { name: "No time tasks" }),
+            await screen.findByRole("button", { name: "Inbox" }),
         );
 
-        expect(await screen.findByText("Work inbox")).toBeInTheDocument();
-        expect(screen.getByText("Home inbox")).toBeInTheDocument();
+        expect(screen.queryByText("Work inbox")).not.toBeInTheDocument();
+        expect(await screen.findByText("Home inbox")).toBeInTheDocument();
     });
 
     it("disables the time-grid scroll reset when navigating dates", async () => {
@@ -1519,12 +1952,10 @@ describe("App", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
         fireEvent.click(
-            await screen.findByRole("button", { name: "No time tasks" }),
+            await screen.findByRole("button", { name: "Inbox" }),
         );
 
-        await waitFor(() =>
-            expect(mocks.draggableConstruct).toHaveBeenCalledTimes(1),
-        );
+        await waitFor(() => expect(mocks.draggableConstruct).toHaveBeenCalled());
         expect(mocks.draggableConstruct).toHaveBeenCalledWith(
             expect.any(HTMLElement),
             expect.objectContaining({
@@ -1543,16 +1974,20 @@ describe("App", () => {
         expect(
             await screen.findByRole("heading", { name: "Create task" }),
         ).toBeInTheDocument();
-        await waitFor(() =>
-            expect(mocks.draggableDestroy).toHaveBeenCalledTimes(1),
-        );
+        const constructCountAfterOpeningPanel =
+            mocks.draggableConstruct.mock.calls.length;
+        const destroyCountAfterOpeningPanel =
+            mocks.draggableDestroy.mock.calls.length;
+        expect(destroyCountAfterOpeningPanel).toBeGreaterThan(0);
 
         fireEvent.click(screen.getByRole("button", { name: "Close" }));
         expect(
             await screen.findByRole("button", { name: "Task view" }),
         ).toBeInTheDocument();
         await waitFor(() =>
-            expect(mocks.draggableConstruct).toHaveBeenCalledTimes(2),
+            expect(mocks.draggableConstruct.mock.calls.length).toBeGreaterThan(
+                constructCountAfterOpeningPanel,
+            ),
         );
     });
 
@@ -1704,10 +2139,10 @@ describe("App", () => {
             await screen.findByRole("button", { name: "Settings" }),
         );
         fireEvent.click(
-            screen.getByRole("button", { name: "Webhook settings" }),
+            screen.getByRole("button", { name: "Webhook" }),
         );
 
-        fireEvent.change(screen.getByLabelText("Webhook URL"), {
+        fireEvent.change(await screen.findByLabelText("Webhook URL"), {
             target: { value: "https://discord.example/webhook" },
         });
         fireEvent.change(screen.getByLabelText("Message format"), {
@@ -1735,9 +2170,9 @@ describe("App", () => {
             await screen.findByRole("button", { name: "Settings" }),
         );
         fireEvent.click(
-            screen.getByRole("button", { name: "Webhook settings" }),
+            screen.getByRole("button", { name: "Webhook" }),
         );
-        fireEvent.change(screen.getByLabelText("Webhook URL"), {
+        fireEvent.change(await screen.findByLabelText("Webhook URL"), {
             target: { value: "https://discord.example/webhook" },
         });
         fireEvent.change(screen.getByLabelText("Message format"), {
@@ -1769,7 +2204,7 @@ describe("App", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "Settings" }));
         fireEvent.click(
-            screen.getByRole("button", { name: "Webhook settings" }),
+            screen.getByRole("button", { name: "Webhook" }),
         );
 
         await waitForElementToBeRemoved(() =>
@@ -1915,6 +2350,44 @@ describe("App", () => {
         expect(mocks.updateTask).toHaveBeenCalledWith(
             "task-edit",
             expect.objectContaining({ title: "Edited task" }),
+        );
+    });
+
+    it("undoes a sidebar task edit and category change", async () => {
+        mocks.tasks = [
+            makeTask({
+                id: "task-edit-undo",
+                title: "Original task",
+                list_id: "list-1",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: /Original task/i }),
+        );
+        fireEvent.change(await screen.findByLabelText("Title"), {
+            target: { value: "Edited task" },
+        });
+        fireEvent.change(screen.getByLabelText("Category"), {
+            target: { value: "" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+        await screen.findByRole("button", { name: "Undo task change" });
+        fireEvent.click(
+            screen.getByRole("button", { name: "Undo task change" }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.updateTask).toHaveBeenLastCalledWith(
+                "task-edit-undo",
+                expect.objectContaining({
+                    title: "Original task",
+                    list_id: "list-1",
+                }),
+            ),
         );
     });
 
@@ -2101,6 +2574,122 @@ describe("App", () => {
         );
     });
 
+    it("undoes completing a task", async () => {
+        mocks.tasks = [
+            makeTask({
+                id: "task-complete-undo",
+                title: "Complete undo task",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("checkbox", {
+                name: "Toggle Complete undo task",
+            }),
+        );
+
+        await screen.findByRole("button", { name: "Undo task change" });
+        fireEvent.click(
+            screen.getByRole("button", { name: "Undo task change" }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.updateTask).toHaveBeenLastCalledWith(
+                "task-complete-undo",
+                expect.objectContaining({
+                    completed: false,
+                }),
+            ),
+        );
+    });
+
+    it("clears an existing undo when a new task is created", async () => {
+        const createDeferredTask = createDeferred<Record<string, unknown>>();
+        mocks.createTask.mockImplementationOnce(
+            async () =>
+                (await createDeferredTask.promise) as { id: string },
+        );
+        mocks.tasks = [
+            makeTask({
+                id: "task-create-clear-undo",
+                title: "Create clear undo",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("checkbox", {
+                name: "Toggle Create clear undo",
+            }),
+        );
+        await screen.findByRole("button", { name: "Undo task change" });
+
+        fireEvent.click(
+            screen.getByRole("button", { name: "Open create task" }),
+        );
+        fireEvent.change(screen.getByLabelText("Title"), {
+            target: { value: "New task" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("button", { name: "Undo task change" }),
+            ).not.toBeInTheDocument(),
+        );
+
+        createDeferredTask.resolve({
+            id: "task-created",
+            user_id: "user-1",
+        });
+
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("button", { name: "Undo task change" }),
+            ).not.toBeInTheDocument(),
+        );
+    });
+
+    it("replaces an existing undo when another undoable edit is saved", async () => {
+        mocks.tasks = [
+            makeTask({
+                id: "task-replace-undo-complete",
+                title: "Complete me first",
+            }),
+            makeTask({
+                id: "task-replace-undo-edit",
+                title: "Original task",
+                list_id: "list-1",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("checkbox", {
+                name: "Toggle Complete me first",
+            }),
+        );
+        await screen.findByRole("button", { name: "Undo task change" });
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: /Original task/i }),
+        );
+        fireEvent.change(screen.getByLabelText("Title"), {
+            target: { value: "Edited task" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+        expect(
+            screen.queryByRole("button", { name: "Undo task change" }),
+        ).not.toBeInTheDocument();
+
+        await screen.findByRole("button", { name: "Undo task change" });
+    });
+
     it("closes the edit panel after deleting a task", async () => {
         const now = new Date();
         const todayAtTen = new Date(
@@ -2155,6 +2744,39 @@ describe("App", () => {
         expect(mocks.deleteTask).toHaveBeenCalledWith("task-delete", {
             deleteScope: "single",
         });
+    });
+
+    it("undoes deleting a task by recreating its snapshot", async () => {
+        mocks.tasks = [
+            makeTask({
+                id: "task-delete-undo",
+                title: "Delete undo task",
+                notes: "Restore these notes",
+                list_id: null,
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: /Delete undo task/i }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+        await screen.findByRole("button", { name: "Undo task change" });
+        fireEvent.click(
+            screen.getByRole("button", { name: "Undo task change" }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.createTask).toHaveBeenLastCalledWith(
+                expect.objectContaining({
+                    title: "Delete undo task",
+                    notes: "Restore these notes",
+                    list_id: null,
+                }),
+            ),
+        );
     });
 
     it("asks how to delete a recurring task before removing it", async () => {
@@ -2227,6 +2849,38 @@ describe("App", () => {
                 deleteScope: "following",
             }),
         );
+    });
+
+    it("does not offer undo after deleting a recurring occurrence", async () => {
+        mocks.tasks = [
+            makeTask({
+                id: "task-recurring-delete-undo",
+                title: "Recurring delete undo",
+                recurrence_rule: "FREQ=DAILY;INTERVAL=1",
+                recurrence_series_id: "series-delete-undo",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: /^Toggle Recurring delete undo Recurring delete undo/i,
+            }),
+        );
+        fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Delete only this" }),
+        );
+
+        expect(
+            await screen.findByRole("button", {
+                name: "Dismiss undo message",
+            }),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Undo task change" }),
+        ).not.toBeInTheDocument();
     });
 
     it("asks how to edit a recurring task before updating the whole series", async () => {
@@ -2375,6 +3029,76 @@ describe("App", () => {
         );
     });
 
+    it("undoes a safe single-occurrence recurring note edit without recurrence fields", async () => {
+        mocks.tasks = [
+            makeTask({
+                id: "task-recurring-note-undo",
+                title: "Recurring note undo",
+                notes: "Original note",
+                recurrence_rule: "FREQ=DAILY;INTERVAL=1",
+                recurrence_series_id: "series-note-undo",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: /^Toggle Recurring note undo Recurring note undo/i,
+            }),
+        );
+        fireEvent.change(await screen.findByLabelText("Notes"), {
+            target: { value: "Updated note" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Edit only this" }),
+        );
+
+        await screen.findByRole("button", { name: "Undo task change" });
+        fireEvent.click(
+            screen.getByRole("button", { name: "Undo task change" }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.updateTask).toHaveBeenLastCalledWith(
+                "task-recurring-note-undo",
+                { notes: "Original note" },
+            ),
+        );
+    });
+
+    it("undoes completing a recurring occurrence without recurrence fields", async () => {
+        mocks.tasks = [
+            makeTask({
+                id: "task-recurring-complete-undo",
+                title: "Recurring completion undo",
+                recurrence_rule: "FREQ=DAILY;INTERVAL=1",
+                recurrence_series_id: "series-complete-undo",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("checkbox", {
+                name: "Toggle Recurring completion undo",
+            }),
+        );
+
+        await screen.findByRole("button", { name: "Undo task change" });
+        fireEvent.click(
+            screen.getByRole("button", { name: "Undo task change" }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.updateTask).toHaveBeenLastCalledWith(
+                "task-recurring-complete-undo",
+                { completed: false },
+            ),
+        );
+    });
+
     it("asks how to edit a recurring task when dragging it on the calendar", async () => {
         mocks.tasks = [
             {
@@ -2417,6 +3141,96 @@ describe("App", () => {
 
         expect(mocks.dragRevert).toHaveBeenCalledTimes(1);
         expect(mocks.updateTask).not.toHaveBeenCalled();
+    });
+
+    it("does not offer undo after detaching a recurring occurrence by dragging it", async () => {
+        mocks.tasks = [
+            {
+                id: "task-recurring-drag",
+                user_id: "user-1",
+                list_id: "list-1",
+                title: "Recurring drag task",
+                notes: null,
+                completed: false,
+                scheduled_start: "2026-05-09T09:00:00Z",
+                scheduled_end: "2026-05-09T10:00:00Z",
+                due_at: null,
+                recurrence_rule: "FREQ=DAILY;INTERVAL=1",
+                recurrence_series_id: "series-drag-1",
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                unscheduled_order: null,
+                notification_sent_at: null,
+                created_at: "2026-05-07T00:00:00Z",
+                updated_at: "2026-05-07T00:00:00Z",
+                completed_at: null,
+            },
+        ];
+
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Drop recurring task" }),
+        );
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Edit only this" }),
+        );
+
+        expect(
+            await screen.findByRole("button", {
+                name: "Dismiss undo message",
+            }),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Undo task change" }),
+        ).not.toBeInTheDocument();
+    });
+
+    it("removes the old undo before a non-undoable recurring delete completes", async () => {
+        const deleteDeferredTask = createDeferred<undefined>();
+        mocks.deleteTask.mockImplementationOnce(
+            async () => await deleteDeferredTask.promise,
+        );
+        mocks.tasks = [
+            makeTask({
+                id: "task-recurring-delete-lifecycle-complete",
+                title: "Recurring lifecycle complete",
+            }),
+            makeTask({
+                id: "task-recurring-delete-lifecycle",
+                title: "Recurring delete lifecycle",
+                recurrence_rule: "FREQ=DAILY;INTERVAL=1",
+                recurrence_series_id: "series-delete-lifecycle",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("checkbox", {
+                name: "Toggle Recurring lifecycle complete",
+            }),
+        );
+        await screen.findByRole("button", { name: "Undo task change" });
+
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: /^Toggle Recurring delete lifecycle/i,
+            }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+        fireEvent.click(
+            screen.getByRole("button", { name: "Delete only this" }),
+        );
+
+        expect(
+            screen.queryByRole("button", { name: "Undo task change" }),
+        ).not.toBeInTheDocument();
+
+        deleteDeferredTask.resolve(undefined);
     });
 
     it("refreshes the calendar after editing all recurring tasks from a drag prompt", async () => {
@@ -2521,7 +3335,18 @@ describe("App", () => {
         expect(recurringRows).toHaveLength(1);
     });
 
-    it("filters tasks without a category from the category dropdown", async () => {
+    it("shows category visibility toggles and keeps the dropdown open", async () => {
+        const now = new Date();
+        const todayAtTen = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+            10,
+            0,
+            0,
+            0,
+        );
+        const todayAtEleven = new Date(todayAtTen.getTime() + 60 * 60 * 1000);
         mocks.tasks = [
             {
                 id: "task-unclassified",
@@ -2530,8 +3355,8 @@ describe("App", () => {
                 title: "Unclassified task",
                 notes: null,
                 completed: false,
-                scheduled_start: null,
-                scheduled_end: null,
+                scheduled_start: todayAtTen.toISOString(),
+                scheduled_end: todayAtEleven.toISOString(),
                 due_at: null,
                 timezone: "Asia/Taipei",
                 priority: null,
@@ -2546,8 +3371,8 @@ describe("App", () => {
                 title: "Classified task",
                 notes: null,
                 completed: false,
-                scheduled_start: null,
-                scheduled_end: null,
+                scheduled_start: todayAtTen.toISOString(),
+                scheduled_end: todayAtEleven.toISOString(),
                 due_at: null,
                 timezone: "Asia/Taipei",
                 priority: null,
@@ -2559,19 +3384,90 @@ describe("App", () => {
 
         render(<App />);
 
-        fireEvent.click(
+        expect(
             await screen.findByRole("button", { name: "Task view" }),
-        );
-        fireEvent.click(screen.getByRole("button", { name: "All tasks" }));
+        ).toHaveTextContent("Today");
 
         fireEvent.click(screen.getByRole("button", { name: "Task category" }));
-        fireEvent.click(screen.getByRole("button", { name: "Unclassified" }));
+
+        const allSwitch = screen.getByRole("switch", { name: "All" });
+        const noneSwitch = screen.getByRole("switch", { name: "None" });
+        const workSwitch = screen.getByRole("switch", { name: "Work" });
+
+        expect(allSwitch).toHaveAttribute("aria-checked", "true");
+        expect(noneSwitch).toBeDisabled();
+        expect(workSwitch).toBeDisabled();
+        expect(screen.getByText("Unclassified task")).toBeInTheDocument();
+        expect(screen.getByText("Classified task")).toBeInTheDocument();
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.events.map((event) => event.id)).toEqual(
+                expect.arrayContaining(["task-unclassified", "task-classified"]),
+            ),
+        );
+
+        fireEvent.click(allSwitch);
 
         expect(
+            screen.getByRole("listbox", { name: "Task category options" }),
+        ).toBeInTheDocument();
+        expect(noneSwitch).not.toBeDisabled();
+        expect(workSwitch).not.toBeDisabled();
+        expect(noneSwitch).toHaveAttribute("aria-checked", "true");
+        expect(workSwitch).toHaveAttribute("aria-checked", "true");
+        expect(
             screen.getByRole("button", { name: "Task category" }),
-        ).toHaveTextContent("Unclassified");
+        ).toHaveTextContent("Filtered");
+
+        fireEvent.click(noneSwitch);
+
+        expect(
+            screen.getByRole("listbox", { name: "Task category options" }),
+        ).toBeInTheDocument();
+        expect(screen.queryByText("Unclassified task")).not.toBeInTheDocument();
+        expect(screen.getByText("Classified task")).toBeInTheDocument();
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.events.map((event) => event.id)).toEqual([
+                "task-classified",
+            ]),
+        );
+
+        fireEvent.click(workSwitch);
+
+        expect(screen.queryByText("Classified task")).not.toBeInTheDocument();
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.events).toHaveLength(0),
+        );
+
+        fireEvent.click(noneSwitch);
+        expect(screen.getByText("Unclassified task")).toBeInTheDocument();
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.events.map((event) => event.id)).toEqual([
+                "task-unclassified",
+            ]),
+        );
+
+        fireEvent.click(allSwitch);
+        expect(allSwitch).toHaveAttribute("aria-checked", "true");
+        expect(noneSwitch).toBeDisabled();
+        expect(workSwitch).toBeDisabled();
+        expect(screen.getByText("Unclassified task")).toBeInTheDocument();
+        expect(screen.getByText("Classified task")).toBeInTheDocument();
+
+        fireEvent.click(allSwitch);
+        expect(workSwitch).toHaveAttribute("aria-checked", "false");
+        expect(noneSwitch).toHaveAttribute("aria-checked", "true");
         expect(screen.getByText("Unclassified task")).toBeInTheDocument();
         expect(screen.queryByText("Classified task")).not.toBeInTheDocument();
+    });
+
+    it("keeps the existing category settings button available", async () => {
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Task category" }),
+        );
+
+        expect(screen.getByRole("button", { name: "Edit Work" })).toBeInTheDocument();
     });
 
     it("marks midnight day-span tasks as all-day calendar events", async () => {
@@ -2625,6 +3521,72 @@ describe("App", () => {
                 scheduled_start: "2026-05-07T16:00:00.000Z",
                 scheduled_end: "2026-05-08T16:00:00.000Z",
             }),
+        );
+    });
+
+    it("undoes a calendar drag reschedule", async () => {
+        mocks.tasks = [
+            makeTask({
+                id: "task-1",
+                title: "Drag undo task",
+                scheduled_start: "2026-05-08T09:00:00.000Z",
+                scheduled_end: "2026-05-08T10:00:00.000Z",
+            }),
+        ];
+
+        render(<App />);
+
+        expect(
+            await screen.findByRole("button", { name: "Task view" }),
+        ).toBeInTheDocument();
+        fireEvent.click(
+            screen.getByRole("button", { name: "Drop all-day task" }),
+        );
+
+        await screen.findByRole("button", { name: "Undo task change" });
+        fireEvent.click(screen.getByRole("button", { name: "Undo task change" }));
+
+        await waitFor(() =>
+            expect(mocks.updateTask).toHaveBeenLastCalledWith(
+                "task-1",
+                expect.objectContaining({
+                    scheduled_start: "2026-05-08T09:00:00.000Z",
+                    scheduled_end: "2026-05-08T10:00:00.000Z",
+                }),
+            ),
+        );
+    });
+
+    it("undoes a calendar resize", async () => {
+        mocks.tasks = [
+            makeTask({
+                id: "task-1",
+                title: "Resize undo task",
+                scheduled_start: "2026-05-08T09:00:00.000Z",
+                scheduled_end: "2026-05-08T10:00:00.000Z",
+            }),
+        ];
+
+        render(<App />);
+
+        expect(
+            await screen.findByRole("button", { name: "Task view" }),
+        ).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Resize task" }));
+
+        await screen.findByRole("button", { name: "Undo task change" });
+        fireEvent.click(
+            screen.getByRole("button", { name: "Undo task change" }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.updateTask).toHaveBeenLastCalledWith(
+                "task-1",
+                expect.objectContaining({
+                    scheduled_start: "2026-05-08T09:00:00.000Z",
+                    scheduled_end: "2026-05-08T10:00:00.000Z",
+                }),
+            ),
         );
     });
 
@@ -2706,7 +3668,7 @@ describe("App", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
         fireEvent.click(
-            await screen.findByRole("button", { name: "No time tasks" }),
+            await screen.findByRole("button", { name: "Inbox" }),
         );
         expect(await screen.findByText("Inbox task")).toBeInTheDocument();
 
@@ -2781,7 +3743,7 @@ describe("App", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
         fireEvent.click(
-            await screen.findByRole("button", { name: "No time tasks" }),
+            await screen.findByRole("button", { name: "Inbox" }),
         );
         expect(await screen.findByText("Inbox task")).toBeInTheDocument();
 
@@ -2965,7 +3927,123 @@ describe("App", () => {
         expect(screen.queryByText("Later task")).not.toBeInTheDocument();
     });
 
-    it("shows overdue tasks and hides completed ones in the overdue view", async () => {
+    it("toggles completed tasks visibility from settings", async () => {
+        const now = new Date();
+        const todayAtTen = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+            10,
+            0,
+            0,
+            0,
+        );
+        const todayAtEleven = new Date(todayAtTen.getTime() + 60 * 60 * 1000);
+        mocks.tasks = [
+            {
+                id: "task-completed-visible",
+                user_id: "user-1",
+                list_id: "list-1",
+                title: "Completed today task",
+                notes: null,
+                completed: true,
+                scheduled_start: todayAtTen.toISOString(),
+                scheduled_end: todayAtEleven.toISOString(),
+                due_at: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                created_at: now.toISOString(),
+                updated_at: now.toISOString(),
+                completed_at: now.toISOString(),
+            },
+        ];
+
+        render(<App />);
+
+        expect(await screen.findByText("Completed today task")).toBeInTheDocument();
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(
+            screen.getByRole("switch", { name: "Show completed tasks" }),
+        );
+        fireEvent.click(
+            screen.getByRole("button", { name: "Return to sidebar" }),
+        );
+
+        await waitFor(() =>
+            expect(
+                screen.queryByText("Completed today task"),
+            ).not.toBeInTheDocument(),
+        );
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(screen.getByRole("switch", { name: "Show completed tasks" }));
+        fireEvent.click(
+            screen.getByRole("button", { name: "Return to sidebar" }),
+        );
+
+        await waitFor(() =>
+            expect(screen.getByText("Completed today task")).toBeInTheDocument(),
+        );
+    });
+
+    it("hides completed scheduled tasks from the calendar when the setting is off", async () => {
+        mocks.tasks = [
+            {
+                id: "task-calendar-completed",
+                user_id: "user-1",
+                list_id: "list-1",
+                title: "Calendar completed task",
+                notes: null,
+                completed: true,
+                scheduled_start: "2026-05-08T10:00:00Z",
+                scheduled_end: "2026-05-08T11:00:00Z",
+                due_at: null,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                created_at: "2026-05-07T00:00:00Z",
+                updated_at: "2026-05-07T00:00:00Z",
+                completed_at: "2026-05-08T11:00:00Z",
+            },
+        ];
+
+        render(<App />);
+
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.events).toHaveLength(1),
+        );
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(
+            screen.getByRole("switch", { name: "Show completed tasks" }),
+        );
+        fireEvent.click(
+            screen.getByRole("button", { name: "Return to sidebar" }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.events).toHaveLength(0),
+        );
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(
+            screen.getByRole("switch", { name: "Show completed tasks" }),
+        );
+        fireEvent.click(
+            screen.getByRole("button", { name: "Return to sidebar" }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.events).toHaveLength(1),
+        );
+    });
+
+    it("shows overdue tasks and hides completed ones in the today view", async () => {
         const now = new Date();
         const overdueStart = new Date(
             now.getFullYear(),
@@ -3039,68 +4117,14 @@ describe("App", () => {
 
         render(<App />);
 
-        fireEvent.click(
-            await screen.findByRole("button", { name: "Task view" }),
-        );
-        fireEvent.click(screen.getByRole("button", { name: "Overdue" }));
-
         expect(
-            screen.getByRole("button", { name: "Task view" }),
-        ).toHaveTextContent("Overdue");
+            await screen.findByRole("button", { name: "Task view" }),
+        ).toHaveTextContent("Today");
         expect(screen.getByText("Overdue task")).toBeInTheDocument();
         expect(screen.getByText("Due task")).toBeInTheDocument();
         expect(
             screen.queryByText("Completed overdue task"),
         ).not.toBeInTheDocument();
-    });
-
-    it("toggles completed tasks on the calendar from the completed view", async () => {
-        mocks.tasks = [
-            {
-                id: "task-completed",
-                user_id: "user-1",
-                list_id: "list-1",
-                title: "Completed calendar task",
-                notes: null,
-                completed: true,
-                scheduled_start: "2026-05-08T10:00:00Z",
-                scheduled_end: "2026-05-08T11:00:00Z",
-                due_at: null,
-                timezone: "Asia/Taipei",
-                priority: null,
-                created_at: "2026-05-07T00:00:00Z",
-                updated_at: "2026-05-07T00:00:00Z",
-                completed_at: "2026-05-08T11:00:00Z",
-            },
-        ];
-
-        render(<App />);
-
-        fireEvent.click(
-            await screen.findByRole("button", { name: "Task view" }),
-        );
-        fireEvent.click(screen.getByRole("button", { name: "Completed" }));
-
-        expect(screen.getByText("Show on calendar")).toBeInTheDocument();
-        await waitFor(() =>
-            expect(mocks.fullCalendarProps.events).toHaveLength(1),
-        );
-        expect(mocks.fullCalendarProps.events[0]).toMatchObject({
-            backgroundColor: "rgba(47, 128, 237, 0.32)",
-            borderColor: "#2f80ed",
-        });
-
-        fireEvent.click(screen.getByLabelText("Show on calendar"));
-
-        await waitFor(() =>
-            expect(mocks.fullCalendarProps.events).toHaveLength(0),
-        );
-
-        fireEvent.click(screen.getByLabelText("Show on calendar"));
-
-        await waitFor(() =>
-            expect(mocks.fullCalendarProps.events).toHaveLength(1),
-        );
     });
 
     it("deletes a task from the task list context menu on right click", async () => {
@@ -3153,6 +4177,17 @@ describe("App", () => {
     });
 
     it("closes the edit panel when deleting the open task from the context menu", async () => {
+        const now = new Date();
+        const todayAtTen = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+            10,
+            0,
+            0,
+            0,
+        );
+        const todayAtEleven = new Date(todayAtTen.getTime() + 60 * 60 * 1000);
         mocks.tasks = [
             {
                 id: "task-delete-open",
@@ -3161,8 +4196,8 @@ describe("App", () => {
                 title: "Delete open task",
                 notes: null,
                 completed: false,
-                scheduled_start: "2026-05-08T10:00:00Z",
-                scheduled_end: "2026-05-08T11:00:00Z",
+                scheduled_start: todayAtTen.toISOString(),
+                scheduled_end: todayAtEleven.toISOString(),
                 due_at: null,
                 timezone: "Asia/Taipei",
                 priority: null,
@@ -3174,10 +4209,9 @@ describe("App", () => {
 
         render(<App />);
 
-        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
-        fireEvent.click(
-            await screen.findByRole("button", { name: "All tasks" }),
-        );
+        expect(
+            await screen.findByRole("button", { name: "Task view" }),
+        ).toHaveTextContent("Today");
 
         const taskRow = await screen.findByRole("button", {
             name: /Delete open task/i,
@@ -3216,7 +4250,7 @@ describe("App", () => {
         );
         await waitFor(() =>
             expect(
-                screen.getByRole("region", { name: "all tasks" }),
+                screen.getByRole("region", { name: "today tasks" }),
             ).toBeInTheDocument(),
         );
     });
@@ -3308,7 +4342,7 @@ describe("App", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
         fireEvent.click(
-            await screen.findByRole("button", { name: "No time tasks" }),
+            await screen.findByRole("button", { name: "Inbox" }),
         );
 
         await waitFor(() =>
@@ -3608,12 +4642,29 @@ describe("App", () => {
         ).not.toBeInTheDocument();
     });
 
-    it("opens a year input from the month view title", async () => {
+    it("cycles calendar views in order", async () => {
         render(<App />);
 
-        fireEvent.click(await screen.findByRole("button", { name: "Month" }));
-        fireEvent.click(screen.getByRole("button", { name: "2026" }));
+        const cycleButton = await screen.findByRole("button", { name: "Week" });
+        await act(async () => {
+            fireEvent.click(cycleButton);
+        });
+        await waitFor(() =>
+            expect(screen.getByRole("button", { name: "Day" })).toBeInTheDocument(),
+        );
 
-        expect(screen.getByLabelText("Calendar year")).toHaveValue(2026);
+        await act(async () => {
+            fireEvent.click(screen.getByRole("button", { name: "Day" }));
+        });
+        await waitFor(() =>
+            expect(screen.getByRole("button", { name: "Month" })).toBeInTheDocument(),
+        );
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole("button", { name: "Month" }));
+        });
+        await waitFor(() =>
+            expect(screen.getByRole("button", { name: "Week" })).toBeInTheDocument(),
+        );
     });
 });

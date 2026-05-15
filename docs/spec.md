@@ -14,14 +14,14 @@ The current app is web-first:
 ## Current Features
 
 - Calendar-first task UI with FullCalendar.
-- Month, week, and day calendar views.
+- Month, week, and day calendar views, with a single cycle button that advances Week -> Day -> Month.
 - A `No time tasks` sidebar view for unscheduled tasks that can be reordered and dragged into the calendar.
 - Task rows support a right-click menu with `Duplicate` and `Delete` actions.
 - Drag target cues distinguish no-time reorder from drag-to-calendar scheduling.
 - No-time task drag handles rebind after sidebar and detail-panel re-renders, and the month-view drag mirror stays aligned with the cursor.
 - Clickable month-view year control for jumping by year.
 - Draggable and resizable scheduled task events.
-- Week and day views show a full `00:00` through `24:00` time grid.
+- Week and day views default to the configured working-hours range and include a compact `Work` / `Full` viewport toggle for switching between working-hours and full-day time grids.
 - Task creation from selected calendar time ranges, including all-day slots.
 - Task editing for title, notes, category, scheduled start/end, and completion.
 - Recurring task creation with RRULE-style daily, weekly, monthly, and yearly intervals.

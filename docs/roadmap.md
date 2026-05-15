@@ -156,14 +156,14 @@ Goal: plan the native Android client after the backend API is stable.
 
 Goal: add a small, safe undo system for recent task changes.
 
-- [ ] Add single-step undo for task updates.
-- [ ] Show a toast with Undo after task edit, drag, resize, complete, and category changes.
-- [ ] Store the previous task snapshot before applying the update.
-- [ ] Restore the previous snapshot if the user clicks Undo.
-- [ ] Add undo for delete by restoring the deleted task.
-- [ ] Keep undo in-memory only at first.
-- [ ] Do not support undo after page refresh in the MVP.
-- [ ] Do not implement full multi-step history yet.
+- [x] Add single-step undo for task updates.
+- [x] Show a compact floating undo control after task edit, drag, resize, complete, and category changes.
+- [x] Store the previous task snapshot before applying the update.
+- [x] Restore the previous snapshot if the user clicks Undo.
+- [x] Add undo for delete by restoring the deleted task.
+- [x] Keep undo in-memory only at first.
+- [x] Do not support undo after page refresh in the MVP.
+- [x] Do not implement full multi-step history yet.
 
 ## Phase 14: Shared tasks
 

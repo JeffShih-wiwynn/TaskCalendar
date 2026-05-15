@@ -28,7 +28,7 @@ This document summarizes what is already in the repository snapshot and where th
   - Validation rejects invalid scheduled ranges.
 - [x] Step 5: Frontend FullCalendar UI
   - FullCalendar is wired into the frontend.
-  - Month, week, and day views are available.
+  - Month, week, and day views are available through a single cycle button.
   - The sidebar includes a `No time tasks` view for unscheduled tasks.
   - Unscheduled task rows can be reordered directly, and the sidebar includes quick `Move to top`, `Move up`, and `Move down` controls.
   - The task right-click menu now includes `Duplicate` for both unscheduled and scheduled tasks.
@@ -36,7 +36,7 @@ This document summarizes what is already in the repository snapshot and where th
   - Reorder changes animate smoothly in the sidebar with Framer Motion layout transitions.
   - Drag target affordances now distinguish no-time reorder from drag-to-calendar scheduling.
   - External no-time drag handles reinitialize reliably after calendar/sidebar re-renders, and the month-view drag mirror now stays aligned with the cursor.
-  - Week and day views now show the full `00:00` through `24:00` range.
+  - Week and day views now default to the configured working-hours range, with a compact `Work` / `Full` toggle for switching to the full-day timeline when needed.
   - Tasks render as calendar events.
   - A runtime crash in the FullCalendar `eventContent` path was fixed by making event rendering fall back safely when a transient drag/drop event has no attached task object.
   - Checkbox completion behavior is wired through the UI.
@@ -68,6 +68,10 @@ This document summarizes what is already in the repository snapshot and where th
   - Ubuntu production deployment is documented.
   - Docker/Compose production deployment is documented.
   - Environment variables and backup/timezone behavior are described in the docs.
+- [x] Step 12: Undo support
+  - Recent task changes now surface a compact floating undo control instead of the previous snackbar/button block.
+  - Undo remains single-step and in-memory only.
+  - Any newer task mutation clears the previous undo state before showing the next undoable or non-undoable message.
 
 ## Current Notes
 
@@ -88,6 +92,7 @@ This document summarizes what is already in the repository snapshot and where th
 - The task UI now has smoother shared motion timings, a clearer drag-to-calendar handle, and subtle calendar event enter animations for view and date transitions.
 - No-time and calendar drag targets now use softer drop-zone highlighting and centered helper labeling instead of hard outlines.
 - Backup export and import are now available from the sidebar settings menu, with import restricted to authenticated user data and guarded by an explicit confirmation step.
+- Undo is implemented as a floating icon-only control, stays single-step, and clears on newer task mutations so stale undo actions do not linger.
 - `due_at` still exists in the backend/data model, but the current edit form hides it.
 - The current UI is more sidebar-based than the original floating-column idea.
 - Recurrence and notifications are now in MVP form, but the series expansion horizon and webhook worker are intentionally limited.
