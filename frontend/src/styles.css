@@ -1615,6 +1615,35 @@ input[type="checkbox"].task-checkbox:checked {
   will-change: transform, opacity;
 }
 
+.calendar-working-range {
+  align-self: flex-start;
+  flex: 0 0 auto;
+  height: auto;
+  min-height: 0;
+}
+
+.calendar-working-range .fc-timeGridWeek-view,
+.calendar-working-range .fc-timeGridDay-view {
+  height: auto;
+  min-height: 0;
+}
+
+.calendar-working-range .fc-timeGridWeek-view .fc-view-harness,
+.calendar-working-range .fc-timeGridDay-view .fc-view-harness,
+.calendar-working-range .fc-timeGridWeek-view .fc-scrollgrid,
+.calendar-working-range .fc-timeGridDay-view .fc-scrollgrid,
+.calendar-working-range .fc-timeGridWeek-view .fc-timegrid-body,
+.calendar-working-range .fc-timeGridDay-view .fc-timegrid-body,
+.calendar-working-range .fc-timeGridWeek-view .fc-timegrid-slots,
+.calendar-working-range .fc-timeGridDay-view .fc-timegrid-slots,
+.calendar-working-range .fc-timeGridWeek-view .fc-timegrid-body table,
+.calendar-working-range .fc-timeGridDay-view .fc-timegrid-body table,
+.calendar-working-range .fc-timeGridWeek-view .fc-timegrid-slots table,
+.calendar-working-range .fc-timeGridDay-view .fc-timegrid-slots table {
+  height: auto;
+  min-height: 0;
+}
+
 .calendar-toolbar {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -2086,12 +2115,17 @@ input[type="checkbox"].task-checkbox:checked {
 }
 
 .fc .fc-timegrid-slot-label-frame {
+  align-items: center;
+  display: flex;
+  justify-content: center;
   overflow: hidden;
   position: relative;
 }
 
 .fc .fc-timegrid-axis-frame {
-  justify-content: flex-start;
+  align-items: center;
+  display: flex;
+  justify-content: center;
 }
 
 .fc .fc-timegrid-axis-cushion,
@@ -2099,11 +2133,11 @@ input[type="checkbox"].task-checkbox:checked {
   box-sizing: border-box;
   inline-size: var(--calendar-time-axis-width);
   max-inline-size: var(--calendar-time-axis-width);
-  text-align: left;
+  text-align: center;
 }
 
 .fc-direction-ltr .fc-timegrid-slot-label-frame {
-  text-align: left;
+  text-align: center;
 }
 
 .fc .fc-scrollgrid-sync-table,
@@ -2121,6 +2155,14 @@ input[type="checkbox"].task-checkbox:checked {
 .fc .fc-timegrid-cols table {
   width: 100% !important;
   min-width: 100% !important;
+}
+
+.fc-dayGridMonth-view .fc-daygrid-body,
+.fc-dayGridMonth-view .fc-daygrid-body table,
+.fc-dayGridMonth-view .fc-scrollgrid-sync-table {
+  width: 100%;
+  min-width: 100%;
+  table-layout: fixed;
 }
 
 .fc .fc-button {
@@ -2199,6 +2241,17 @@ input[type="checkbox"].task-checkbox:checked {
   border-color: var(--border);
 }
 
+.app-shell.dark .calendar-working-range .fc-timeGridWeek-view .fc-scrollgrid-section-header,
+.app-shell.dark .calendar-working-range .fc-timeGridDay-view .fc-scrollgrid-section-header,
+.app-shell.dark .calendar-working-range .fc-timeGridWeek-view .fc-col-header-cell,
+.app-shell.dark .calendar-working-range .fc-timeGridDay-view .fc-col-header-cell,
+.app-shell.dark .calendar-working-range .fc-timeGridWeek-view .fc-timegrid-axis,
+.app-shell.dark .calendar-working-range .fc-timeGridDay-view .fc-timegrid-axis,
+.app-shell.dark .calendar-working-range .fc-timeGridWeek-view .fc-timegrid-axis-frame,
+.app-shell.dark .calendar-working-range .fc-timeGridDay-view .fc-timegrid-axis-frame {
+  background: var(--panel-bg);
+}
+
 .app-shell.dark .fc .fc-daygrid-day,
 .app-shell.dark .fc .fc-timegrid-slot,
 .app-shell.dark .fc .fc-timegrid-axis {
@@ -2235,6 +2288,11 @@ input[type="checkbox"].task-checkbox:checked {
 
   .calendar-transition-shell {
     min-height: 0;
+  }
+
+  .calendar-working-range {
+    align-self: stretch;
+    flex: 1 1 auto;
   }
 
   .calendar-toolbar {

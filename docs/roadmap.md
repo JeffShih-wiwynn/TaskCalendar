@@ -107,7 +107,7 @@ Status: mostly already implemented in the current repository, but keep this phas
 - [x] Clicking a task opens an edit panel.
 - [x] Task changes PATCH the backend.
 - [x] Persist manual `No time tasks` ordering through the backend with a dedicated `unscheduled_order` field.
-- [x] Keep the no-time drag source and month-view drag preview stable across sidebar and calendar re-renders.
+- [x] Keep the no-time drag source and month-view drag preview stable across sidebar and calendar re-renders, and keep month-view day-grid layout aligned on first render.
 - [ ] Keep polishing keyboard navigation, accessibility, and layout consistency as the sidebar evolves.
 
 ---

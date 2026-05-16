@@ -35,7 +35,7 @@ This document summarizes what is already in the repository snapshot and where th
   - `No time tasks` order now persists through the backend with a dedicated `unscheduled_order` field for tasks that have neither `scheduled_start` nor `scheduled_end`.
   - Reorder changes animate smoothly in the sidebar with Framer Motion layout transitions.
   - Drag target affordances now distinguish no-time reorder from drag-to-calendar scheduling.
-  - External no-time drag handles reinitialize reliably after calendar/sidebar re-renders, and the month-view drag mirror now stays aligned with the cursor.
+  - External no-time drag handles reinitialize reliably after calendar/sidebar re-renders, the month-view drag mirror stays aligned with the cursor, and month-view day-grid layout now renders correctly on the initial view switch.
   - Week and day views now default to the configured working-hours range, with a compact `Work` / `Full` toggle for switching to the full-day timeline when needed.
   - Tasks render as calendar events.
   - A runtime crash in the FullCalendar `eventContent` path was fixed by making event rendering fall back safely when a transient drag/drop event has no attached task object.

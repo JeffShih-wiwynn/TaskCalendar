@@ -925,10 +925,15 @@ describe("App", () => {
     it("toggles between working-hours and full-day calendar viewport", async () => {
         render(<App />);
 
+        mocks.fullCalendarUpdateSize.mockClear();
+
         fireEvent.click(
             await screen.findByRole("button", { name: "Work" }),
         );
 
+        await waitFor(() =>
+            expect(mocks.fullCalendarUpdateSize).toHaveBeenCalled(),
+        );
         await waitFor(() =>
             expect(mocks.fullCalendarProps.slotMinTime).toBe("00:00:00"),
         );
@@ -941,6 +946,9 @@ describe("App", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "Full" }));
         await waitFor(() =>
+            expect(mocks.fullCalendarUpdateSize).toHaveBeenCalled(),
+        );
+        await waitFor(() =>
             expect(mocks.fullCalendarProps.slotMinTime).toBe("08:00:00"),
         );
         await waitFor(() =>
@@ -950,6 +958,8 @@ describe("App", () => {
 
     it("hides the working-hours toggle in month view", async () => {
         render(<App />);
+
+        mocks.fullCalendarUpdateSize.mockClear();
 
         await act(async () => {
             fireEvent.click(await screen.findByRole("button", { name: "Week" }));
@@ -961,6 +971,9 @@ describe("App", () => {
         await act(async () => {
             fireEvent.click(screen.getByRole("button", { name: "Day" }));
         });
+        await waitFor(() =>
+            expect(mocks.fullCalendarUpdateSize).toHaveBeenCalled(),
+        );
         await waitFor(() =>
             expect(screen.getByRole("button", { name: "Month" })).toBeInTheDocument(),
         );
