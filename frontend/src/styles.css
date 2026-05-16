@@ -32,6 +32,10 @@ body {
   background: var(--page-bg);
 }
 
+.mobile-app-nav {
+  display: none;
+}
+
 .auth-shell {
   min-height: 100vh;
   display: grid;
@@ -1963,6 +1967,14 @@ input[type="checkbox"].task-checkbox:checked {
   overflow-wrap: normal;
 }
 
+.mobile-month-task-preview {
+  display: none;
+}
+
+.mobile-calendar-period-control {
+  display: none;
+}
+
 @media (hover: hover) and (pointer: fine) {
   .task-row:hover {
     transform: translateY(-2px);
@@ -2259,8 +2271,14 @@ input[type="checkbox"].task-checkbox:checked {
 }
 
 @media (max-width: 860px) {
+  html,
   body {
+    width: 100%;
     overflow-x: hidden;
+  }
+
+  body {
+    min-width: 0;
   }
 
   .app-shell {
@@ -2269,21 +2287,102 @@ input[type="checkbox"].task-checkbox:checked {
     flex-direction: column;
     grid-template-columns: 1fr;
     gap: 12px;
-    padding: 12px;
+    padding: max(12px, env(safe-area-inset-top)) 12px
+      calc(76px + env(safe-area-inset-bottom)) 12px;
+  }
+
+  .mobile-app-nav {
+    position: fixed;
+    right: max(10px, env(safe-area-inset-right));
+    bottom: max(10px, env(safe-area-inset-bottom));
+    left: max(10px, env(safe-area-inset-left));
+    z-index: 30;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 4px;
+    padding: 6px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--panel-bg) 94%, transparent);
+    box-shadow: 0 14px 34px rgb(24 32 38 / 18%);
+    backdrop-filter: blur(14px);
+  }
+
+  .mobile-app-nav-button {
+    min-width: 0;
+    min-height: 44px;
+    border: 0;
+    border-radius: 10px;
+    padding: 6px 3px;
+    color: var(--muted);
+    background: transparent;
+    font: inherit;
+    font-size: 0.74rem;
+    font-weight: 800;
+    line-height: 1.05;
+    cursor: pointer;
+  }
+
+  .mobile-app-nav-button.active {
+    color: var(--accent);
+    background: var(--accent-soft);
   }
 
   .task-sidebar {
     width: 100%;
-    max-height: 72dvh;
+    max-height: none;
     padding-right: 0;
-    overflow-y: auto;
+    overflow: visible;
   }
 
   .task-sidebar-collapsed {
     display: none;
   }
 
+  .app-shell:not(.mobile-screen-calendar) .calendar-panel {
+    display: none;
+  }
+
+  .app-shell.mobile-screen-calendar .task-sidebar {
+    display: none;
+  }
+
+  .app-shell.mobile-screen-calendar.detail-panel-open .task-sidebar {
+    position: fixed;
+    inset: 0;
+    z-index: 23;
+    display: block;
+    width: auto;
+    padding: 0;
+    overflow: visible;
+    pointer-events: none;
+  }
+
+  .app-shell.mobile-screen-calendar.detail-panel-open .calendar-panel {
+    display: grid;
+  }
+
   .sidebar-resizer {
+    display: none;
+  }
+
+  .sidebar-toggle {
+    display: none;
+  }
+
+  .app-shell.mobile-screen-today .settings-menu,
+  .app-shell.mobile-screen-upcoming .settings-menu,
+  .app-shell.mobile-screen-unscheduled .settings-menu,
+  .app-shell.mobile-screen-settings .settings-toggle,
+  .app-shell.mobile-screen-calendar .sidebar-reopen-button,
+  .app-shell.mobile-screen-today .task-schedule-button,
+  .app-shell.mobile-screen-upcoming .task-schedule-button,
+  .app-shell.mobile-screen-unscheduled .task-schedule-button,
+  .app-shell.mobile-screen-settings .task-schedule-button,
+  .app-shell.mobile-screen-calendar .task-schedule-button,
+  .app-shell.mobile-screen-today .task-view-filter-field,
+  .app-shell.mobile-screen-upcoming .task-view-filter-field,
+  .app-shell.mobile-screen-unscheduled .task-view-filter-field {
     display: none;
   }
 
@@ -2293,20 +2392,288 @@ input[type="checkbox"].task-checkbox:checked {
     grid-template-columns: 1fr;
   }
 
+  .task-form,
+  .task-form label,
+  .task-form input,
+  .task-form select,
+  .task-form textarea,
+  .filter-section,
+  .filter-dropdown,
+  .filter-menu {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .app-shell.mobile-screen-today .filter-section,
+  .app-shell.mobile-screen-upcoming .filter-section,
+  .app-shell.mobile-screen-unscheduled .filter-section {
+    position: relative;
+    z-index: 2;
+  }
+
+  .app-shell.mobile-screen-today .task-list,
+  .app-shell.mobile-screen-upcoming .task-list,
+  .app-shell.mobile-screen-unscheduled .task-list {
+    overflow: visible;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .app-shell.mobile-screen-unscheduled .task-order-button-desktop-top,
+  .app-shell.mobile-screen-today .task-order-button-desktop-top,
+  .app-shell.mobile-screen-upcoming .task-order-button-desktop-top {
+    display: none;
+  }
+
+  .app-shell.mobile-screen-unscheduled .task-order-button-mobile-order {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 30px;
+    min-height: 30px;
+  }
+
+  .app-shell.mobile-screen-unscheduled .task-order-actions--aligned {
+    gap: 6px;
+  }
+
+  .app-shell.mobile-screen-today .filter-menu,
+  .app-shell.mobile-screen-upcoming .filter-menu,
+  .app-shell.mobile-screen-unscheduled .filter-menu {
+    max-height: calc(100dvh - 190px - env(safe-area-inset-bottom));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .task-form input,
+  .task-form select,
+  .task-form textarea,
+  .filter-trigger,
+  .filter-number-input,
+  .category-inline-form input[type="text"] {
+    font-size: 16px;
+  }
+
   .task-form-inline-toggle {
     grid-template-columns: auto auto;
     justify-content: center;
   }
 
+  .mobile-task-sheet {
+    position: fixed;
+    right: max(8px, env(safe-area-inset-right));
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    left: max(8px, env(safe-area-inset-left));
+    z-index: 24;
+    min-width: 0;
+    max-height: min(76dvh, 680px);
+    overflow-y: auto;
+    padding: 14px 12px calc(14px + env(safe-area-inset-bottom));
+    border: 1px solid var(--border);
+    border-radius: 18px 18px 12px 12px;
+    background: var(--page-bg);
+    box-shadow: 0 24px 60px rgb(24 32 38 / 22%);
+    pointer-events: auto;
+    overscroll-behavior: contain;
+  }
+
+  .mobile-task-sheet .task-detail-header {
+    position: sticky;
+    top: -14px;
+    z-index: 1;
+    align-items: flex-start;
+    padding: 0 0 12px;
+    background: var(--page-bg);
+  }
+
+  .mobile-task-sheet .task-detail-header-actions {
+    gap: 6px;
+  }
+
+  .floating-panel-action {
+    min-height: 40px;
+    padding: 8px 10px;
+  }
+
   .calendar-panel {
     min-width: 0;
-    min-height: 680px;
+    min-height: calc(100dvh - 100px - env(safe-area-inset-bottom));
     padding: 12px;
-    gap: 12px;
+    gap: 8px;
   }
 
   .calendar-transition-shell {
     min-height: 0;
+  }
+
+  .calendar-view-dayGridMonth .fc-daygrid-event {
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    margin: 0;
+    border: 0;
+    border-radius: 999px;
+    padding: 0;
+    background: transparent;
+    overflow: hidden;
+  }
+
+  .calendar-view-dayGridMonth .fc-daygrid-event-harness {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .calendar-view-dayGridMonth .fc-daygrid-event-harness:has(.mobile-month-event-hidden) {
+    display: none;
+  }
+
+  .calendar-view-dayGridMonth .fc-daygrid-day-events {
+    display: grid;
+    grid-template-columns: repeat(2, 16px);
+    grid-auto-rows: 16px;
+    align-content: flex-start;
+    justify-content: start;
+    gap: 2px;
+    min-height: 34px;
+    max-height: 34px;
+    overflow: hidden;
+  }
+
+  .calendar-view-dayGridMonth .calendar-task,
+  .calendar-view-dayGridMonth .fc-event-time,
+  .calendar-view-dayGridMonth .fc-event-title {
+    display: none;
+  }
+
+  .mobile-month-category-indicator {
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px;
+    padding: 0;
+    color: var(--month-category-text, #ffffff);
+    background: var(--month-category-color, var(--muted));
+    font-size: 0.64rem;
+    font-weight: 800;
+    line-height: 1;
+    text-align: center;
+  }
+
+  .mobile-month-category-overflow {
+    color: #ffffff;
+    background: #7a8782;
+  }
+
+  .mobile-month-task-preview {
+    display: none;
+  }
+
+  .mobile-month-task-preview-open {
+    position: fixed;
+    right: max(8px, env(safe-area-inset-right));
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    left: max(8px, env(safe-area-inset-left));
+    z-index: 22;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 10px;
+    max-height: min(42dvh, 360px);
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 16px 16px 12px 12px;
+    background: var(--page-bg);
+    box-shadow: 0 20px 54px rgb(24 32 38 / 20%);
+  }
+
+  .mobile-month-task-preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+  }
+
+  .mobile-month-task-preview-close {
+    min-height: 36px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 10px;
+    color: var(--muted);
+    background: var(--panel-bg);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .mobile-month-task-list {
+    display: grid;
+    align-content: start;
+    gap: 8px;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: 2px;
+  }
+
+  .mobile-month-task-row {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    border: 1px solid var(--border);
+    border-left-width: 5px;
+    border-radius: 6px;
+    padding: 10px;
+    color: var(--text);
+    background: var(--panel-bg);
+    font: inherit;
+    text-align: left;
+  }
+
+  .mobile-month-task-main {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+
+  .calendar-view-timeGridWeek {
+    overflow-x: auto;
+    overflow-y: visible;
+    overscroll-behavior-x: contain;
+    padding-bottom: 4px;
+  }
+
+  .calendar-view-timeGridWeek .fc {
+    min-width: calc(var(--calendar-time-axis-width) + 7 * 112px);
+  }
+
+  .calendar-view-timeGridWeek .fc-scrollgrid,
+  .calendar-view-timeGridWeek .fc-col-header,
+  .calendar-view-timeGridWeek .fc-col-header table,
+  .calendar-view-timeGridWeek .fc-timegrid .fc-daygrid-body,
+  .calendar-view-timeGridWeek .fc-timegrid .fc-daygrid-body table,
+  .calendar-view-timeGridWeek .fc-timegrid-body,
+  .calendar-view-timeGridWeek .fc-timegrid-slots,
+  .calendar-view-timeGridWeek .fc-timegrid-cols,
+  .calendar-view-timeGridWeek .fc-timegrid-body table,
+  .calendar-view-timeGridWeek .fc-timegrid-cols table {
+    width: calc(var(--calendar-time-axis-width) + 7 * 112px) !important;
+    min-width: calc(var(--calendar-time-axis-width) + 7 * 112px) !important;
+  }
+
+  .calendar-view-timeGridWeek .fc-timegrid-axis,
+  .calendar-view-timeGridWeek .fc-timegrid-slot-label {
+    position: sticky;
+    left: 0;
+    z-index: 4;
+    background: var(--panel-bg);
+  }
+
+  .calendar-view-timeGridWeek .fc-timegrid-axis {
+    z-index: 6;
   }
 
   .calendar-working-range {
@@ -2315,19 +2682,60 @@ input[type="checkbox"].task-checkbox:checked {
   }
 
   .calendar-toolbar {
-    grid-template-columns: 1fr;
-    gap: 10px;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: "nav view";
+    gap: 8px;
+    align-items: center;
     justify-items: stretch;
   }
 
-  .calendar-toolbar-group,
-  .calendar-toolbar-title {
-    justify-content: center;
+  .calendar-toolbar > .calendar-toolbar-group:first-child {
+    grid-area: nav;
+    justify-content: flex-start;
     min-width: 0;
   }
 
+  .calendar-toolbar-title {
+    display: none;
+  }
+
   .calendar-view-switcher {
-    flex-wrap: wrap;
+    grid-area: view;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+
+  .calendar-hours-toggle {
+    order: 2;
+  }
+
+  .calendar-view-cycle-button {
+    flex: 0 1 auto;
+  }
+
+  .calendar-toolbar-dayGridMonth {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .calendar-toolbar-dayGridMonth .calendar-toolbar-group:first-child {
+    gap: 5px;
+  }
+
+  .calendar-toolbar-dayGridMonth .mobile-calendar-period-control {
+    min-width: 0;
+    display: block;
+  }
+
+  .calendar-toolbar-dayGridMonth .mobile-calendar-period-button {
+    max-width: 7.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .calendar-toolbar-dayGridMonth .calendar-view-switcher {
+    flex: 0 0 auto;
   }
 
   .calendar-toolbar-button,
@@ -2340,6 +2748,33 @@ input[type="checkbox"].task-checkbox:checked {
   .task-form button,
   .secondary-button {
     min-height: 44px;
+  }
+
+  .calendar-toolbar .calendar-toolbar-button,
+  .calendar-toolbar .calendar-nav-button,
+  .calendar-toolbar .calendar-year-button {
+    min-height: 38px;
+  }
+
+  .calendar-toolbar .calendar-toolbar-button,
+  .calendar-toolbar .calendar-year-button {
+    padding: 7px 7px;
+    font-size: 0.86rem;
+  }
+
+  .calendar-toolbar .calendar-nav-button {
+    width: 38px;
+    height: 38px;
+  }
+
+  .calendar-title-month {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .calendar-year-control {
+    min-width: 0;
+    gap: 6px;
   }
 
   .task-form {
@@ -2357,16 +2792,29 @@ input[type="checkbox"].task-checkbox:checked {
 
   .fc {
     min-width: 0;
+    max-width: 100%;
+  }
+
+  .fc .fc-scrollgrid,
+  .fc .fc-view-harness,
+  .fc .fc-scroller {
+    max-width: 100%;
+  }
+
+  .fc .fc-toolbar-chunk,
+  .fc .fc-col-header-cell-cushion,
+  .fc .fc-daygrid-day-number {
+    overflow-wrap: anywhere;
   }
 }
 
 @media (max-width: 480px) {
   .app-shell {
-    padding: 8px;
+    padding: max(8px, env(safe-area-inset-top)) 8px
+      calc(76px + env(safe-area-inset-bottom)) 8px;
   }
 
   .task-sidebar {
-    max-height: 68dvh;
     gap: 12px;
   }
 
@@ -2376,7 +2824,7 @@ input[type="checkbox"].task-checkbox:checked {
   }
 
   .calendar-panel {
-    min-height: 620px;
+    min-height: calc(100dvh - 92px - env(safe-area-inset-bottom));
     padding: 10px;
   }
 
@@ -2395,5 +2843,34 @@ input[type="checkbox"].task-checkbox:checked {
 
   .task-row {
     padding: 9px;
+  }
+
+  .auth-shell {
+    min-height: 100dvh;
+    padding:
+      max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+      max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
+
+  .auth-panel {
+    width: 100%;
+    padding: 20px;
+    border-radius: 12px;
+  }
+
+  .auth-mode-switch {
+    grid-template-columns: 1fr;
+    border-radius: 12px;
+  }
+
+  .auth-mode-tab {
+    min-height: 44px;
+    border-radius: 8px;
+  }
+
+  .auth-form input,
+  .auth-form button {
+    min-height: 44px;
+    font-size: 16px;
   }
 }

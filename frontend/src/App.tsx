@@ -1,5 +1,6 @@
 import type {
     DatesSetArg,
+    DayCellContentArg,
     EventApi,
     EventClickArg,
     EventContentArg,
@@ -91,6 +92,7 @@ type TaskView =
     | "all";
 type ThemeMode = "light" | "dark";
 type CalendarView = "dayGridMonth" | "timeGridWeek" | "timeGridDay";
+type MobileScreen = "today" | "upcoming" | "unscheduled" | "calendar" | "settings";
 type CalendarTransitionKind = "neutral" | "view" | "prev" | "next" | "today";
 type DragTargetMode = "reorder" | "schedule" | null;
 type AuthMode = "login" | "register";
@@ -101,6 +103,7 @@ type WorkingHoursSettings = {
 const defaultSidebarWidth = 300;
 const minSidebarWidth = 240;
 const minCalendarWidth = 320;
+const mobileLayoutQuery = "(max-width: 860px)";
 const defaultWorkingHours: WorkingHoursSettings = {
     start: "08:00",
     end: "22:00",
@@ -236,6 +239,14 @@ const motionTimings = {
     calendarEventAnimationHoldMs: 300,
 } as const;
 
+function isNarrowScreen(): boolean {
+    return (
+        typeof window !== "undefined" &&
+        typeof window.matchMedia === "function" &&
+        window.matchMedia(mobileLayoutQuery).matches
+    );
+}
+
 export function App() {
     const prefersReducedMotion = useReducedMotion();
     const calendarTransitionControls = useAnimationControls();
@@ -261,6 +272,7 @@ export function App() {
         tasks: [],
     });
     const [activeView, setActiveView] = useState<TaskView>("today");
+    const [mobileScreen, setMobileScreen] = useState<MobileScreen>("today");
     const [upcomingDays, setUpcomingDays] = useState(7);
     const [showCompletedTasks, setShowCompletedTasks] = useState(true);
     const [activeListId, setActiveListId] = useState<string | null>(null);
@@ -340,6 +352,8 @@ export function App() {
         useState<CalendarView>("timeGridWeek");
     const [calendarTitle, setCalendarTitle] = useState("");
     const [calendarDate, setCalendarDate] = useState(new Date());
+    const [mobileMonthPreviewDate, setMobileMonthPreviewDate] =
+        useState<Date | null>(null);
     const [isYearPickerOpen, setIsYearPickerOpen] = useState(false);
     const [yearDraft, setYearDraft] = useState(
         String(new Date().getFullYear()),
@@ -462,10 +476,26 @@ export function App() {
         calendarView === "timeGridWeek" || calendarView === "timeGridDay";
 
     const events = useMemo<EventInput[]>(() => {
-        return calendarTasks
-            .filter((task) => task.scheduled_start)
-            .map((task) => mapTaskToCalendarEvent(task, categoryColorById));
+        return mapTasksToCalendarEvents(calendarTasks, categoryColorById);
     }, [calendarTasks, categoryColorById]);
+    const mobileMonthPreviewTasks = useMemo(() => {
+        if (!mobileMonthPreviewDate) {
+            return [];
+        }
+
+        return calendarTasks
+            .filter((task) => {
+                if (!task.scheduled_start) {
+                    return false;
+                }
+
+                return isSameLocalDay(
+                    parseTaskDate(task.scheduled_start),
+                    mobileMonthPreviewDate,
+                );
+            })
+            .sort(compareTasksByScheduledStart);
+    }, [calendarTasks, mobileMonthPreviewDate]);
     const calendarSlotMinTime = isFullDayTimelineVisible
         ? "00:00:00"
         : `${workingHours.start}:00`;
@@ -1426,6 +1456,10 @@ export function App() {
             setIsCategoryMenuOpen(false);
             setIsAddingCategory(false);
             setContextMenu(null);
+            if (isNarrowScreen()) {
+                setIsSidebarOpen(true);
+                setMobileScreen("calendar");
+            }
             setDetailPanelMode("create");
             setSelectedTaskId(null);
             setFormState({
@@ -1480,13 +1514,18 @@ export function App() {
 
     const handleDateClick = useCallback(
         (clickInfo: DateClickArg) => {
+            if (calendarView === "dayGridMonth" && isNarrowScreen()) {
+                setMobileMonthPreviewDate(clickInfo.date);
+                return;
+            }
+
             const start = clickInfo.date;
             const end = clickInfo.allDay
                 ? addLocalDays(start, 1)
                 : new Date(start.getTime() + 60 * 60 * 1000);
             openCreatePanel(start, end);
         },
-        [openCreatePanel],
+        [calendarView, openCreatePanel],
     );
 
     const handleCheckboxChange = useCallback(
@@ -1617,8 +1656,65 @@ export function App() {
     );
     const taskContentKey = `${activeView}-${categoryFilterKey}-${upcomingDays}`;
 
+    const renderDayCellContent = useCallback((dayCellInfo: DayCellContentArg) => {
+        return (
+            <div className="calendar-month-day-cell-content">
+                <span className="calendar-month-day-number">
+                    {dayCellInfo.dayNumberText}
+                </span>
+            </div>
+        );
+    }, []);
+
     const renderEventContent = useCallback(
         (eventInfo: EventContentArg) => {
+            const monthGroupCount =
+                typeof eventInfo.event.extendedProps.mobileMonthGroupCount ===
+                "number"
+                    ? eventInfo.event.extendedProps.mobileMonthGroupCount
+                    : null;
+            const monthGroupColor =
+                typeof eventInfo.event.extendedProps.mobileMonthGroupColor ===
+                "string"
+                    ? eventInfo.event.extendedProps.mobileMonthGroupColor
+                    : eventInfo.event.backgroundColor;
+            const resolvedMonthGroupColor = monthGroupColor ?? "#176b58";
+            const monthGroupTextColor =
+                typeof eventInfo.event.extendedProps.mobileMonthGroupTextColor ===
+                "string"
+                    ? eventInfo.event.extendedProps.mobileMonthGroupTextColor
+                    : readableTextColor(resolvedMonthGroupColor);
+
+            if (
+                eventInfo.view?.type === "dayGridMonth" &&
+                isNarrowScreen() &&
+                monthGroupCount !== null
+            ) {
+                const isOverflowSummary =
+                    eventInfo.event.extendedProps.mobileMonthGroupOverflow ===
+                    true;
+
+                return (
+                    <div
+                        className={
+                            isOverflowSummary
+                                ? "mobile-month-category-indicator mobile-month-category-overflow"
+                                : "mobile-month-category-indicator"
+                        }
+                        style={{
+                            "--month-category-color": resolvedMonthGroupColor,
+                            "--month-category-text": monthGroupTextColor,
+                        } as CSSProperties}
+                    >
+                        <span className="mobile-month-category-count">
+                            {isOverflowSummary || monthGroupCount > 9
+                                ? "*"
+                                : monthGroupCount}
+                        </span>
+                    </div>
+                );
+            }
+
             const task =
                 (eventInfo.event.extendedProps.task as ScheduledTask | undefined) ??
                 tasksRef.current.find((item) => item.id === eventInfo.event.id);
@@ -1665,9 +1761,22 @@ export function App() {
     );
 
     const handleEventClick = useCallback((clickInfo: EventClickArg) => {
+        if (
+            clickInfo.view.type === "dayGridMonth" &&
+            isNarrowScreen() &&
+            clickInfo.event.start
+        ) {
+            setMobileMonthPreviewDate(clickInfo.event.start);
+            return;
+        }
+
         setIsViewMenuOpen(false);
         setIsCategoryMenuOpen(false);
         setIsAddingCategory(false);
+        if (isNarrowScreen()) {
+            setIsSidebarOpen(true);
+            setMobileScreen("calendar");
+        }
         setDetailPanelMode("edit");
         setSelectedTaskId(clickInfo.event.id);
         setContextMenu(null);
@@ -1902,6 +2011,39 @@ export function App() {
             if (
                 areStringArraysEqual(unscheduledOrderRef.current, nextOrder)
             ) {
+                return;
+            }
+
+            applyLocalUnscheduledOrder(nextOrder);
+            persistUnscheduledOrder(nextOrder);
+        },
+        [activeView, applyLocalUnscheduledOrder, persistUnscheduledOrder],
+    );
+
+    const moveUnscheduledTaskByOffset = useCallback(
+        (taskId: string, offset: number) => {
+            if (activeView !== "unscheduled" || offset === 0) {
+                return;
+            }
+
+            const currentOrder = unscheduledOrderRef.current;
+            const currentIndex = currentOrder.indexOf(taskId);
+            if (currentIndex < 0) {
+                return;
+            }
+
+            const nextIndex = currentIndex + offset;
+            if (nextIndex < 0 || nextIndex >= currentOrder.length) {
+                return;
+            }
+
+            const nextOrder = [...currentOrder];
+            [nextOrder[currentIndex], nextOrder[nextIndex]] = [
+                nextOrder[nextIndex],
+                nextOrder[currentIndex],
+            ];
+
+            if (areStringArraysEqual(currentOrder, nextOrder)) {
                 return;
             }
 
@@ -2624,6 +2766,40 @@ export function App() {
         isWorkingHoursSettingsOpen ||
         isWebhookSettingsOpen ||
         isBackupSettingsOpen;
+    const openMobileTaskScreen = useCallback(
+        (screen: Extract<MobileScreen, "today" | "upcoming" | "unscheduled">) => {
+            setMobileScreen(screen);
+            setActiveView(screen);
+            setIsSidebarOpen(true);
+            setIsSettingsMenuOpen(false);
+            setIsWorkingHoursSettingsOpen(false);
+            setIsWebhookSettingsOpen(false);
+            setIsBackupSettingsOpen(false);
+            closeDetailPanel();
+        },
+        [closeDetailPanel],
+    );
+    const openMobileCalendarScreen = useCallback(() => {
+        setMobileScreen("calendar");
+        setIsSidebarOpen(false);
+        setIsSettingsMenuOpen(false);
+        setIsWorkingHoursSettingsOpen(false);
+        setIsWebhookSettingsOpen(false);
+        setIsBackupSettingsOpen(false);
+        closeDetailPanel();
+        window.setTimeout(() => {
+            calendarRef.current?.getApi().updateSize();
+        }, 0);
+    }, [closeDetailPanel]);
+    const openMobileSettingsScreen = useCallback(() => {
+        setMobileScreen("settings");
+        closeDetailPanel();
+        setIsSidebarOpen(true);
+        setIsWorkingHoursSettingsOpen(false);
+        setIsWebhookSettingsOpen(false);
+        setIsBackupSettingsOpen(false);
+        setIsSettingsMenuOpen(true);
+    }, [closeDetailPanel]);
 
     if (!authToken) {
         return (
@@ -2646,7 +2822,7 @@ export function App() {
     return (
         <main
             ref={appShellRef}
-            className={`app-shell ${themeMode} ${isSidebarOpen ? "sidebar-open" : "sidebar-collapsed"}`}
+            className={`app-shell ${themeMode} ${isSidebarOpen ? "sidebar-open" : "sidebar-collapsed"} mobile-screen-${mobileScreen} ${detailPanelMode ? "detail-panel-open" : ""}`}
             style={appShellStyle}
             onTransitionEnd={(event) => {
                 if (
@@ -2666,6 +2842,63 @@ export function App() {
                 setIsCategoryMenuOpen(false);
             }}
         >
+            <nav className="mobile-app-nav" aria-label="Mobile app navigation">
+                <button
+                    type="button"
+                    aria-label="Mobile Today"
+                    className={`mobile-app-nav-button ${mobileScreen === "today" ? "active" : ""}`}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        openMobileTaskScreen("today");
+                    }}
+                >
+                    Today
+                </button>
+                <button
+                    type="button"
+                    aria-label="Mobile Upcoming"
+                    className={`mobile-app-nav-button ${mobileScreen === "upcoming" ? "active" : ""}`}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        openMobileTaskScreen("upcoming");
+                    }}
+                >
+                    Upcoming
+                </button>
+                <button
+                    type="button"
+                    aria-label="Mobile Inbox"
+                    className={`mobile-app-nav-button ${mobileScreen === "unscheduled" ? "active" : ""}`}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        openMobileTaskScreen("unscheduled");
+                    }}
+                >
+                    Inbox
+                </button>
+                <button
+                    type="button"
+                    aria-label="Mobile Calendar"
+                    className={`mobile-app-nav-button ${mobileScreen === "calendar" ? "active" : ""}`}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        openMobileCalendarScreen();
+                    }}
+                >
+                    Calendar
+                </button>
+                <button
+                    type="button"
+                    aria-label="Mobile Settings"
+                    className={`mobile-app-nav-button ${mobileScreen === "settings" ? "active" : ""}`}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        openMobileSettingsScreen();
+                    }}
+                >
+                    Settings
+                </button>
+            </nav>
             <aside
                 className={`task-sidebar ${isSidebarOpen ? "task-sidebar-open" : "task-sidebar-collapsed"}`}
                 aria-hidden={!isSidebarOpen}
@@ -3132,7 +3365,7 @@ export function App() {
                             className="filter-section"
                             aria-label="Task filters"
                         >
-                            <div className="filter-field">
+                            <div className="filter-field task-view-filter-field">
                                 <span>View</span>
                                 <div
                                     className="filter-dropdown"
@@ -3582,7 +3815,7 @@ export function App() {
                         {detailPanelMode && (
                             <motion.section
                                 key={detailPanelMode}
-                                className="task-detail-panel"
+                                className="task-detail-panel mobile-task-sheet"
                                 aria-label={
                                     detailPanelMode === "create"
                                         ? "Create task panel"
@@ -4153,6 +4386,7 @@ export function App() {
                                                             : undefined
                                                     }
                                                     className={`task-row ${activeView === "unscheduled" ? "task-row--reorderable" : ""} ${!task.completed && isOverdueTask(task, new Date()) ? "task-row--overdue" : ""} ${selectedTaskId === task.id ? "selected" : ""}`}
+                                                    data-task-index={taskIndex}
                                                     style={{
                                                         borderLeftColor:
                                                             taskCategoryColor(
@@ -4319,30 +4553,89 @@ export function App() {
                                                     <span className="task-order-actions task-order-actions--aligned">
                                                         {activeView ===
                                                             "unscheduled" && (
-                                                            <button
-                                                                type="button"
-                                                                className="task-order-button task-order-button-top"
-                                                                aria-label={`Move ${task.title} to top`}
-                                                                disabled={
-                                                                    taskIndex ===
-                                                                    0
-                                                                }
-                                                                onPointerDown={(
-                                                                    event,
-                                                                ) =>
-                                                                    event.stopPropagation()
-                                                                }
-                                                                onClick={(
-                                                                    event,
-                                                                ) => {
-                                                                    event.stopPropagation();
-                                                                    moveUnscheduledTaskToTop(
-                                                                        task.id,
-                                                                    );
-                                                                }}
-                                                            >
-                                                                ⇡
-                                                            </button>
+                                                            <>
+                                                                {mobileScreen ===
+                                                                "unscheduled" ? (
+                                                                    <>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="task-order-button task-order-button-up task-order-button-mobile-order"
+                                                                            aria-label={`Move ${task.title} up`}
+                                                                            disabled={
+                                                                                taskIndex ===
+                                                                                0
+                                                                            }
+                                                                            onPointerDown={(
+                                                                                event,
+                                                                            ) =>
+                                                                                event.stopPropagation()
+                                                                            }
+                                                                            onClick={(
+                                                                                event,
+                                                                            ) => {
+                                                                                event.stopPropagation();
+                                                                                moveUnscheduledTaskByOffset(
+                                                                                    task.id,
+                                                                                    -1,
+                                                                                );
+                                                                            }}
+                                                                        >
+                                                                            ⇡
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="task-order-button task-order-button-down task-order-button-mobile-order"
+                                                                            aria-label={`Move ${task.title} down`}
+                                                                            disabled={
+                                                                                taskIndex ===
+                                                                                orderedVisibleTasks.length -
+                                                                                    1
+                                                                            }
+                                                                            onPointerDown={(
+                                                                                event,
+                                                                            ) =>
+                                                                                event.stopPropagation()
+                                                                            }
+                                                                            onClick={(
+                                                                                event,
+                                                                            ) => {
+                                                                                event.stopPropagation();
+                                                                                moveUnscheduledTaskByOffset(
+                                                                                    task.id,
+                                                                                    1,
+                                                                                );
+                                                                            }}
+                                                                        >
+                                                                            ⇣
+                                                                        </button>
+                                                                    </>
+                                                                ) : (
+                                                                    <button
+                                                                        type="button"
+                                                                        className="task-order-button task-order-button-top task-order-button-desktop-top"
+                                                                        aria-label={`Move ${task.title} to top`}
+                                                                        disabled={
+                                                                            taskIndex ===
+                                                                            0
+                                                                        }
+                                                                        onPointerDown={(
+                                                                            event,
+                                                                        ) =>
+                                                                            event.stopPropagation()
+                                                                        }
+                                                                        onClick={(
+                                                                            event,
+                                                                        ) => {
+                                                                            event.stopPropagation();
+                                                                            moveUnscheduledTaskToTop(
+                                                                                task.id,
+                                                                            );
+                                                                        }}
+                                                                    >
+                                                                        ⇡
+                                                                    </button>
+                                                                )}
+                                                            </>
                                                         )}
                                                         <button
                                                             type="button"
@@ -4515,7 +4808,7 @@ export function App() {
                     </motion.div>
                 )}
 
-                <div className="calendar-toolbar">
+                <div className={`calendar-toolbar calendar-toolbar-${calendarView}`}>
                     <div className="calendar-toolbar-group">
                         {!isSidebarOpen && (
                             <button
@@ -4550,6 +4843,38 @@ export function App() {
                         >
                             Today
                         </button>
+                        <div className="mobile-calendar-period-control">
+                            {isYearPickerOpen ? (
+                                <form
+                                    className="calendar-year-form"
+                                    onSubmit={(event) =>
+                                        void submitYearChange(event)
+                                    }
+                                >
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        step={1}
+                                        value={yearDraft}
+                                        onChange={(event) =>
+                                            setYearDraft(event.target.value)
+                                        }
+                                        aria-label="Calendar year"
+                                    />
+                                </form>
+                            ) : (
+                                <button
+                                    type="button"
+                                    className="calendar-toolbar-button mobile-calendar-period-button"
+                                    onClick={() => setIsYearPickerOpen(true)}
+                                >
+                                    {calendarDate.getFullYear()}{" "}
+                                    {new Intl.DateTimeFormat(undefined, {
+                                        month: "short",
+                                    }).format(calendarDate)}
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     <div className="calendar-toolbar-title">
@@ -4623,7 +4948,7 @@ export function App() {
                 </div>
 
                 <motion.div
-                    className={`calendar-transition-shell${
+                    className={`calendar-transition-shell calendar-view-${calendarView}${
                         isWorkingTimeGridView
                             ? " calendar-working-range"
                             : ""
@@ -4645,6 +4970,7 @@ export function App() {
                             hour12: false,
                         }}
                         eventContent={renderEventContent}
+                        dayCellContent={renderDayCellContent}
                         eventClick={handleEventClick}
                         eventDidMount={handleEventDidMount}
                         dateClick={handleDateClick}
@@ -4681,6 +5007,91 @@ export function App() {
                             : {})}
                     />
                 </motion.div>
+                {calendarView === "dayGridMonth" && (
+                    <section
+                        className={`mobile-month-task-preview${
+                            mobileMonthPreviewDate
+                                ? " mobile-month-task-preview-open"
+                                : ""
+                        }`}
+                        aria-label="Selected day tasks"
+                    >
+                        <div className="mobile-month-task-preview-header">
+                            <h2>
+                                {mobileMonthPreviewDate
+                                    ? formatDateFromDate(mobileMonthPreviewDate)
+                                    : "Select a day"}
+                            </h2>
+                            {mobileMonthPreviewDate && (
+                                <button
+                                    type="button"
+                                    className="mobile-month-task-preview-close"
+                                    aria-label="Close selected day tasks"
+                                    onClick={() =>
+                                        setMobileMonthPreviewDate(null)
+                                    }
+                                >
+                                    Close
+                                </button>
+                            )}
+                        </div>
+                        <div className="mobile-month-task-list">
+                            {mobileMonthPreviewDate &&
+                            mobileMonthPreviewTasks.length === 0 ? (
+                                <p className="muted">No tasks this day.</p>
+                            ) : null}
+                            {!mobileMonthPreviewDate ? (
+                                <p className="muted">
+                                    Tap a day to preview tasks.
+                                </p>
+                            ) : null}
+                            {mobileMonthPreviewTasks.map((task) => (
+                                <button
+                                    key={task.id}
+                                    type="button"
+                                    className="mobile-month-task-row"
+                                    style={{
+                                        borderLeftColor: taskCategoryColor(
+                                            task,
+                                            categoryColorById,
+                                        ),
+                                    }}
+                                    onClick={() => {
+                                        setDetailPanelMode("edit");
+                                        setSelectedTaskId(task.id);
+                                    }}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        className="task-checkbox"
+                                        checked={task.completed}
+                                        onChange={() =>
+                                            void handleCheckboxChange(task)
+                                        }
+                                        onClick={(event) =>
+                                            event.stopPropagation()
+                                        }
+                                        aria-label={`Toggle ${task.title}`}
+                                    />
+                                    <span className="mobile-month-task-main">
+                                        <span
+                                            className={
+                                                task.completed
+                                                    ? "task-title completed"
+                                                    : "task-title"
+                                            }
+                                        >
+                                            {task.title}
+                                        </span>
+                                        <span className="task-meta">
+                                            {formatTaskMeta(task)}
+                                        </span>
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    </section>
+                )}
             </section>
 
             {pendingDeleteTask && (
@@ -5790,6 +6201,14 @@ function isSameLocalDay(left: Date, right: Date): boolean {
     );
 }
 
+function localDateKey(value: Date): string {
+    return [
+        value.getFullYear(),
+        String(value.getMonth() + 1).padStart(2, "0"),
+        String(value.getDate()).padStart(2, "0"),
+    ].join("-");
+}
+
 function isWithinUpcomingDays(value: Date, now: Date, days: number): boolean {
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const end = addLocalDays(start, Math.max(1, days));
@@ -5950,8 +6369,30 @@ function formatDate(value: string): string {
     }).format(parseTaskDate(value));
 }
 
+function formatDateFromDate(value: Date): string {
+    return new Intl.DateTimeFormat(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+    }).format(value);
+}
+
 function parseTaskDate(value: string): Date {
     return new Date(value);
+}
+
+function compareTasksByScheduledStart(
+    left: ScheduledTask,
+    right: ScheduledTask,
+): number {
+    const leftTime = left.scheduled_start
+        ? parseTaskDate(left.scheduled_start).getTime()
+        : 0;
+    const rightTime = right.scheduled_start
+        ? parseTaskDate(right.scheduled_start).getTime()
+        : 0;
+
+    return leftTime - rightTime || left.title.localeCompare(right.title);
 }
 
 function splitDateTimeInputValue(value: string): {
@@ -6161,9 +6602,26 @@ function getPartValue(
 function mapTaskToCalendarEvent(
     task: ScheduledTask,
     categoryColorById: Map<string, string>,
+    mobileMonthGroup?: {
+        count: number;
+        color: string;
+        hidden: boolean;
+        overflow: boolean;
+        overflowCount: number;
+    },
 ): EventInput {
     const color = taskCategoryColor(task, categoryColorById);
     const allDay = isAllDayScheduledTask(task);
+    const classNames = task.completed
+        ? ["task-event", "task-event--completed"]
+        : ["task-event"];
+
+    if (mobileMonthGroup?.hidden) {
+        classNames.push("mobile-month-event-hidden");
+    }
+    if (mobileMonthGroup?.overflow) {
+        classNames.push("mobile-month-event-overflow");
+    }
 
     return {
         id: task.id,
@@ -6184,13 +6642,91 @@ function mapTaskToCalendarEvent(
             : color,
         borderColor: color,
         textColor: task.completed ? "#50615b" : readableTextColor(color),
-        classNames: task.completed
-            ? ["task-event", "task-event--completed"]
-            : ["task-event"],
+        classNames,
         extendedProps: {
             task,
+            mobileMonthGroupCount: mobileMonthGroup?.overflow
+                ? mobileMonthGroup.overflowCount
+                : mobileMonthGroup?.count,
+            mobileMonthGroupColor: mobileMonthGroup?.overflow
+                ? "#7a8782"
+                : mobileMonthGroup?.color,
+            mobileMonthGroupTextColor: mobileMonthGroup?.overflow
+                ? "#ffffff"
+                : readableTextColor(mobileMonthGroup?.color ?? color),
+            mobileMonthGroupOverflow: mobileMonthGroup?.overflow ?? false,
         },
     };
+}
+
+function mapTasksToCalendarEvents(
+    tasks: ScheduledTask[],
+    categoryColorById: Map<string, string>,
+): EventInput[] {
+    const scheduledTasks = tasks.filter((task) => task.scheduled_start);
+    const groupByKey = new Map<
+        string,
+        {
+            color: string;
+            taskIds: string[];
+        }
+    >();
+
+    for (const task of scheduledTasks) {
+        if (!task.scheduled_start) {
+            continue;
+        }
+
+        const dayKey = localDateKey(parseTaskDate(task.scheduled_start));
+        const categoryKey = task.list_id ?? "__uncategorized__";
+        const groupKey = `${dayKey}:${categoryKey}`;
+        const group = groupByKey.get(groupKey) ?? {
+            color: taskCategoryColor(task, categoryColorById),
+            taskIds: [],
+        };
+
+        group.taskIds.push(task.id);
+        groupByKey.set(groupKey, group);
+    }
+
+    const visibleGroupKeysByDay = new Map<string, string[]>();
+    for (const groupKey of groupByKey.keys()) {
+        const dayKey = groupKey.slice(0, groupKey.indexOf(":"));
+        const dayGroups = visibleGroupKeysByDay.get(dayKey) ?? [];
+        dayGroups.push(groupKey);
+        visibleGroupKeysByDay.set(dayKey, dayGroups);
+    }
+
+    return scheduledTasks.map((task) => {
+        const dayKey = localDateKey(parseTaskDate(task.scheduled_start ?? ""));
+        const categoryKey = task.list_id ?? "__uncategorized__";
+        const groupKey = `${dayKey}:${categoryKey}`;
+        const group = groupByKey.get(groupKey);
+        const visibleGroupKeys = visibleGroupKeysByDay.get(dayKey) ?? [];
+        const groupIndex = visibleGroupKeys.indexOf(groupKey);
+        const isFirstInGroup = group?.taskIds[0] === task.id;
+        const hasOverflowGroups = visibleGroupKeys.length > 4;
+        const visibleGroupLimit = hasOverflowGroups ? 3 : 4;
+        const overflowGroupCount = Math.max(
+            0,
+            visibleGroupKeys.length - visibleGroupLimit,
+        );
+        const isOverflowSummary =
+            hasOverflowGroups &&
+            groupIndex === visibleGroupLimit &&
+            isFirstInGroup;
+
+        return mapTaskToCalendarEvent(task, categoryColorById, {
+            count: group?.taskIds.length ?? 1,
+            color: group?.color ?? taskCategoryColor(task, categoryColorById),
+            hidden:
+                !isFirstInGroup ||
+                groupIndex > visibleGroupLimit ||
+                (groupIndex === visibleGroupLimit && overflowGroupCount <= 0),
+            overflow: isOverflowSummary,
+            overflowCount: overflowGroupCount,
+        });
+    });
 }
 
 function readableTextColor(hexColor: string): string {
