@@ -82,6 +82,7 @@ Current frontend behavior includes:
 - draggable, resizable, and all-day scheduled tasks
 - a compact `Work` / `Full` toggle for week/day time-grid views, switching between working-hours and full-day ranges
 - a clickable year control in month view
+- month view now keeps its date grid aligned on the initial render without needing a click to recalculate layout
 - category colors with inline category editing
 - customizable `Upcoming` day ranges
 - backup export and import actions in the sidebar settings menu

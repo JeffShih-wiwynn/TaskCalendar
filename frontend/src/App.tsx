@@ -375,6 +375,8 @@ export function App() {
     const yearInputRef = useRef<HTMLInputElement | null>(null);
     const timeGridScrollTopRef = useRef<number | null>(null);
     const locallyUpdatedTasksRef = useRef<Map<string, ScheduledTask>>(new Map());
+    const calendarResizeRafRef = useRef<number | null>(null);
+    const calendarResizeRaf2Ref = useRef<number | null>(null);
 
     const tasks = taskState.tasks;
     const isInitialTaskLoad =
@@ -470,7 +472,7 @@ export function App() {
     const calendarSlotMaxTime = isFullDayTimelineVisible
         ? "24:00:00"
         : `${workingHours.end}:00`;
-    const calendarTimelineKey = `${calendarSlotMinTime}-${calendarSlotMaxTime}`;
+    const isWorkingTimeGridView = isTimeGridView && !isFullDayTimelineVisible;
     const calendarViewToggleLabel =
         calendarView === "timeGridWeek"
             ? "Week"
@@ -608,6 +610,56 @@ export function App() {
             }
         };
     }, [isSidebarOpen, prefersReducedMotion]);
+
+    const scheduleCalendarResize = useCallback(() => {
+        if (calendarResizeRafRef.current !== null) {
+            window.cancelAnimationFrame(calendarResizeRafRef.current);
+            calendarResizeRafRef.current = null;
+        }
+        if (calendarResizeRaf2Ref.current !== null) {
+            window.cancelAnimationFrame(calendarResizeRaf2Ref.current);
+            calendarResizeRaf2Ref.current = null;
+        }
+
+        if (calendarView === "dayGridMonth") {
+            calendarResizeRafRef.current = window.requestAnimationFrame(() => {
+                calendarResizeRafRef.current = null;
+                calendarResizeRaf2Ref.current = window.requestAnimationFrame(
+                    () => {
+                        calendarResizeRaf2Ref.current = null;
+                        calendarRef.current?.getApi().updateSize();
+                    },
+                );
+            });
+            return;
+        }
+
+        calendarResizeRafRef.current = window.requestAnimationFrame(() => {
+            calendarResizeRafRef.current = null;
+            calendarRef.current?.getApi().updateSize();
+        });
+    }, [calendarView]);
+
+    useEffect(() => {
+        scheduleCalendarResize();
+
+        return () => {
+            if (calendarResizeRafRef.current !== null) {
+                window.cancelAnimationFrame(calendarResizeRafRef.current);
+                calendarResizeRafRef.current = null;
+            }
+            if (calendarResizeRaf2Ref.current !== null) {
+                window.cancelAnimationFrame(calendarResizeRaf2Ref.current);
+                calendarResizeRaf2Ref.current = null;
+            }
+        };
+    }, [
+        detailPanelMode,
+        isDetailPanelClosing,
+        isFullDayTimelineVisible,
+        isSidebarOpen,
+        scheduleCalendarResize,
+    ]);
 
     useEffect(() => {
         if (!selectedTask) {
@@ -2596,6 +2648,14 @@ export function App() {
             ref={appShellRef}
             className={`app-shell ${themeMode} ${isSidebarOpen ? "sidebar-open" : "sidebar-collapsed"}`}
             style={appShellStyle}
+            onTransitionEnd={(event) => {
+                if (
+                    event.target === event.currentTarget &&
+                    event.propertyName === "grid-template-columns"
+                ) {
+                    scheduleCalendarResize();
+                }
+            }}
             onClick={() => {
                 setIsSettingsMenuOpen(false);
                 setIsWorkingHoursSettingsOpen(false);
@@ -2610,6 +2670,16 @@ export function App() {
                 className={`task-sidebar ${isSidebarOpen ? "task-sidebar-open" : "task-sidebar-collapsed"}`}
                 aria-hidden={!isSidebarOpen}
                 inert={!isSidebarOpen}
+                onTransitionEnd={(event) => {
+                    if (
+                        event.target === event.currentTarget &&
+                        (event.propertyName === "opacity" ||
+                            event.propertyName === "transform" ||
+                            event.propertyName === "padding-right")
+                    ) {
+                        scheduleCalendarResize();
+                    }
+                }}
             >
                 <div className="sidebar-header">
                     {currentUser && (
@@ -4351,6 +4421,16 @@ export function App() {
             <section
                 className={`calendar-panel ${dragTargetMode === "schedule" ? "drag-target-calendar-active" : ""}`}
                 aria-label="Scheduled tasks calendar"
+                onTransitionEnd={(event) => {
+                    if (
+                        event.target === event.currentTarget &&
+                        (event.propertyName === "box-shadow" ||
+                            event.propertyName === "background-color" ||
+                            event.propertyName === "transform")
+                    ) {
+                        scheduleCalendarResize();
+                    }
+                }}
             >
                 <AnimatePresence initial={false}>
                     {dragTargetMode === "schedule" && (
@@ -4543,12 +4623,15 @@ export function App() {
                 </div>
 
                 <motion.div
-                    className="calendar-transition-shell"
+                    className={`calendar-transition-shell${
+                        isWorkingTimeGridView
+                            ? " calendar-working-range"
+                            : ""
+                    }`}
                     animate={calendarTransitionControls}
                     initial={false}
                 >
                     <FullCalendar
-                        key={calendarTimelineKey}
                         ref={calendarRef}
                         plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
                         initialView={calendarView}
@@ -4589,7 +4672,13 @@ export function App() {
                         }
                         slotMinTime={calendarSlotMinTime}
                         slotMaxTime={calendarSlotMaxTime}
-                        height="100%"
+                        height={isWorkingTimeGridView ? "auto" : "100%"}
+                        {...(isWorkingTimeGridView
+                            ? {
+                                  contentHeight: "auto" as const,
+                                  expandRows: false as const,
+                              }
+                            : {})}
                     />
                 </motion.div>
             </section>

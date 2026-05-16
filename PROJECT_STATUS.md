@@ -40,6 +40,7 @@ This file summarizes the current repository state for future contributors and AI
 - Sidebar drag/drop stability fixes
 - No-time task drag preview and re-render fixes
 - FullCalendar event rendering crash fix for transient drag events
+- Month view now renders with an aligned day grid on the initial switch without requiring a click to fix layout
 - Undo snackbar lifecycle cleanup so only the latest task mutation can own the undo control
 - Task and category routes now scope data to the authenticated user
 - Cross-user backend isolation tests
