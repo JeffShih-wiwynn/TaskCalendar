@@ -72,13 +72,16 @@ This document summarizes what is already in the repository snapshot and where th
   - Recent task changes now surface a compact floating undo control instead of the previous snackbar/button block.
   - Undo remains single-step and in-memory only.
   - Any newer task mutation clears the previous undo state before showing the next undoable or non-undoable message.
+- [x] Step 13: Phase 1 PWA and mobile usability
+  - Vite PWA support is configured with a generated manifest, app icons, standalone display mode, and static asset service worker.
+  - The service worker precaches built frontend assets only and avoids intentional caching for API, auth, backup, and health routes.
+  - Narrow-screen CSS stacks the sidebar and calendar, hides the desktop sidebar resizer, improves touch target sizing, and prevents task forms from overflowing horizontally.
 
 ## Current Notes
 
 - The app is still web-first.
 - There is no native Android app yet.
-- There is no PWA manifest or service worker yet.
-- The backend authentication foundation exists, but frontend login and task-level authenticated user scoping are not implemented yet.
+- Phase 1 PWA install support exists, but offline task editing, offline CRUD sync, and push notifications are not implemented.
 - Alembic is now configured for backend schema upgrades and fresh database initialization.
 - Existing databases that already match the baseline schema should be adopted with `alembic stamp head` instead of relying on startup mutation.
 - Application timezone behavior is now configurable with `APP_TIMEZONE`, defaulting to `UTC` when unset.
@@ -102,4 +105,4 @@ This document summarizes what is already in the repository snapshot and where th
 - Frontend: React + TypeScript + FullCalendar.
 - Backend: FastAPI + SQLAlchemy + PostgreSQL.
 - Local dev: `scripts/dev.sh` can start and stop the stack in the background.
-- Deployment portability and Android support are still roadmap items, not finished deliverables.
+- Android support is still a roadmap item, not a finished deliverable.

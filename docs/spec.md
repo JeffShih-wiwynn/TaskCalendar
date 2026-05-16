@@ -43,6 +43,8 @@ The current app is web-first:
 - Reusable backend current-user dependency for authenticated endpoints.
 - Backend REST endpoints for tasks and task lists.
 - Alembic-managed PostgreSQL schema migrations.
+- Phase 1 PWA support with a manifest, app icons, standalone display mode, and generated static asset service worker.
+- Basic responsive layout for phone-width browsers, stacking the sidebar and calendar instead of forcing the desktop side-by-side layout.
 
 ## Intended Future Features
 
@@ -83,6 +85,8 @@ The current app is web-first:
 - Android app implementation.
 - Android widget implementation.
 - Offline/local-first sync.
+- Offline task editing or offline CRUD sync.
+- Push notifications.
 - Full CalDAV server support.
 - Google Calendar or external calendar sync.
 - Natural-language task parsing.

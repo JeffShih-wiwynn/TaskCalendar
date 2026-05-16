@@ -83,6 +83,8 @@ Current frontend behavior includes:
 - a compact `Work` / `Full` toggle for week/day time-grid views, switching between working-hours and full-day ranges
 - a clickable year control in month view
 - month view now keeps its date grid aligned on the initial render without needing a click to recalculate layout
+- Phase 1 PWA support with install metadata, app icons, and production static asset caching
+- basic narrow-screen layout support for phone-sized browsers
 - category colors with inline category editing
 - customizable `Upcoming` day ranges
 - backup export and import actions in the sidebar settings menu
@@ -90,6 +92,20 @@ Current frontend behavior includes:
 - completed tasks stay category-colored in the calendar with increased transparency
 - a completed-task calendar toggle in the `Completed` view
 - right-click delete from calendar events and task-list rows
+
+## PWA Verification
+
+PWA support is generated during the production frontend build:
+
+```sh
+cd frontend
+npm run build
+npm run preview
+```
+
+Open the preview URL in Chrome or another PWA-capable browser. In DevTools, check **Application -> Manifest** for the app name, theme color, standalone display mode, and icons. Check **Application -> Service Workers** to confirm the generated service worker is registered. The service worker precaches built static assets only; task API, auth, backup, and health requests are not intentionally cached.
+
+To verify Add to Home Screen, use the browser install button from the address bar on desktop Chrome, or open the browser menu on Android Chrome and choose **Add to Home screen** or **Install app**.
 
 ## Convenience Script
 

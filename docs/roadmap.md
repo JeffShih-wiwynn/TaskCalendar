@@ -84,16 +84,18 @@ Goal: support full app backup, restore, and migration of user-owned data.
 
 Goal: make the web app pleasant to use on Android browsers before building native Android.
 
-- [ ] Add a PWA manifest if one is missing.
-- [ ] Add a service worker only if it improves the actual UX and does not make development brittle.
-- [ ] Improve responsive layout for narrow Android browser screens.
-- [ ] Keep desktop drag-and-drop and resizing.
+- [x] Add a PWA manifest if one is missing.
+- [x] Add a service worker only if it improves the actual UX and does not make development brittle.
+- [x] Improve responsive layout for narrow Android browser screens.
+- [x] Keep desktop drag-and-drop and resizing.
 - [ ] Do not rely only on drag-and-drop on mobile.
 - [ ] Add a bottom sheet or other mobile-friendly task editor.
 - [ ] Tapping a task on mobile should open an editor.
 - [ ] The mobile editor should support title, completed state, `scheduled_start`, `scheduled_end`, and notes.
 - [ ] Keep `eventDrop` and `eventResize` working where supported.
 - [ ] Make time editing reliable even when touch dragging is awkward.
+- [ ] Add offline task editing/sync only after a safe conflict and auth strategy exists.
+- [ ] Add push notifications only after notification delivery semantics are designed.
 
 ---
 

@@ -2259,12 +2259,28 @@ input[type="checkbox"].task-checkbox:checked {
 }
 
 @media (max-width: 860px) {
+  body {
+    overflow-x: hidden;
+  }
+
   .app-shell {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
     grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 12px;
   }
 
   .task-sidebar {
+    width: 100%;
+    max-height: 72dvh;
     padding-right: 0;
+    overflow-y: auto;
+  }
+
+  .task-sidebar-collapsed {
+    display: none;
   }
 
   .sidebar-resizer {
@@ -2283,7 +2299,10 @@ input[type="checkbox"].task-checkbox:checked {
   }
 
   .calendar-panel {
-    min-height: 760px;
+    min-width: 0;
+    min-height: 680px;
+    padding: 12px;
+    gap: 12px;
   }
 
   .calendar-transition-shell {
@@ -2297,15 +2316,84 @@ input[type="checkbox"].task-checkbox:checked {
 
   .calendar-toolbar {
     grid-template-columns: 1fr;
+    gap: 10px;
     justify-items: stretch;
   }
 
   .calendar-toolbar-group,
   .calendar-toolbar-title {
     justify-content: center;
+    min-width: 0;
   }
 
   .calendar-view-switcher {
     flex-wrap: wrap;
+  }
+
+  .calendar-toolbar-button,
+  .calendar-nav-button,
+  .calendar-year-button,
+  .theme-toggle,
+  .filter-trigger,
+  .filter-add-button,
+  .sidebar-create-task-button,
+  .task-form button,
+  .secondary-button {
+    min-height: 44px;
+  }
+
+  .task-form {
+    padding: 12px;
+  }
+
+  .task-form-recurring-top,
+  .task-form-datetime-row {
+    grid-template-columns: 1fr;
+  }
+
+  .task-form-recurring-bottom {
+    max-width: none;
+  }
+
+  .fc {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-shell {
+    padding: 8px;
+  }
+
+  .task-sidebar {
+    max-height: 68dvh;
+    gap: 12px;
+  }
+
+  .sidebar-header,
+  .task-detail-header {
+    align-items: flex-start;
+  }
+
+  .calendar-panel {
+    min-height: 620px;
+    padding: 10px;
+  }
+
+  .calendar-toolbar-title {
+    font-size: 1.12rem;
+  }
+
+  .calendar-toolbar-group {
+    flex-wrap: wrap;
+  }
+
+  .calendar-year-control {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .task-row {
+    padding: 9px;
   }
 }

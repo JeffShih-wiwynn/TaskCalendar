@@ -12,6 +12,7 @@ This file summarizes the current repository state for future contributors and AI
 - Notifications: Discord webhook notifications with per-task notification fields
 - Timezone: application timezone is configurable with `APP_TIMEZONE`, defaulting to `UTC`
 - Deployment: non-Docker Ubuntu deployment and minimal Docker/Compose deployment are both documented
+- PWA: installable production build with manifest, app icons, standalone display mode, and static asset service worker
 
 ## Completed Major Features
 
@@ -29,6 +30,7 @@ This file summarizes the current repository state for future contributors and AI
 - Drag/drop and resize support for scheduled tasks
 - Overdue and completed task views
 - Single-step floating undo control for recent task changes, with stale undo state cleared on newer task mutations
+- Phase 1 PWA install support and basic phone-width responsive layout
 
 ## Recently Completed Work
 
@@ -51,18 +53,20 @@ This file summarizes the current repository state for future contributors and AI
 - JSON export payload now returns only the authenticated user's tasks and task lists
 - Sidebar backup export/import actions now support user-scoped restore with explicit confirmation before import
 - `APP_TIMEZONE` now controls application datetime serialization, recurrence boundaries, notification scheduling, and backup datetime handling
+- Vite PWA support now generates a manifest and service worker for production static assets without intentional API response caching
 
 ## Work Currently In Progress
 
-- Production hardening and deployment verification
+- Mobile ergonomics beyond the Phase 1 responsive baseline
 
 ## Known Limitations
 
 - Full JSON backup/export/import workflow exists for authenticated users
 - No CalDAV sync
 - No offline sync
+- No push notifications
 - Docker deployment is documented but not the primary production path yet
 
 ## Next Recommended Priority
 
-Deployment portability and environment configuration are the next major milestone.
+Mobile task editing ergonomics and production verification are the next major milestones.
