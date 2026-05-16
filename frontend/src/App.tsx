@@ -85,19 +85,29 @@ type TaskState =
 type TaskView =
     | "today"
     | "upcoming"
+    | "unscheduled"
     | "overdue"
     | "completed"
-    | "unscheduled"
     | "all";
 type ThemeMode = "light" | "dark";
 type CalendarView = "dayGridMonth" | "timeGridWeek" | "timeGridDay";
 type CalendarTransitionKind = "neutral" | "view" | "prev" | "next" | "today";
 type DragTargetMode = "reorder" | "schedule" | null;
 type AuthMode = "login" | "register";
-const unclassifiedCategoryFilter = "__unclassified__";
+type WorkingHoursSettings = {
+    start: string;
+    end: string;
+};
 const defaultSidebarWidth = 300;
 const minSidebarWidth = 240;
 const minCalendarWidth = 320;
+const defaultWorkingHours: WorkingHoursSettings = {
+    start: "08:00",
+    end: "22:00",
+};
+const workingHourOptions = Array.from({ length: 24 }, (_, index) =>
+    `${String(index).padStart(2, "0")}:00`,
+);
 
 type TaskFormState = {
     title: string;
@@ -120,6 +130,11 @@ type EditFormState = TaskFormState & {
 type WebhookSettingsFormState = {
     discord_webhook_url: string;
     discord_message_template: string;
+};
+
+type CategoryVisibilityState = {
+    none: boolean;
+    lists: Record<string, boolean>;
 };
 
 type AuthFormState = {
@@ -148,6 +163,14 @@ type PendingTaskEditState = {
     updates: Parameters<typeof updateTask>[1];
     source: "form" | "calendar";
     revert?: () => void;
+};
+
+type TaskUndoState = {
+    message: string;
+    task?: ScheduledTask;
+    kind: "update" | "delete" | "unavailable";
+    restoreFields?: Array<keyof Parameters<typeof updateTask>[1]>;
+    updateScope?: "single" | "series";
 };
 
 type DetailPanelMode = "create" | "edit" | null;
@@ -185,20 +208,22 @@ const notificationUnits: Array<{ id: NotificationUnit; label: string }> = [
 
 const defaultCategoryColor = "#176b58";
 
+const defaultCategoryVisibility: CategoryVisibilityState = {
+    none: true,
+    lists: {},
+};
+
 const taskViews: Array<{ id: TaskView; label: string }> = [
     { id: "today", label: "Today" },
     { id: "upcoming", label: "Upcoming" },
-    { id: "overdue", label: "Overdue" },
-    { id: "completed", label: "Completed" },
-    { id: "unscheduled", label: "No time tasks" },
-    { id: "all", label: "All tasks" },
+    { id: "unscheduled", label: "Inbox" },
 ];
 
-const calendarViews: Array<{ id: CalendarView; label: string }> = [
-    { id: "dayGridMonth", label: "Month" },
-    { id: "timeGridWeek", label: "Week" },
-    { id: "timeGridDay", label: "Day" },
-];
+const calendarViewCycle: Record<CalendarView, CalendarView> = {
+    timeGridWeek: "timeGridDay",
+    timeGridDay: "dayGridMonth",
+    dayGridMonth: "timeGridWeek",
+};
 
 const calendarTransitionEase = [0.22, 1, 0.36, 1] as const;
 const motionTimings = {
@@ -228,15 +253,21 @@ export function App() {
     const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialThemeMode);
     const [isSidebarOpen, setIsSidebarOpen] = useState(getInitialSidebarOpen);
     const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
+    const [workingHours, setWorkingHours] = useState(getInitialWorkingHours);
+    const [isFullDayTimelineVisible, setIsFullDayTimelineVisible] =
+        useState(false);
     const [taskState, setTaskState] = useState<TaskState>({
         status: "loading",
         tasks: [],
     });
     const [activeView, setActiveView] = useState<TaskView>("today");
     const [upcomingDays, setUpcomingDays] = useState(7);
-    const [showCompletedOnCalendar, setShowCompletedOnCalendar] =
-        useState(true);
+    const [showCompletedTasks, setShowCompletedTasks] = useState(true);
     const [activeListId, setActiveListId] = useState<string | null>(null);
+    const [areAllCategoriesVisible, setAreAllCategoriesVisible] =
+        useState(true);
+    const [categoryVisibility, setCategoryVisibility] =
+        useState<CategoryVisibilityState>(defaultCategoryVisibility);
     const [taskLists, setTaskLists] = useState<TaskList[]>([]);
     const [unscheduledOrder, setUnscheduledOrder] = useState<string[]>(
         getInitialUnscheduledOrder,
@@ -250,6 +281,8 @@ export function App() {
     const [editingListColor, setEditingListColor] =
         useState(defaultCategoryColor);
     const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
+    const [isWorkingHoursSettingsOpen, setIsWorkingHoursSettingsOpen] =
+        useState(false);
     const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
     const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
     const [isAddingCategory, setIsAddingCategory] = useState(false);
@@ -266,10 +299,13 @@ export function App() {
         useState<PendingTaskDeleteState | null>(null);
     const [pendingTaskEdit, setPendingTaskEdit] =
         useState<PendingTaskEditState | null>(null);
+    const [taskUndo, setTaskUndo] = useState<TaskUndoState | null>(null);
+    const [isUndoingTask, setIsUndoingTask] = useState(false);
     const [detailPanelMode, setDetailPanelMode] =
         useState<DetailPanelMode>(null);
     const [isDetailPanelClosing, setIsDetailPanelClosing] = useState(false);
     const [isWebhookSettingsOpen, setIsWebhookSettingsOpen] = useState(false);
+    const [isBackupSettingsOpen, setIsBackupSettingsOpen] = useState(false);
     const [webhookSettings, setWebhookSettings] = useState<AppSettings | null>(
         null,
     );
@@ -289,7 +325,6 @@ export function App() {
         null,
     );
     const [isBackupLoading, setIsBackupLoading] = useState(false);
-    const [isBackupDownloading, setIsBackupDownloading] = useState(false);
     const [backupImportFile, setBackupImportFile] = useState<File | null>(null);
     const [isBackupImporting, setIsBackupImporting] = useState(false);
     const [backupImportMessage, setBackupImportMessage] = useState<string | null>(
@@ -315,11 +350,14 @@ export function App() {
         useRef<CalendarTransitionKind>("neutral");
     const calendarEventAnimationTimeoutRef = useRef<number | null>(null);
     const appShellRef = useRef<HTMLElement | null>(null);
+    const backupFileInputRef = useRef<HTMLInputElement | null>(null);
     const taskListRef = useRef<HTMLElement | null>(null);
     const tasksRef = useRef<ScheduledTask[]>([]);
     const visibleTasksRef = useRef<ScheduledTask[]>([]);
     const taskRowPointerStateRef = useRef<TaskRowPointerState | null>(null);
     const taskRowWindowDragCleanupRef = useRef<(() => void) | null>(null);
+    const previousCategoryVisibilityRef =
+        useRef<CategoryVisibilityState | null>(null);
     const draggedUnscheduledTaskIdRef = useRef<string | null>(null);
     const suppressTaskRowClickRef = useRef<string | null>(null);
     const scheduleDragCleanupRef = useRef<(() => void) | null>(null);
@@ -355,8 +393,23 @@ export function App() {
         : undefined;
 
     const visibleTasks = useMemo(
-        () => filterTasksForView(tasks, activeView, activeListId, upcomingDays),
-        [activeListId, activeView, tasks, upcomingDays],
+        () =>
+            filterTasksForView(
+                tasks,
+                activeView,
+                areAllCategoriesVisible,
+                categoryVisibility,
+                upcomingDays,
+                showCompletedTasks,
+            ),
+        [
+            activeView,
+            areAllCategoriesVisible,
+            categoryVisibility,
+            showCompletedTasks,
+            tasks,
+            upcomingDays,
+        ],
     );
     const orderedVisibleTasks = useMemo(
         () =>
@@ -381,36 +434,28 @@ export function App() {
         [activeView],
     );
 
-    const activeCategory = useMemo(
-        () =>
-            activeListId && activeListId !== unclassifiedCategoryFilter
-                ? (taskLists.find((taskList) => taskList.id === activeListId) ??
-                  null)
-                : null,
-        [activeListId, taskLists],
-    );
-
-    const activeCategoryLabel =
-        activeListId === unclassifiedCategoryFilter
-            ? "Unclassified"
-            : (activeCategory?.name ?? "All");
-    const selectedListIdForForms =
-        activeListId && activeListId !== unclassifiedCategoryFilter
-            ? activeListId
-            : "";
+    const activeCategoryLabel = areAllCategoriesVisible ? "All" : "Filtered";
+    const selectedListIdForForms = activeListId ?? "";
+    const categoryFilterKey = areAllCategoriesVisible
+        ? "all"
+        : `custom-${categoryVisibility.none ? "none-on" : "none-off"}-${taskLists
+              .map(
+                  (taskList) =>
+                      `${taskList.id}:${(categoryVisibility.lists[taskList.id] ?? true) ? "on" : "off"}`,
+              )
+              .join("|")}`;
 
     const calendarTasks = useMemo(() => {
-        const categoryFilteredTasks =
-            activeListId === unclassifiedCategoryFilter
-                ? tasks.filter((task) => task.list_id === null)
-                : activeListId
-                  ? tasks.filter((task) => task.list_id === activeListId)
-                  : tasks;
-
-        return categoryFilteredTasks.filter(
-            (task) => showCompletedOnCalendar || !task.completed,
+        return tasks.filter(
+            (task) =>
+                isTaskVisibleForCategory(
+                    task,
+                    areAllCategoriesVisible,
+                    categoryVisibility,
+                ) &&
+                (showCompletedTasks || !task.completed),
         );
-    }, [activeListId, showCompletedOnCalendar, tasks]);
+    }, [areAllCategoriesVisible, categoryVisibility, showCompletedTasks, tasks]);
     const isTimeGridView =
         calendarView === "timeGridWeek" || calendarView === "timeGridDay";
 
@@ -419,6 +464,28 @@ export function App() {
             .filter((task) => task.scheduled_start)
             .map((task) => mapTaskToCalendarEvent(task, categoryColorById));
     }, [calendarTasks, categoryColorById]);
+    const calendarSlotMinTime = isFullDayTimelineVisible
+        ? "00:00:00"
+        : `${workingHours.start}:00`;
+    const calendarSlotMaxTime = isFullDayTimelineVisible
+        ? "24:00:00"
+        : `${workingHours.end}:00`;
+    const calendarTimelineKey = `${calendarSlotMinTime}-${calendarSlotMaxTime}`;
+    const calendarViewToggleLabel =
+        calendarView === "timeGridWeek"
+            ? "Week"
+            : calendarView === "timeGridDay"
+              ? "Day"
+              : "Month";
+    const updateWorkingHours = useCallback(
+        (updates: Partial<WorkingHoursSettings>) => {
+            setWorkingHours((current) => ({
+                ...current,
+                ...updates,
+            }));
+        },
+        [],
+    );
 
     const resetAppData = useCallback(() => {
         locallyUpdatedTasksRef.current.clear();
@@ -427,6 +494,7 @@ export function App() {
         setSelectedTaskId(null);
         setDetailPanelMode(null);
         setFormError(null);
+        setTaskUndo(null);
         setWebhookSettings(null);
         setWebhookSettingsDraft({
             discord_webhook_url: "",
@@ -455,6 +523,7 @@ export function App() {
         try {
             const payload = await fetchBackupExport();
             setBackupSummary(payload);
+            downloadBackupPayload(payload);
         } catch (error) {
             setFormError(
                 error instanceof Error
@@ -463,29 +532,8 @@ export function App() {
             );
         } finally {
             setIsBackupLoading(false);
-            setIsSettingsMenuOpen(false);
         }
     }, []);
-
-    const handleConfirmBackupDownload = useCallback(() => {
-        if (!backupSummary) {
-            return;
-        }
-
-        setIsBackupDownloading(true);
-        try {
-            downloadBackupPayload(backupSummary);
-            setBackupSummary(null);
-        } catch (error) {
-            setFormError(
-                error instanceof Error
-                    ? error.message
-                    : "Unable to export backup",
-            );
-        } finally {
-            setIsBackupDownloading(false);
-        }
-    }, [backupSummary]);
 
     const handleAuthSubmit = useCallback(
         async (event: FormEvent<HTMLFormElement>) => {
@@ -692,17 +740,8 @@ export function App() {
         }
     }, [handleAuthExpired]);
 
-    const handleBackupImportFileChange = useCallback(
-        (event: ChangeEvent<HTMLInputElement>) => {
-            setBackupImportFile(event.target.files?.[0] ?? null);
-            setBackupImportMessage(null);
-            setBackupImportError(null);
-        },
-        [],
-    );
-
-    const handleConfirmBackupImport = useCallback(async () => {
-        if (!backupImportFile) {
+    const handleConfirmBackupImport = useCallback(async (file: File | null) => {
+        if (!file) {
             setBackupImportError("Choose a JSON backup file first.");
             return;
         }
@@ -711,7 +750,7 @@ export function App() {
         setBackupImportMessage(null);
         setBackupImportError(null);
         try {
-            const text = await readBackupFileText(backupImportFile);
+            const text = await readBackupFileText(file);
             const payload = JSON.parse(text) as BackupExportPayload;
             const result = await importBackup(payload);
             setBackupImportMessage(
@@ -731,7 +770,22 @@ export function App() {
         } finally {
             setIsBackupImporting(false);
         }
-    }, [backupImportFile, refreshTaskLists, refreshTasks]);
+    }, [refreshTaskLists, refreshTasks]);
+
+    const handleBackupImportFileChange = useCallback(
+        (event: ChangeEvent<HTMLInputElement>) => {
+            const file = event.target.files?.[0] ?? null;
+            event.target.value = "";
+            setBackupImportFile(file);
+            setBackupImportMessage(null);
+            setBackupImportError(null);
+
+            if (!file) {
+                return;
+            }
+        },
+        [],
+    );
 
     const refreshWebhookSettings = useCallback(async () => {
         try {
@@ -782,6 +836,23 @@ export function App() {
     }, [sidebarWidth]);
 
     useEffect(() => {
+        saveWorkingHours(workingHours);
+    }, [workingHours]);
+
+    useEffect(() => {
+        setCategoryVisibility((current) =>
+            reconcileCategoryVisibility(current, taskLists),
+        );
+        previousCategoryVisibilityRef.current =
+            previousCategoryVisibilityRef.current
+                ? reconcileCategoryVisibility(
+                      previousCategoryVisibilityRef.current,
+                      taskLists,
+                  )
+                : null;
+    }, [taskLists]);
+
+    useEffect(() => {
         const unscheduledTaskIds = tasks
             .filter((task) => !task.scheduled_start && !task.scheduled_end)
             .map((task) => task.id);
@@ -797,9 +868,26 @@ export function App() {
         saveUnscheduledOrder(unscheduledOrder);
     }, [unscheduledOrder]);
 
+    useLayoutEffect(() => {
+        const api = calendarRef.current?.getApi();
+        if (!api) {
+            return;
+        }
+
+        api.scrollToTime(
+            isFullDayTimelineVisible ? "00:00:00" : `${workingHours.start}:00`,
+        );
+        api.updateSize();
+    }, [
+        calendarView,
+        isFullDayTimelineVisible,
+        workingHours.end,
+        workingHours.start,
+    ]);
+
     useEffect(() => {
         const taskListElement = taskListRef.current;
-        if (!taskListElement || detailPanelMode || activeView !== "unscheduled") {
+        if (!taskListElement || detailPanelMode) {
             return;
         }
 
@@ -998,6 +1086,64 @@ export function App() {
         setFormError(null);
     }, [pendingTaskEdit]);
 
+    const clearUndoState = useCallback(() => {
+        setTaskUndo(null);
+    }, []);
+
+    const showTaskUndo = useCallback((undo: TaskUndoState) => {
+        setTaskUndo(undo);
+    }, []);
+
+    const handleUndoTaskChange = useCallback(async () => {
+        if (!taskUndo) {
+            return;
+        }
+
+        setFormError(null);
+        setIsUndoingTask(true);
+
+        try {
+            if (taskUndo.kind === "unavailable" || !taskUndo.task) {
+                setTaskUndo(null);
+            } else if (taskUndo.kind === "delete") {
+                const restoredTask = await createTask(
+                    buildTaskCreateInputFromSnapshot(taskUndo.task),
+                );
+                replaceTaskInState(restoredTask);
+            } else if (taskUndo.updateScope === "series") {
+                await updateTask(
+                    taskUndo.task.id,
+                    buildTaskUpdateInputFromSnapshot(
+                        taskUndo.task,
+                        taskUndo.restoreFields,
+                    ),
+                    { updateScope: "series" },
+                );
+                reloadTasks();
+            } else {
+                const restoredTask = await updateTask(
+                    taskUndo.task.id,
+                    buildTaskUpdateInputFromSnapshot(
+                        taskUndo.task,
+                        taskUndo.restoreFields,
+                    ),
+                );
+                replaceTaskInState(restoredTask);
+                void refreshTasks();
+            }
+
+            setTaskUndo(null);
+        } catch (error) {
+            setFormError(
+                error instanceof Error
+                    ? error.message
+                    : "Unable to undo task change",
+            );
+        } finally {
+            setIsUndoingTask(false);
+        }
+    }, [refreshTasks, reloadTasks, replaceTaskInState, taskUndo]);
+
     const runTaskDelete = useCallback(
         async (
             taskId: string,
@@ -1005,12 +1151,19 @@ export function App() {
             deleteScope: "single" | "following" = "single",
         ) => {
             setFormError(null);
+            clearUndoState();
             setIsDeleting(true);
+            const previousTask = tasksRef.current.find(
+                (task) => task.id === taskId,
+            );
 
             try {
                 await deleteTask(taskId, { deleteScope });
                 locallyUpdatedTasksRef.current.delete(taskId);
                 setPendingTaskDelete(null);
+                if (previousTask) {
+                    showTaskUndo(buildDeleteTaskUndo(previousTask, deleteScope));
+                }
 
                 if (source === "detail") {
                     closeDetailPanel();
@@ -1036,7 +1189,7 @@ export function App() {
                 setIsDeleting(false);
             }
         },
-        [closeDetailPanel, reloadTasks, selectedTaskId],
+        [clearUndoState, closeDetailPanel, reloadTasks, selectedTaskId, showTaskUndo],
     );
 
     const runTaskUpdate = useCallback(
@@ -1047,13 +1200,22 @@ export function App() {
             source: "form" | "calendar" = "form",
         ) => {
             setFormError(null);
+            clearUndoState();
             setIsEditSaving(true);
+            const previousTask = tasksRef.current.find(
+                (task) => task.id === taskId,
+            );
 
             try {
                 if (updateScope === "series") {
                     await updateTask(taskId, updates, { updateScope });
                 } else {
                     await updateTask(taskId, updates);
+                }
+                if (previousTask) {
+                    showTaskUndo(
+                        buildUpdateTaskUndo(previousTask, updates, updateScope),
+                    );
                 }
                 setPendingTaskEdit(null);
                 reloadTasks();
@@ -1074,7 +1236,7 @@ export function App() {
                 setIsEditSaving(false);
             }
         },
-        [closeDetailPanel, pendingTaskEdit, reloadTasks],
+        [clearUndoState, closeDetailPanel, pendingTaskEdit, reloadTasks, showTaskUndo],
     );
 
     const navigateCalendar = useCallback((direction: "prev" | "next") => {
@@ -1103,6 +1265,10 @@ export function App() {
         setIsYearPickerOpen(false);
     }, [startCalendarTransition]);
 
+    const cycleCalendarView = useCallback(() => {
+        changeCalendarView(calendarViewCycle[calendarView]);
+    }, [calendarView, changeCalendarView]);
+
     const submitYearChange = useCallback(
         (event: FormEvent<HTMLFormElement>) => {
             event.preventDefault();
@@ -1128,6 +1294,7 @@ export function App() {
         async (dropInfo: EventDropArg) => {
             const task = tasks.find((item) => item.id === dropInfo.event.id);
             const updates = getCalendarEventScheduleUpdate(dropInfo.event);
+            clearUndoState();
 
             if (task && shouldPromptRecurringTaskEdit(task, updates)) {
                 setPendingTaskEdit({
@@ -1141,6 +1308,11 @@ export function App() {
 
             try {
                 await updateTask(dropInfo.event.id, updates);
+                if (task) {
+                    showTaskUndo(
+                        buildUpdateTaskUndo(task, updates, "single", "Task moved."),
+                    );
+                }
                 reloadTasks();
             } catch (error) {
                 dropInfo.revert();
@@ -1151,13 +1323,14 @@ export function App() {
                 );
             }
         },
-        [reloadTasks, tasks],
+        [clearUndoState, reloadTasks, showTaskUndo, tasks],
     );
 
     const handleEventResize = useCallback(
         async (resizeInfo: EventResizeDoneArg) => {
             const task = tasks.find((item) => item.id === resizeInfo.event.id);
             const updates = getCalendarEventScheduleUpdate(resizeInfo.event);
+            clearUndoState();
 
             if (task && shouldPromptRecurringTaskEdit(task, updates)) {
                 setPendingTaskEdit({
@@ -1171,6 +1344,16 @@ export function App() {
 
             try {
                 await updateTask(resizeInfo.event.id, updates);
+                if (task) {
+                    showTaskUndo(
+                        buildUpdateTaskUndo(
+                            task,
+                            updates,
+                            "single",
+                            "Task resized.",
+                        ),
+                    );
+                }
                 reloadTasks();
             } catch (error) {
                 resizeInfo.revert();
@@ -1181,7 +1364,7 @@ export function App() {
                 );
             }
         },
-        [reloadTasks, tasks],
+        [clearUndoState, reloadTasks, showTaskUndo, tasks],
     );
 
     const openCreatePanel = useCallback(
@@ -1256,12 +1439,21 @@ export function App() {
 
     const handleCheckboxChange = useCallback(
         async (task: ScheduledTask) => {
+            clearUndoState();
             try {
                 if (task.completed) {
                     await uncompleteTask(task.id);
                 } else {
                     await completeTask(task.id);
                 }
+                showTaskUndo({
+                    kind: "update",
+                    task,
+                    restoreFields: ["completed"],
+                    message: task.completed
+                        ? "Task marked incomplete."
+                        : "Task completed.",
+                });
                 reloadTasks();
             } catch (error) {
                 setFormError(
@@ -1271,7 +1463,7 @@ export function App() {
                 );
             }
         },
-        [reloadTasks],
+        [clearUndoState, reloadTasks, showTaskUndo],
     );
 
     const completionTransition = useMemo(
@@ -1371,7 +1563,7 @@ export function App() {
         }),
         [],
     );
-    const taskContentKey = `${activeView}-${activeListId ?? "all"}-${upcomingDays}-${showCompletedOnCalendar ? "completed-on" : "completed-off"}`;
+    const taskContentKey = `${activeView}-${categoryFilterKey}-${upcomingDays}`;
 
     const renderEventContent = useCallback(
         (eventInfo: EventContentArg) => {
@@ -1449,6 +1641,7 @@ export function App() {
                     saveState.queued = null;
 
                     try {
+                        clearUndoState();
                         const updates = buildUnscheduledOrderUpdates(
                             orderToSave,
                             tasksRef.current,
@@ -1477,7 +1670,7 @@ export function App() {
                 saveState.saving = false;
             })();
         },
-        [applyLocalUnscheduledOrder, refreshTasks, replaceTasksInState],
+        [applyLocalUnscheduledOrder, clearUndoState, refreshTasks, replaceTasksInState],
     );
 
     const moveTaskRowDuringDrag = useCallback(
@@ -1727,6 +1920,9 @@ export function App() {
 
             try {
                 const updatedTask = await updateTask(task.id, updates);
+                showTaskUndo(
+                    buildUpdateTaskUndo(task, updates, "single", "Task moved."),
+                );
                 replaceTaskInState(updatedTask);
                 void refreshTasks();
             } catch (error) {
@@ -1739,7 +1935,12 @@ export function App() {
                 endScheduleDragHighlight();
             }
         },
-        [endScheduleDragHighlight, refreshTasks, replaceTaskInState],
+        [
+            endScheduleDragHighlight,
+            refreshTasks,
+            replaceTaskInState,
+            showTaskUndo,
+        ],
     );
 
     const promptRecurringTaskDelete = useCallback(
@@ -1836,6 +2037,7 @@ export function App() {
             return;
         }
 
+        clearUndoState();
         setIsSaving(true);
 
         try {
@@ -2159,6 +2361,7 @@ export function App() {
         }
 
         setFormError(null);
+        clearUndoState();
         setIsDuplicating(true);
 
         try {
@@ -2252,7 +2455,9 @@ export function App() {
 
     const openWebhookSettings = () => {
         closeDetailPanel();
+        setIsWorkingHoursSettingsOpen(false);
         setIsWebhookSettingsOpen(true);
+        setIsBackupSettingsOpen(false);
         setWebhookTestMessage(null);
         setWebhookSettingsDraft({
             discord_webhook_url: webhookSettings?.discord_webhook_url ?? "",
@@ -2262,8 +2467,61 @@ export function App() {
         setIsSettingsMenuOpen(false);
     };
 
+    const handleToggleAllCategories = (event: ReactMouseEvent<HTMLButtonElement>) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (areAllCategoriesVisible) {
+            setAreAllCategoriesVisible(false);
+            setCategoryVisibility(
+                previousCategoryVisibilityRef.current ??
+                    createDefaultCategoryVisibility(taskLists),
+            );
+            return;
+        }
+
+        previousCategoryVisibilityRef.current = categoryVisibility;
+        setCategoryVisibility(createDefaultCategoryVisibility(taskLists));
+        setAreAllCategoriesVisible(true);
+    };
+
+    const handleToggleUncategorized = (
+        event: ReactMouseEvent<HTMLButtonElement>,
+    ) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (areAllCategoriesVisible) {
+            return;
+        }
+
+        setCategoryVisibility((current) => ({
+            ...current,
+            none: !current.none,
+        }));
+    };
+
+    const handleToggleTaskListVisibility = (
+        taskListId: string,
+        event: ReactMouseEvent<HTMLButtonElement>,
+    ) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (areAllCategoriesVisible) {
+            return;
+        }
+
+        setCategoryVisibility((current) => ({
+            ...current,
+            lists: {
+                ...current.lists,
+                [taskListId]: !(current.lists[taskListId] ?? true),
+            },
+        }));
+    };
+
     const toggleSidebar = () => {
         setIsSettingsMenuOpen(false);
+        setIsBackupSettingsOpen(false);
+        setIsWebhookSettingsOpen(false);
         setContextMenu(null);
         setIsViewMenuOpen(false);
         setIsCategoryMenuOpen(false);
@@ -2309,6 +2567,11 @@ export function App() {
         "--sidebar-width": `${isSidebarOpen ? Math.max(240, sidebarWidth) : 0}px`,
         "--sidebar-resizer-width": `${isSidebarOpen ? 12 : 0}px`,
     } as CSSProperties;
+    const isSettingsSubviewOpen =
+        isSettingsMenuOpen ||
+        isWorkingHoursSettingsOpen ||
+        isWebhookSettingsOpen ||
+        isBackupSettingsOpen;
 
     if (!authToken) {
         return (
@@ -2335,6 +2598,9 @@ export function App() {
             style={appShellStyle}
             onClick={() => {
                 setIsSettingsMenuOpen(false);
+                setIsWorkingHoursSettingsOpen(false);
+                setIsWebhookSettingsOpen(false);
+                setIsBackupSettingsOpen(false);
                 setContextMenu(null);
                 setIsViewMenuOpen(false);
                 setIsCategoryMenuOpen(false);
@@ -2356,130 +2622,29 @@ export function App() {
                             className="settings-menu"
                             onClick={(event) => event.stopPropagation()}
                         >
-                                <button
-                                    type="button"
-                                    className="theme-toggle settings-toggle"
-                                    aria-label="Settings"
-                                    aria-expanded={isSettingsMenuOpen}
-                                    onClick={() =>
-                                        setIsSettingsMenuOpen(
-                                            (current) => !current,
-                                        )
-                                    }
-                                >
-                                    <span aria-hidden="true">☰</span>
-                                </button>
-                                <AnimatePresence initial={false}>
-                                    {isSettingsMenuOpen && (
-                                        <motion.div
-                                            key="settings-menu"
-                                            className="settings-menu-panel"
-                                            variants={dropdownVariants}
-                                            initial="hidden"
-                                            animate="visible"
-                                            exit="exit"
-                                            transition={dropdownTransition}
-                                        >
-                                            <button
-                                                type="button"
-                                                className="filter-option"
-                                                onClick={() => {
-                                                    setThemeMode(
-                                                        themeMode === "dark"
-                                                            ? "light"
-                                                            : "dark",
-                                                    );
-                                                    setIsSettingsMenuOpen(
-                                                        false,
-                                                    );
-                                                }}
-                                            >
-                                                Switch to{" "}
-                                                {themeMode === "dark"
-                                                    ? "light"
-                                                    : "dark"}{" "}
-                                                mode
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="filter-option"
-                                                onClick={openWebhookSettings}
-                                            >
-                                                Webhook settings
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="filter-option"
-                                                disabled={isBackupLoading}
-                                                onClick={() =>
-                                                    void handleOpenBackupSummary()
-                                                }
-                                            >
-                                                {isBackupLoading
-                                                    ? "Loading backup..."
-                                                    : "Export current backup"}
-                                            </button>
-                                            <div className="backup-import-section">
-                                                <label>
-                                                    <span>Import backup (.json)</span>
-                                                    <input
-                                                        type="file"
-                                                        accept="application/json,.json"
-                                                        onChange={
-                                                            handleBackupImportFileChange
-                                                        }
-                                                        disabled={
-                                                            isBackupImporting
-                                                        }
-                                                    />
-                                                </label>
-                                                <p className="muted">
-                                                    Importing replaces your
-                                                    current calendar data for
-                                                    this account.
-                                                </p>
-                                                {backupImportFile && (
-                                                    <p className="muted">
-                                                        Selected:{" "}
-                                                        {backupImportFile.name}
-                                                    </p>
-                                                )}
-                                                {backupImportMessage && (
-                                                    <p className="webhook-test-success">
-                                                        {backupImportMessage}
-                                                    </p>
-                                                )}
-                                                {backupImportError && (
-                                                    <p className="form-error">
-                                                        {backupImportError}
-                                                    </p>
-                                                )}
-                                                <button
-                                                    type="button"
-                                                    className="secondary-button"
-                                                    disabled={
-                                                        isBackupImporting ||
-                                                        !backupImportFile
-                                                    }
-                                                    onClick={() =>
-                                                        void handleConfirmBackupImport()
-                                                    }
-                                                >
-                                                    {isBackupImporting
-                                                        ? "Importing..."
-                                                        : "Confirm import"}
-                                                </button>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                className="filter-option"
-                                                onClick={handleLogout}
-                                            >
-                                                Logout
-                                            </button>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
+                            <button
+                                type="button"
+                                className="theme-toggle settings-toggle"
+                                aria-label={
+                                    isSettingsSubviewOpen
+                                        ? "Return to sidebar"
+                                        : "Settings"
+                                }
+                                aria-expanded={isSettingsSubviewOpen}
+                                onClick={() => {
+                                    closeDetailPanel();
+                                    setIsWorkingHoursSettingsOpen(false);
+                                    setIsWebhookSettingsOpen(false);
+                                    setIsBackupSettingsOpen(false);
+                                    setIsSettingsMenuOpen((current) =>
+                                        isSettingsSubviewOpen ? false : !current,
+                                    );
+                                }}
+                            >
+                                <span aria-hidden="true">
+                                    {isSettingsSubviewOpen ? "☰" : "⚙"}
+                                </span>
+                            </button>
                         </div>
                         <button
                             type="button"
@@ -2493,10 +2658,285 @@ export function App() {
                 </div>
 
                     <AnimatePresence initial={false} mode="wait">
+                        {!detailPanelMode && isSettingsMenuOpen && (
+                            <motion.section
+                                key="settings-menu"
+                                className="filter-section settings-menu-panel"
+                                onClick={(event) => event.stopPropagation()}
+                                variants={panelVariants}
+                                initial="hidden"
+                                animate="visible"
+                                exit="exit"
+                                transition={panelTransition}
+                            >
+                                <div className="sidebar-settings-list">
+                                    <div className="sidebar-settings-row">
+                                        <span>Dark mode</span>
+                                        <button
+                                            type="button"
+                                            className={`sidebar-switch ${themeMode === "dark" ? "sidebar-switch-on" : ""}`}
+                                            role="switch"
+                                            aria-label="Dark mode"
+                                            aria-checked={themeMode === "dark"}
+                                            onClick={() =>
+                                                setThemeMode(
+                                                    themeMode === "dark"
+                                                        ? "light"
+                                                        : "dark",
+                                                )
+                                            }
+                                        >
+                                            <span className="sidebar-switch-knob" />
+                                        </button>
+                                    </div>
+                                    <div className="sidebar-settings-row">
+                                        <span>Show completed tasks</span>
+                                        <button
+                                            type="button"
+                                            className={`sidebar-switch ${showCompletedTasks ? "sidebar-switch-on" : ""}`}
+                                            role="switch"
+                                            aria-label="Show completed tasks"
+                                            aria-checked={showCompletedTasks}
+                                            onClick={() =>
+                                                setShowCompletedTasks(
+                                                    (current) => !current,
+                                                )
+                                            }
+                                        >
+                                            <span className="sidebar-switch-knob" />
+                                        </button>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className="filter-option"
+                                        onClick={() => {
+                                            setIsSettingsMenuOpen(false);
+                                            setIsWorkingHoursSettingsOpen(true);
+                                        }}
+                                    >
+                                        Working hours
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="filter-option"
+                                        onClick={openWebhookSettings}
+                                    >
+                                        Webhook
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="filter-option"
+                                        onClick={() => {
+                                            setBackupImportMessage(null);
+                                            setBackupImportError(null);
+                                            setIsWorkingHoursSettingsOpen(false);
+                                            setIsSettingsMenuOpen(false);
+                                            setIsBackupSettingsOpen(true);
+                                        }}
+                                    >
+                                        Backup &amp; Restore
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="filter-option"
+                                        onClick={handleLogout}
+                                    >
+                                        Logout
+                                    </button>
+                                </div>
+                            </motion.section>
+                        )}
+                        {!detailPanelMode && isWorkingHoursSettingsOpen && (
+                            <motion.section
+                                key="working-hours-settings"
+                                className="filter-section"
+                                onClick={(event) => event.stopPropagation()}
+                                variants={panelVariants}
+                                initial="hidden"
+                                animate="visible"
+                                exit="exit"
+                                transition={panelTransition}
+                            >
+                                <form
+                                    className="task-form working-hours-form"
+                                    onClick={(event) => event.stopPropagation()}
+                                >
+                                    <h3 className="working-hours-title">
+                                        Working hours
+                                    </h3>
+                                    <label>
+                                        <span>Start time</span>
+                                        <input
+                                            type="time"
+                                            lang="en-GB"
+                                            min="00:00"
+                                            max="23:00"
+                                            step="3600"
+                                            value={workingHours.start}
+                                            onChange={(event) =>
+                                                updateWorkingHours({
+                                                    start: event.target.value,
+                                                })
+                                            }
+                                        />
+                                    </label>
+                                    <label>
+                                        <span>End time</span>
+                                        <input
+                                            type="time"
+                                            lang="en-GB"
+                                            min="00:00"
+                                            max="23:00"
+                                            step="3600"
+                                            value={workingHours.end}
+                                            onChange={(event) =>
+                                                updateWorkingHours({
+                                                    end: event.target.value,
+                                                })
+                                            }
+                                        />
+                                    </label>
+                                    <div className="task-form-actions">
+                                        <button
+                                            type="button"
+                                            className="ghost-button"
+                                            onClick={() => {
+                                                setIsWorkingHoursSettingsOpen(false);
+                                                setIsSettingsMenuOpen(true);
+                                            }}
+                                        >
+                                            Back
+                                        </button>
+                                    </div>
+                                </form>
+                            </motion.section>
+                        )}
+                        {!detailPanelMode && isBackupSettingsOpen && (
+                            <motion.section
+                                key="backup-settings"
+                                className="filter-section backup-settings-panel"
+                                onClick={(event) => event.stopPropagation()}
+                                variants={panelVariants}
+                                initial="hidden"
+                                animate="visible"
+                                exit="exit"
+                                transition={panelTransition}
+                            >
+                                <div className="task-form backup-settings-form">
+                                    <input
+                                        ref={backupFileInputRef}
+                                        className="visually-hidden"
+                                        type="file"
+                                        aria-label="Import backup (.json)"
+                                        accept="application/json,.json"
+                                        onChange={handleBackupImportFileChange}
+                                        disabled={isBackupImporting}
+                                    />
+                                    {backupSummary && (
+                                        <div className="backup-summary">
+                                            <div>
+                                                <span>Tasks:</span>{" "}
+                                                {backupSummary.tasks.length}
+                                            </div>
+                                            <div>
+                                                <span>Categories:</span>{" "}
+                                                {backupSummary.task_lists.length}
+                                            </div>
+                                            <div>
+                                                <span>Schema version:</span>{" "}
+                                                {backupSummary.schema_version}
+                                            </div>
+                                            <div>
+                                                <span>Exported:</span>{" "}
+                                                {formatBackupDate(
+                                                    backupSummary.exported_at,
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {backupImportFile ? (
+                                        <p className="form-error">
+                                            Importing this backup will
+                                            replace existing calendar and
+                                            account data for this account.
+                                            Confirm once to continue.
+                                        </p>
+                                    ) : (
+                                        <p className="muted">
+                                            Restore will replace existing
+                                            calendar and account data for this
+                                            account.
+                                        </p>
+                                    )}
+                                    <button
+                                        type="button"
+                                        className="backup-action-button backup-action-button-primary"
+                                        disabled={isBackupLoading}
+                                        onClick={() =>
+                                            void handleOpenBackupSummary()
+                                        }
+                                    >
+                                        {isBackupLoading
+                                            ? "Backing up..."
+                                            : "Backup"}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="backup-action-button backup-action-button-danger"
+                                        disabled={isBackupImporting}
+                                        onClick={() => {
+                                            if (backupImportFile) {
+                                                void handleConfirmBackupImport(
+                                                    backupImportFile,
+                                                );
+                                                return;
+                                            }
+                                            backupFileInputRef.current?.click();
+                                        }}
+                                    >
+                                        {isBackupImporting
+                                            ? "Restoring..."
+                                            : backupImportFile
+                                              ? "Confirm restore"
+                                              : "Restore"}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="ghost-button"
+                                        disabled={
+                                            isBackupLoading || isBackupImporting
+                                        }
+                                        onClick={() => {
+                                            setIsWorkingHoursSettingsOpen(false);
+                                            setIsBackupSettingsOpen(false);
+                                            setIsSettingsMenuOpen(true);
+                                        }}
+                                    >
+                                        Back
+                                    </button>
+                                    {backupImportFile && (
+                                        <p className="muted">
+                                            Selected: {backupImportFile.name}
+                                        </p>
+                                    )}
+                                    {backupImportMessage && (
+                                        <p className="webhook-test-success">
+                                            {backupImportMessage}
+                                        </p>
+                                    )}
+                                    {backupImportError && (
+                                        <p className="form-error">
+                                            {backupImportError}
+                                        </p>
+                                    )}
+                                </div>
+                            </motion.section>
+                        )}
                         {!detailPanelMode && isWebhookSettingsOpen && (
                             <motion.section
                                 key="webhook-settings"
                                 className="filter-section"
+                                onClick={(event) => event.stopPropagation()}
                                 variants={panelVariants}
                                 initial="hidden"
                                 animate="visible"
@@ -2590,6 +3030,7 @@ export function App() {
                                                 isWebhookSettingsTesting
                                             }
                                             onClick={() => {
+                                                setIsWorkingHoursSettingsOpen(false);
                                                 setWebhookSettingsDraft({
                                                     discord_webhook_url:
                                                         webhookSettings?.discord_webhook_url ??
@@ -2600,9 +3041,10 @@ export function App() {
                                                 });
                                                 setWebhookTestMessage(null);
                                                 setIsWebhookSettingsOpen(false);
+                                                setIsSettingsMenuOpen(true);
                                             }}
                                         >
-                                            Cancel
+                                            Back
                                         </button>
                                     </div>
                                 </form>
@@ -2610,7 +3052,12 @@ export function App() {
                         )}
                     </AnimatePresence>
 
-                    {!detailPanelMode && !isDetailPanelClosing && (
+                    {!detailPanelMode &&
+                        !isDetailPanelClosing &&
+                        !isSettingsMenuOpen &&
+                        !isWorkingHoursSettingsOpen &&
+                        !isBackupSettingsOpen &&
+                        !isWebhookSettingsOpen && (
                         <section
                             className="filter-section"
                             aria-label="Task filters"
@@ -2703,22 +3150,6 @@ export function App() {
                                 </div>
                             )}
 
-                            {activeView === "completed" && (
-                                <label className="filter-toggle-field">
-                                    <span>Show on calendar</span>
-                                    <input
-                                        type="checkbox"
-                                        className="task-checkbox task-checkbox--compact"
-                                        checked={showCompletedOnCalendar}
-                                        onChange={(event) =>
-                                            setShowCompletedOnCalendar(
-                                                event.target.checked,
-                                            )
-                                        }
-                                    />
-                                </label>
-                            )}
-
                             <div className="filter-field">
                                 <span>Category</span>
                                 <div
@@ -2742,7 +3173,6 @@ export function App() {
                                                 className="category-swatch"
                                                 style={{
                                                     backgroundColor:
-                                                        activeCategory?.color ??
                                                         "transparent",
                                                 }}
                                                 aria-hidden="true"
@@ -2771,56 +3201,64 @@ export function App() {
                                                     dropdownTransition
                                                 }
                                             >
-                                                <button
-                                                    type="button"
-                                                    className={`filter-option ${activeListId === null ? "active" : ""}`}
-                                                    onClick={() => {
-                                                        setActiveListId(null);
-                                                        setIsCategoryMenuOpen(
-                                                            false,
-                                                        );
-                                                    }}
+                                                <div className="category-filter-row">
+                                                    <span className="category-filter-label">
+                                                        <span
+                                                            className="category-swatch category-swatch-empty"
+                                                            aria-hidden="true"
+                                                        />
+                                                        <span>All</span>
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        className={`sidebar-switch ${areAllCategoriesVisible ? "sidebar-switch-on" : ""}`}
+                                                        role="switch"
+                                                        aria-label="All"
+                                                        aria-checked={
+                                                            areAllCategoriesVisible
+                                                        }
+                                                        onClick={
+                                                            handleToggleAllCategories
+                                                        }
+                                                    >
+                                                        <span className="sidebar-switch-knob" />
+                                                    </button>
+                                                </div>
+                                                <div
+                                                    className={`category-filter-row ${areAllCategoriesVisible ? "category-filter-row-disabled" : ""}`}
                                                 >
-                                                    <span
-                                                        className="category-swatch category-swatch-empty"
-                                                        aria-hidden="true"
-                                                    />
-                                                    <span>All</span>
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className={`filter-option ${activeListId === unclassifiedCategoryFilter ? "active" : ""}`}
-                                                    onClick={() => {
-                                                        setActiveListId(
-                                                            unclassifiedCategoryFilter,
-                                                        );
-                                                        setIsCategoryMenuOpen(
-                                                            false,
-                                                        );
-                                                    }}
-                                                >
-                                                    <span
-                                                        className="category-swatch category-swatch-empty"
-                                                        aria-hidden="true"
-                                                    />
-                                                    <span>Unclassified</span>
-                                                </button>
+                                                    <span className="category-filter-label">
+                                                        <span
+                                                            className="category-swatch category-swatch-empty"
+                                                            aria-hidden="true"
+                                                        />
+                                                        <span>None</span>
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        className={`sidebar-switch ${categoryVisibility.none ? "sidebar-switch-on" : ""}`}
+                                                        role="switch"
+                                                        aria-label="None"
+                                                        aria-checked={
+                                                            categoryVisibility.none
+                                                        }
+                                                        disabled={
+                                                            areAllCategoriesVisible
+                                                        }
+                                                        onClick={
+                                                            handleToggleUncategorized
+                                                        }
+                                                    >
+                                                        <span className="sidebar-switch-knob" />
+                                                    </button>
+                                                </div>
                                                 {taskLists.map((taskList) => (
                                                     <div
                                                         key={taskList.id}
-                                                        className={`filter-option-row ${activeListId === taskList.id ? "active" : ""}`}
+                                                        className={`filter-option-row ${areAllCategoriesVisible ? "category-filter-row-disabled" : ""} category-filter-option-row`}
                                                     >
-                                                        <button
-                                                            type="button"
-                                                            className={`filter-option ${activeListId === taskList.id ? "active" : ""}`}
-                                                            onClick={() => {
-                                                                setActiveListId(
-                                                                    taskList.id,
-                                                                );
-                                                                setIsCategoryMenuOpen(
-                                                                    false,
-                                                                );
-                                                            }}
+                                                        <div
+                                                            className="category-filter-row category-filter-row-custom"
                                                             onContextMenu={(
                                                                 event,
                                                             ) => {
@@ -2833,47 +3271,79 @@ export function App() {
                                                                 });
                                                             }}
                                                         >
-                                                            <span
-                                                                className="category-swatch"
-                                                                style={{
-                                                                    backgroundColor:
-                                                                        taskList.color,
-                                                                }}
-                                                                aria-hidden="true"
-                                                            />
-                                                            <span>
-                                                                {taskList.name}
+                                                            <span className="category-filter-label">
+                                                                <span
+                                                                    className="category-swatch"
+                                                                    style={{
+                                                                        backgroundColor:
+                                                                            taskList.color,
+                                                                    }}
+                                                                    aria-hidden="true"
+                                                                />
+                                                                <span>
+                                                                    {
+                                                                        taskList.name
+                                                                    }
+                                                                </span>
                                                             </span>
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            className="filter-option-action"
-                                                            aria-label={`Edit ${taskList.name}`}
-                                                            onClick={() =>
-                                                                startEditingTaskList(
-                                                                    taskList,
-                                                                )
-                                                            }
-                                                        >
-                                                            <span
-                                                                aria-hidden="true"
-                                                                className="filter-option-action-icon"
+                                                            <button
+                                                                type="button"
+                                                                className="filter-option-action category-filter-action"
+                                                                aria-label={`Edit ${taskList.name}`}
+                                                                onClick={() =>
+                                                                    startEditingTaskList(
+                                                                        taskList,
+                                                                    )
+                                                                }
                                                             >
-                                                                ⚙
-                                                            </span>
-                                                        </button>
+                                                                <span
+                                                                    aria-hidden="true"
+                                                                    className="filter-option-action-icon"
+                                                                >
+                                                                    ⚙
+                                                                </span>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className={`sidebar-switch ${(categoryVisibility.lists[taskList.id] ?? true) ? "sidebar-switch-on" : ""}`}
+                                                                role="switch"
+                                                                aria-label={
+                                                                    taskList.name
+                                                                }
+                                                                aria-checked={
+                                                                    categoryVisibility
+                                                                        .lists[
+                                                                        taskList
+                                                                            .id
+                                                                    ] ?? true
+                                                                }
+                                                                disabled={
+                                                                    areAllCategoriesVisible
+                                                                }
+                                                                onClick={(
+                                                                    event,
+                                                                ) =>
+                                                                    handleToggleTaskListVisibility(
+                                                                        taskList.id,
+                                                                        event,
+                                                                    )
+                                                                }
+                                                            >
+                                                                <span className="sidebar-switch-knob" />
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 ))}
                                                 <div className="filter-menu-footer">
-                                                {editingTaskListId ? (
-                                                    <form
-                                                        className="category-inline-form"
-                                                        onSubmit={(event) =>
-                                                            void handleUpdateTaskList(
-                                                                event,
-                                                            )
-                                                        }
-                                                    >
+                                                    {editingTaskListId ? (
+                                                        <form
+                                                            className="category-inline-form"
+                                                            onSubmit={(event) =>
+                                                                void handleUpdateTaskList(
+                                                                    event,
+                                                                )
+                                                            }
+                                                        >
                                                         <div className="category-inline-fields">
                                                             <input
                                                                 type="color"
@@ -3535,7 +4005,12 @@ export function App() {
                         )}
                     </AnimatePresence>
 
-                    {!detailPanelMode && !isDetailPanelClosing && (
+                    {!detailPanelMode &&
+                        !isDetailPanelClosing &&
+                        !isSettingsMenuOpen &&
+                        !isWorkingHoursSettingsOpen &&
+                        !isBackupSettingsOpen &&
+                        !isWebhookSettingsOpen && (
             <section
                 ref={taskListRef}
                 className={`task-list ${dragTargetMode === "reorder" ? "drag-target-list-active" : ""}`}
@@ -3607,7 +4082,7 @@ export function App() {
                                                               }
                                                             : undefined
                                                     }
-                                                    className={`task-row ${activeView === "unscheduled" ? "task-row--reorderable" : ""} ${selectedTaskId === task.id ? "selected" : ""}`}
+                                                    className={`task-row ${activeView === "unscheduled" ? "task-row--reorderable" : ""} ${!task.completed && isOverdueTask(task, new Date()) ? "task-row--overdue" : ""} ${selectedTaskId === task.id ? "selected" : ""}`}
                                                     style={{
                                                         borderLeftColor:
                                                             taskCategoryColor(
@@ -3771,9 +4246,9 @@ export function App() {
                                                             )}
                                                         </span>
                                                     </span>
-                                                    {activeView ===
-                                                        "unscheduled" && (
-                                                        <span className="task-order-actions task-order-actions--aligned">
+                                                    <span className="task-order-actions task-order-actions--aligned">
+                                                        {activeView ===
+                                                            "unscheduled" && (
                                                             <button
                                                                 type="button"
                                                                 className="task-order-button task-order-button-top"
@@ -3795,69 +4270,69 @@ export function App() {
                                                                         task.id,
                                                                     );
                                                                 }}
-                                                                >
+                                                            >
                                                                 ⇡
                                                             </button>
-                                                            <button
-                                                                type="button"
-                                                                className="task-drag-handle task-schedule-button"
-                                                                data-task-id={
-                                                                    task.id
-                                                                }
-                                                                aria-label="Drag to calendar"
-                                                                title="Drag to calendar"
-                                                                onPointerDown={(
-                                                                    event,
-                                                                ) => {
-                                                                    event.stopPropagation();
-                                                                    startScheduleDragHighlight();
-                                                                }}
-                                                                onMouseDown={(
-                                                                    event,
-                                                                ) =>
-                                                                    event.stopPropagation()
-                                                                }
-                                                                onClick={(
-                                                                    event,
-                                                                ) =>
-                                                                    event.stopPropagation()
-                                                                }
+                                                        )}
+                                                        <button
+                                                            type="button"
+                                                            className="task-drag-handle task-schedule-button"
+                                                            data-task-id={
+                                                                task.id
+                                                            }
+                                                            aria-label="Drag to calendar"
+                                                            title="Drag to calendar"
+                                                            onPointerDown={(
+                                                                event,
+                                                            ) => {
+                                                                event.stopPropagation();
+                                                                startScheduleDragHighlight();
+                                                            }}
+                                                            onMouseDown={(
+                                                                event,
+                                                            ) =>
+                                                                event.stopPropagation()
+                                                            }
+                                                            onClick={(
+                                                                event,
+                                                            ) =>
+                                                                event.stopPropagation()
+                                                            }
+                                                        >
+                                                            <span
+                                                                aria-hidden="true"
+                                                                className="task-drag-handle-icon"
                                                             >
-                                                                <span
+                                                                <svg
+                                                                    viewBox="0 0 16 16"
+                                                                    fill="none"
                                                                     aria-hidden="true"
-                                                                    className="task-drag-handle-icon"
                                                                 >
-                                                                    <svg
-                                                                        viewBox="0 0 16 16"
-                                                                        fill="none"
-                                                                        aria-hidden="true"
-                                                                    >
-                                                                        <rect
-                                                                            x="2.5"
-                                                                            y="3.5"
-                                                                            width="11"
-                                                                            height="10"
-                                                                            rx="2"
-                                                                            stroke="currentColor"
-                                                                            strokeWidth="1.3"
-                                                                        />
-                                                                        <path
-                                                                            d="M2.5 6h11"
-                                                                            stroke="currentColor"
-                                                                            strokeWidth="1.3"
-                                                                            strokeLinecap="round"
-                                                                        />
-                                                                        <path
-                                                                            d="M5 2.5v2M11 2.5v2"
-                                                                            stroke="currentColor"
-                                                                            strokeWidth="1.3"
-                                                                            strokeLinecap="round"
-                                                                        />
-                                                                    </svg>
-                                                                </span>
-                                                            </button>
-                                                        </span>
-                                                    )}
+                                                                    <rect
+                                                                        x="2.5"
+                                                                        y="3.5"
+                                                                        width="11"
+                                                                        height="10"
+                                                                        rx="2"
+                                                                        stroke="currentColor"
+                                                                        strokeWidth="1.3"
+                                                                    />
+                                                                    <path
+                                                                        d="M2.5 6h11"
+                                                                        stroke="currentColor"
+                                                                        strokeWidth="1.3"
+                                                                        strokeLinecap="round"
+                                                                    />
+                                                                    <path
+                                                                        d="M5 2.5v2M11 2.5v2"
+                                                                        stroke="currentColor"
+                                                                        strokeWidth="1.3"
+                                                                        strokeLinecap="round"
+                                                                    />
+                                                                </svg>
+                                                            </span>
+                                                        </button>
+                                                    </span>
                                                 </motion.div>
                                             ),
                                         )}
@@ -3914,6 +4389,50 @@ export function App() {
                 </AnimatePresence>
                 {formError && (
                     <div className="status-banner error">{formError}</div>
+                )}
+                {taskUndo && (
+                    <motion.div
+                        key="task-undo"
+                        className="undo-snackbar"
+                        role="status"
+                        aria-live="polite"
+                        initial={{
+                            opacity: 0,
+                            y: 20,
+                            x: 18,
+                            scale: 0.92,
+                        }}
+                        animate={{
+                            opacity: 1,
+                            y: 0,
+                            x: 0,
+                            scale: 1,
+                        }}
+                        transition={{
+                            duration: prefersReducedMotion ? 0 : 0.24,
+                            ease: [0.22, 1, 0.36, 1],
+                        }}
+                    >
+                        <button
+                            type="button"
+                            className="undo-snackbar-button"
+                            aria-label={
+                                taskUndo.kind === "unavailable"
+                                    ? "Dismiss undo message"
+                                    : "Undo task change"
+                            }
+                            disabled={
+                                taskUndo.kind !== "unavailable" && isUndoingTask
+                            }
+                            onClick={() =>
+                                taskUndo.kind === "unavailable"
+                                    ? setTaskUndo(null)
+                                    : void handleUndoTaskChange()
+                            }
+                        >
+                            <span aria-hidden="true">↶</span>
+                        </button>
+                    </motion.div>
                 )}
 
                 <div className="calendar-toolbar">
@@ -4002,16 +4521,24 @@ export function App() {
                         role="tablist"
                         aria-label="Calendar view"
                     >
-                        {calendarViews.map((view) => (
+                        {isTimeGridView && (
                             <button
-                                key={view.id}
                                 type="button"
-                                className={`calendar-toolbar-button ${calendarView === view.id ? "active" : ""}`}
-                                onClick={() => changeCalendarView(view.id)}
+                                className="calendar-toolbar-button calendar-hours-toggle"
+                                onClick={() =>
+                                    setIsFullDayTimelineVisible((current) => !current)
+                                }
                             >
-                                {view.label}
+                                {isFullDayTimelineVisible ? "Full" : "Work"}
                             </button>
-                        ))}
+                        )}
+                        <button
+                            type="button"
+                            className="calendar-toolbar-button calendar-view-cycle-button"
+                            onClick={cycleCalendarView}
+                        >
+                            {calendarViewToggleLabel}
+                        </button>
                     </div>
                 </div>
 
@@ -4021,6 +4548,7 @@ export function App() {
                     initial={false}
                 >
                     <FullCalendar
+                        key={calendarTimelineKey}
                         ref={calendarRef}
                         plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
                         initialView={calendarView}
@@ -4054,68 +4582,17 @@ export function App() {
                         scrollTimeReset={false}
                         eventResizableFromStart
                         nowIndicator
-                        slotMinTime="00:00:00"
-                        slotMaxTime="24:00:00"
+                        scrollTime={
+                            isFullDayTimelineVisible
+                                ? "00:00:00"
+                                : `${workingHours.start}:00`
+                        }
+                        slotMinTime={calendarSlotMinTime}
+                        slotMaxTime={calendarSlotMaxTime}
                         height="100%"
                     />
                 </motion.div>
             </section>
-
-            {backupSummary && (
-                <div
-                    className="dialog-backdrop"
-                    role="presentation"
-                    onClick={() => setBackupSummary(null)}
-                >
-                    <div
-                        className="choice-dialog"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="backup-summary-title"
-                        onClick={(event) => event.stopPropagation()}
-                    >
-                        <h2 id="backup-summary-title">Backup ready</h2>
-                        <p className="muted">
-                            Review the export summary before downloading.
-                        </p>
-                        <div className="backup-summary">
-                            <div>
-                                <span>Tasks:</span> {backupSummary.tasks.length}
-                            </div>
-                            <div>
-                                <span>Categories:</span>{" "}
-                                {backupSummary.task_lists.length}
-                            </div>
-                            <div>
-                                <span>Schema version:</span>{" "}
-                                {backupSummary.schema_version}
-                            </div>
-                            <div>
-                                <span>Exported:</span>{" "}
-                                {formatBackupDate(backupSummary.exported_at)}
-                            </div>
-                        </div>
-                        <div className="choice-dialog-actions">
-                            <button
-                                type="button"
-                                className="secondary-button"
-                                onClick={() => setBackupSummary(null)}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                disabled={isBackupDownloading}
-                                onClick={() => void handleConfirmBackupDownload()}
-                            >
-                                {isBackupDownloading
-                                    ? "Downloading..."
-                                    : "Download backup"}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {pendingDeleteTask && (
                 <div
@@ -4572,6 +5049,185 @@ function buildTaskUpdates(
     return updates;
 }
 
+function buildTaskUpdateInputFromSnapshot(
+    task: ScheduledTask,
+    restoreFields?: Array<keyof Parameters<typeof updateTask>[1]>,
+): Parameters<typeof updateTask>[1] {
+    const snapshot = {
+        title: task.title,
+        list_id: task.list_id,
+        notes: task.notes,
+        completed: task.completed,
+        scheduled_start: task.scheduled_start,
+        scheduled_end: task.scheduled_end,
+        due_at: task.due_at,
+        unscheduled_order: task.unscheduled_order,
+        recurrence_rule: task.recurrence_rule,
+        notification_enabled: task.notification_enabled,
+        notification_offset_minutes: task.notification_offset_minutes,
+        notification_channel: task.notification_channel,
+    };
+
+    if (!restoreFields) {
+        return snapshot;
+    }
+
+    const update: Parameters<typeof updateTask>[1] = {};
+    for (const field of restoreFields) {
+        assignTaskUpdateField(update, snapshot, field);
+    }
+
+    return update;
+}
+
+function assignTaskUpdateField(
+    update: Parameters<typeof updateTask>[1],
+    snapshot: Parameters<typeof updateTask>[1],
+    field: keyof Parameters<typeof updateTask>[1],
+): void {
+    switch (field) {
+        case "title":
+            update.title = snapshot.title;
+            break;
+        case "list_id":
+            update.list_id = snapshot.list_id;
+            break;
+        case "notes":
+            update.notes = snapshot.notes;
+            break;
+        case "completed":
+            update.completed = snapshot.completed;
+            break;
+        case "scheduled_start":
+            update.scheduled_start = snapshot.scheduled_start;
+            break;
+        case "scheduled_end":
+            update.scheduled_end = snapshot.scheduled_end;
+            break;
+        case "due_at":
+            update.due_at = snapshot.due_at;
+            break;
+        case "unscheduled_order":
+            update.unscheduled_order = snapshot.unscheduled_order;
+            break;
+        case "recurrence_rule":
+            update.recurrence_rule = snapshot.recurrence_rule;
+            break;
+        case "notification_enabled":
+            update.notification_enabled = snapshot.notification_enabled;
+            break;
+        case "notification_offset_minutes":
+            update.notification_offset_minutes =
+                snapshot.notification_offset_minutes;
+            break;
+        case "notification_channel":
+            update.notification_channel = snapshot.notification_channel;
+            break;
+    }
+}
+
+function buildUpdateTaskUndo(
+    task: ScheduledTask,
+    updates: Parameters<typeof updateTask>[1],
+    updateScope: "single" | "series",
+    message = "Task updated.",
+): TaskUndoState {
+    if (updateScope === "series") {
+        return {
+            kind: "unavailable",
+            message: "Task updated. Undo is not available for recurring series edits.",
+        };
+    }
+
+    if (updates.recurrence_rule !== undefined) {
+        return {
+            kind: "unavailable",
+            message: "Task updated. Undo is not available for recurrence changes.",
+        };
+    }
+
+    if (
+        task.recurrence_series_id &&
+        hasRecurringDetachUpdate(updates)
+    ) {
+        return {
+            kind: "unavailable",
+            message:
+                "Task updated. Undo is not available after detaching a recurring occurrence.",
+        };
+    }
+
+    return {
+        kind: "update",
+        task,
+        restoreFields: Object.keys(updates) as Array<
+            keyof Parameters<typeof updateTask>[1]
+        >,
+        message,
+    };
+}
+
+function buildDeleteTaskUndo(
+    task: ScheduledTask,
+    deleteScope: "single" | "following",
+): TaskUndoState {
+    if (deleteScope !== "single") {
+        return {
+            kind: "unavailable",
+            message: "Task deleted. Undo is not available for recurring series deletes.",
+        };
+    }
+
+    if (task.recurrence_series_id || task.recurrence_rule) {
+        return {
+            kind: "unavailable",
+            message:
+                "Task deleted. Undo is not available for recurring occurrence deletes.",
+        };
+    }
+
+    return {
+        kind: "delete",
+        task,
+        message: "Task deleted.",
+    };
+}
+
+function hasRecurringDetachUpdate(
+    updates: Parameters<typeof updateTask>[1],
+): boolean {
+    return [
+        "title",
+        "list_id",
+        "scheduled_start",
+        "scheduled_end",
+        "notification_enabled",
+        "notification_offset_minutes",
+        "notification_channel",
+    ].some((field) => field in updates);
+}
+
+function buildTaskCreateInputFromSnapshot(
+    task: ScheduledTask,
+): CreateScheduledTaskInput {
+    return {
+        title: task.title,
+        list_id: task.list_id,
+        notes: task.notes,
+        completed: task.completed,
+        scheduled_start: task.scheduled_start,
+        scheduled_end: task.scheduled_end,
+        due_at: task.due_at,
+        timezone: task.timezone,
+        priority: task.priority,
+        unscheduled_order: task.unscheduled_order,
+        recurrence_rule: task.recurrence_rule,
+        notification_enabled: task.notification_enabled,
+        notification_offset_minutes: task.notification_offset_minutes,
+        notification_channel: task.notification_channel,
+    };
+}
+
 function buildDuplicateTaskInput(
     task: ScheduledTask,
 ): CreateScheduledTaskInput {
@@ -4692,28 +5348,25 @@ function shouldPromptRecurringTaskEdit(
 function filterTasksForView(
     tasks: ScheduledTask[],
     activeView: TaskView,
-    activeListId: string | null,
+    areAllCategoriesVisible: boolean,
+    categoryVisibility: CategoryVisibilityState,
     upcomingDays: number,
+    showCompletedTasks: boolean,
 ): ScheduledTask[] {
     const now = new Date();
     const filteredTasks = tasks.filter((task) => {
+        if (
+            !isTaskVisibleForCategory(
+                task,
+                areAllCategoriesVisible,
+                categoryVisibility,
+            )
+        ) {
+            return false;
+        }
+
         if (activeView === "unscheduled") {
             return !task.completed && !task.scheduled_start && !task.scheduled_end;
-        }
-
-        if (
-            activeListId === unclassifiedCategoryFilter &&
-            task.list_id !== null
-        ) {
-            return false;
-        }
-
-        if (
-            activeListId &&
-            activeListId !== unclassifiedCategoryFilter &&
-            task.list_id !== activeListId
-        ) {
-            return false;
         }
 
         if (activeView === "all") {
@@ -4728,7 +5381,7 @@ function filterTasksForView(
             return isOverdueTask(task, now);
         }
 
-        if (task.completed) {
+        if (task.completed && !showCompletedTasks) {
             return false;
         }
 
@@ -4736,7 +5389,8 @@ function filterTasksForView(
 
         if (activeView === "today") {
             return taskDate
-                ? isSameLocalDay(parseTaskDate(taskDate), now)
+                ? isSameLocalDay(parseTaskDate(taskDate), now) ||
+                      isOverdueTask(task, now)
                 : false;
         }
 
@@ -4754,6 +5408,57 @@ function filterTasksForView(
     });
 
     return collapseRecurringTasksForList(filteredTasks);
+}
+
+function createDefaultCategoryVisibility(
+    taskLists: TaskList[],
+): CategoryVisibilityState {
+    return {
+        none: true,
+        lists: Object.fromEntries(taskLists.map((taskList) => [taskList.id, true])),
+    };
+}
+
+function reconcileCategoryVisibility(
+    visibility: CategoryVisibilityState,
+    taskLists: TaskList[],
+): CategoryVisibilityState {
+    const validIds = new Set(taskLists.map((taskList) => taskList.id));
+    const lists = Object.fromEntries(
+        taskLists.map((taskList) => [
+            taskList.id,
+            visibility.lists[taskList.id] ?? true,
+        ]),
+    );
+
+    if (
+        Object.keys(visibility.lists).length === taskLists.length &&
+        Object.keys(visibility.lists).every((id) => validIds.has(id)) &&
+        taskLists.every((taskList) => visibility.lists[taskList.id] === lists[taskList.id])
+    ) {
+        return visibility;
+    }
+
+    return {
+        none: visibility.none,
+        lists,
+    };
+}
+
+function isTaskVisibleForCategory(
+    task: ScheduledTask,
+    areAllCategoriesVisible: boolean,
+    categoryVisibility: CategoryVisibilityState,
+): boolean {
+    if (areAllCategoriesVisible) {
+        return true;
+    }
+
+    if (!task.list_id) {
+        return categoryVisibility.none;
+    }
+
+    return categoryVisibility.lists[task.list_id] ?? true;
 }
 
 function mergeLocallyUpdatedTasks(
@@ -5476,6 +6181,34 @@ function saveSidebarWidth(sidebarWidth: number): void {
     }
 }
 
+function getInitialWorkingHours(): WorkingHoursSettings {
+    try {
+        const stored = window.localStorage?.getItem("calendar-working-hours");
+        if (!stored) {
+            return defaultWorkingHours;
+        }
+
+        const parsed = JSON.parse(stored) as Partial<WorkingHoursSettings>;
+        return {
+            start: normalizeWorkingHour(parsed.start, defaultWorkingHours.start),
+            end: normalizeWorkingHour(parsed.end, defaultWorkingHours.end),
+        };
+    } catch {
+        return defaultWorkingHours;
+    }
+}
+
+function saveWorkingHours(workingHours: WorkingHoursSettings): void {
+    try {
+        window.localStorage?.setItem(
+            "calendar-working-hours",
+            JSON.stringify(workingHours),
+        );
+    } catch {
+        // Working hours persistence is optional.
+    }
+}
+
 function getInitialUnscheduledOrder(): string[] {
     try {
         const storedOrder = window.localStorage?.getItem(
@@ -5503,6 +6236,10 @@ function saveUnscheduledOrder(unscheduledOrder: string[]): void {
     } catch {
         // Unscheduled task order persistence is optional.
     }
+}
+
+function normalizeWorkingHour(value: string | undefined, fallback: string): string {
+    return value && workingHourOptions.includes(value) ? value : fallback;
 }
 
 function clampNumber(value: number, min: number, max: number): number {

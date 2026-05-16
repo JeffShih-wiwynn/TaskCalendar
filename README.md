@@ -73,14 +73,14 @@ Set `APP_TIMEZONE` in `backend/.env` to control application datetime behavior. I
 
 Current frontend behavior includes:
 
-- month, week, and day calendar views
+- month, week, and day calendar views, with a single cycle button for switching Week -> Day -> Month
 - a `No time tasks` sidebar view for unscheduled tasks
 - unscheduled task rows can be reordered directly, with quick `Move to top`, `Move up`, and `Move down` controls
 - a `Duplicate` action in the task right-click menu
 - distinct drag target cues for no-time reorder and drag-to-calendar scheduling
 - no-time task drag previews stay aligned in month view while dragging into the calendar
 - draggable, resizable, and all-day scheduled tasks
-- a full-day week/day time grid from `00:00` through `24:00`
+- a compact `Work` / `Full` toggle for week/day time-grid views, switching between working-hours and full-day ranges
 - a clickable year control in month view
 - category colors with inline category editing
 - customizable `Upcoming` day ranges

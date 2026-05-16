@@ -15,7 +15,7 @@ This file summarizes the current repository state for future contributors and AI
 
 ## Completed Major Features
 
-- Calendar month, week, and day views
+- Calendar month, week, and day views with a single cycle button
 - Sidebar task list and task editor
 - No-time task ordering persisted through the backend
 - RRULE-compatible recurring tasks
@@ -28,6 +28,7 @@ This file summarizes the current repository state for future contributors and AI
 - Alembic migrations and migration smoke tests
 - Drag/drop and resize support for scheduled tasks
 - Overdue and completed task views
+- Single-step floating undo control for recent task changes, with stale undo state cleared on newer task mutations
 
 ## Recently Completed Work
 
@@ -39,10 +40,13 @@ This file summarizes the current repository state for future contributors and AI
 - Sidebar drag/drop stability fixes
 - No-time task drag preview and re-render fixes
 - FullCalendar event rendering crash fix for transient drag events
+- Undo snackbar lifecycle cleanup so only the latest task mutation can own the undo control
 - Task and category routes now scope data to the authenticated user
 - Cross-user backend isolation tests
 - Login/register screen, logout action, and token-backed frontend API requests
 - Sidebar header icon button sizing refined to keep the hamburger and fold controls visually aligned
+- Working-hours viewport toggle now switches week/day time-grid views between the configured working-hours range and the full-day range
+- Toolbar view controls were condensed from separate Month/Week/Day buttons into a single cycle button
 - JSON export payload now returns only the authenticated user's tasks and task lists
 - Sidebar backup export/import actions now support user-scoped restore with explicit confirmation before import
 - `APP_TIMEZONE` now controls application datetime serialization, recurrence boundaries, notification scheduling, and backup datetime handling
