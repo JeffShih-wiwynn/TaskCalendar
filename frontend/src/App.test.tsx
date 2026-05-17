@@ -377,7 +377,7 @@ vi.mock("@fullcalendar/react", () => ({
                         eventDrop?.({
                             event: {
                                 id: "task-1",
-                                start: new Date("2026-05-07T16:00:00Z"),
+                                start: new Date(2026, 4, 18, 0, 0, 0, 0),
                                 end: null,
                                 allDay: true,
                             },
@@ -591,6 +591,7 @@ function makeTask(overrides: Record<string, unknown> = {}): Record<string, unkno
         completed: false,
         scheduled_start: todayAtNine.toISOString(),
         scheduled_end: todayAtTen.toISOString(),
+        all_day: false,
         due_at: null,
         timezone: "Asia/Taipei",
         priority: null,
@@ -665,6 +666,7 @@ describe("App", () => {
                     scheduled_end:
                         (input.scheduled_end as string | null | undefined) ??
                         null,
+                    all_day: Boolean(input.all_day ?? false),
                     due_at: (input.due_at as string | null | undefined) ?? null,
                     timezone:
                         (input.timezone as string | undefined) ?? "Asia/Taipei",
@@ -2480,7 +2482,7 @@ describe("App", () => {
         render(<App />);
 
         fireEvent.click(
-            await screen.findByRole("button", { name: "Open all-day create task" }),
+            await screen.findByRole("button", { name: "Open create task" }),
         );
         fireEvent.change(screen.getByLabelText("Title"), {
             target: { value: "New task" },
@@ -3489,6 +3491,7 @@ describe("App", () => {
                 {
                     scheduled_start: "2026-05-10T09:30:00.000Z",
                     scheduled_end: "2026-05-10T10:30:00.000Z",
+                    all_day: false,
                 },
                 { updateScope: "series" },
             ),
@@ -3681,7 +3684,7 @@ describe("App", () => {
         expect(screen.getByRole("button", { name: "Edit Work" })).toBeInTheDocument();
     });
 
-    it("marks midnight day-span tasks as all-day calendar events", async () => {
+    it("maps explicit all-day tasks to all-day calendar events", async () => {
         mocks.tasks = [
             {
                 id: "task-1",
@@ -3690,8 +3693,9 @@ describe("App", () => {
                 title: "All day task",
                 notes: null,
                 completed: false,
-                scheduled_start: "2026-05-07T16:00:00Z",
-                scheduled_end: "2026-05-08T16:00:00Z",
+                scheduled_start: "2026-05-08T00:00:00",
+                scheduled_end: null,
+                all_day: true,
                 due_at: null,
                 timezone: "Asia/Taipei",
                 priority: null,
@@ -3717,7 +3721,44 @@ describe("App", () => {
         });
     });
 
-    it("saves an all-day drop with a one-day end when FullCalendar omits the end", async () => {
+    it("keeps explicit midnight timed tasks in the timed grid", async () => {
+        mocks.tasks = [
+            {
+                id: "task-midnight",
+                user_id: "user-1",
+                list_id: "list-1",
+                title: "Midnight timed task",
+                notes: null,
+                completed: false,
+                scheduled_start: "2026-05-07T16:00:00Z",
+                scheduled_end: "2026-05-07T17:00:00Z",
+                all_day: false,
+                due_at: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                created_at: "2026-05-07T00:00:00Z",
+                updated_at: "2026-05-07T00:00:00Z",
+                completed_at: null,
+            },
+        ];
+
+        render(<App />);
+
+        expect(
+            await screen.findByRole("button", { name: "Task view" }),
+        ).toBeInTheDocument();
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.events).toHaveLength(1),
+        );
+        expect(mocks.fullCalendarProps.events[0]).toMatchObject({
+            title: "Midnight timed task",
+            allDay: false,
+            start: "2026-05-07T16:00:00Z",
+            end: "2026-05-07T17:00:00Z",
+        });
+    });
+
+    it("saves an all-day drop as a date-only task when FullCalendar omits the end", async () => {
         render(<App />);
 
         expect(
@@ -3729,8 +3770,9 @@ describe("App", () => {
 
         await waitFor(() =>
             expect(mocks.updateTask).toHaveBeenCalledWith("task-1", {
-                scheduled_start: "2026-05-07T16:00:00.000Z",
-                scheduled_end: "2026-05-08T16:00:00.000Z",
+                scheduled_start: "2026-05-18T00:00:00",
+                scheduled_end: null,
+                all_day: true,
             }),
         );
     });
@@ -3763,6 +3805,7 @@ describe("App", () => {
                 expect.objectContaining({
                     scheduled_start: "2026-05-08T09:00:00.000Z",
                     scheduled_end: "2026-05-08T10:00:00.000Z",
+                    all_day: false,
                 }),
             ),
         );
@@ -3839,6 +3882,7 @@ describe("App", () => {
             expect(mocks.updateTask).toHaveBeenCalledWith("task-external", {
                 scheduled_start: "2026-05-08T13:00:00.000Z",
                 scheduled_end: "2026-05-08T14:00:00.000Z",
+                all_day: false,
             }),
         );
     });
@@ -3891,6 +3935,7 @@ describe("App", () => {
             expect(mocks.updateTask).toHaveBeenCalledWith("task-external", {
                 scheduled_start: "2026-05-08T13:00:00.000Z",
                 scheduled_end: "2026-05-08T14:00:00.000Z",
+                all_day: false,
             }),
         );
         await waitFor(() =>
@@ -3990,7 +4035,7 @@ describe("App", () => {
         );
     });
 
-    it("opens the create form with a full-day range when clicking the all-day lane", async () => {
+    it("opens the create form with a date-only value when clicking the all-day lane", async () => {
         render(<App />);
 
         expect(
@@ -4006,10 +4051,28 @@ describe("App", () => {
         expect(screen.getByLabelText("Start date")).toBeInTheDocument();
         expect(screen.getByDisplayValue("2026-05-08")).toBeInTheDocument();
         expect(screen.getByLabelText("Start time")).toBeInTheDocument();
+        expect(screen.getByLabelText("Start time")).toHaveValue("");
         expect(screen.getByLabelText("End date")).toBeInTheDocument();
-        expect(screen.getByDisplayValue("2026-05-09")).toBeInTheDocument();
+        expect(screen.getByLabelText("End date")).toHaveValue("");
         expect(screen.getByLabelText("End time")).toBeInTheDocument();
-        expect(screen.getAllByDisplayValue("00:00")).toHaveLength(2);
+        expect(screen.getByLabelText("End time")).toHaveValue("");
+
+        fireEvent.change(screen.getByLabelText("Title"), {
+            target: { value: "Date-only task" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+        await waitFor(() =>
+            expect(mocks.createTask).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    title: "Date-only task",
+                    scheduled_start: "2026-05-08T00:00:00",
+                    scheduled_end: null,
+                    all_day: true,
+                    due_at: null,
+                }),
+            ),
+        );
     });
 
     it("clears scheduled fields in the create form when moving a task to no time", async () => {

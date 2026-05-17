@@ -704,7 +704,10 @@ export function App() {
         setEditState({
             title: selectedTask.title,
             notes: selectedTask.notes ?? "",
-            scheduled_start: toDateTimeLocalValue(selectedTask.scheduled_start),
+            scheduled_start:
+                Boolean(selectedTask.all_day) && selectedTask.scheduled_start
+                    ? toAllDayCalendarDate(selectedTask.scheduled_start)
+                    : toDateTimeLocalValue(selectedTask.scheduled_start),
             scheduled_end: toDateTimeLocalValue(selectedTask.scheduled_end),
             completed: selectedTask.completed,
             list_id: selectedTask.list_id ?? "",
@@ -936,7 +939,10 @@ export function App() {
 
     useEffect(() => {
         const unscheduledTaskIds = tasks
-            .filter((task) => !task.scheduled_start && !task.scheduled_end)
+            .filter(
+                (task) =>
+                    !task.scheduled_start && !task.scheduled_end && !task.due_at,
+            )
             .map((task) => task.id);
         setUnscheduledOrder((current) => {
             const next = reconcileTaskOrder(current, unscheduledTaskIds);
@@ -1375,7 +1381,7 @@ export function App() {
     const handleEventDrop = useCallback(
         async (dropInfo: EventDropArg) => {
             const task = tasks.find((item) => item.id === dropInfo.event.id);
-            const updates = getCalendarEventScheduleUpdate(dropInfo.event);
+            const updates = getCalendarEventScheduleUpdate(dropInfo.event, task);
             clearUndoState();
 
             if (task && shouldPromptRecurringTaskEdit(task, updates)) {
@@ -1479,6 +1485,36 @@ export function App() {
         [selectedListIdForForms],
     );
 
+    const openDateOnlyCreatePanel = useCallback(
+        (date: Date) => {
+            setFormError(null);
+            setIsViewMenuOpen(false);
+            setIsCategoryMenuOpen(false);
+            setIsAddingCategory(false);
+            setContextMenu(null);
+            if (isNarrowScreen()) {
+                setIsSidebarOpen(true);
+                setMobileScreen("calendar");
+            }
+            setDetailPanelMode("create");
+            setSelectedTaskId(null);
+            setFormState({
+                ...initialFormState,
+                list_id: selectedListIdForForms,
+                scheduled_start: dateToDateInputValue(date),
+                scheduled_end: "",
+            });
+            window.setTimeout(() => {
+                createFormRef.current?.scrollIntoView?.({
+                    block: "nearest",
+                    behavior: "smooth",
+                });
+                titleInputRef.current?.focus();
+            }, 0);
+        },
+        [selectedListIdForForms],
+    );
+
     const openUnscheduledCreatePanel = useCallback(() => {
         setFormError(null);
         setIsViewMenuOpen(false);
@@ -1516,14 +1552,17 @@ export function App() {
 
     const handleDateSelect = useCallback(
         (selectInfo: DateSelectArg) => {
+            if (selectInfo.allDay) {
+                openDateOnlyCreatePanel(selectInfo.start);
+                return;
+            }
+
             openCreatePanel(
                 selectInfo.start,
-                selectInfo.allDay
-                    ? normalizeAllDayEnd(selectInfo.start, selectInfo.end)
-                    : selectInfo.end,
+                selectInfo.end,
             );
         },
-        [openCreatePanel],
+        [openCreatePanel, openDateOnlyCreatePanel],
     );
 
     const handleDateClick = useCallback(
@@ -1534,12 +1573,17 @@ export function App() {
             }
 
             const start = clickInfo.date;
+            if (clickInfo.allDay) {
+                openDateOnlyCreatePanel(start);
+                return;
+            }
+
             const end = clickInfo.allDay
                 ? addLocalDays(start, 1)
                 : new Date(start.getTime() + 60 * 60 * 1000);
             openCreatePanel(start, end);
         },
-        [calendarView, openCreatePanel],
+        [calendarView, openCreatePanel, openDateOnlyCreatePanel],
     );
 
     const handleCheckboxChange = useCallback(
@@ -2158,6 +2202,10 @@ export function App() {
             );
         }
 
+        if (isNarrowScreen()) {
+            return;
+        }
+
         const handleContextMenu = (event: MouseEvent) => {
             event.preventDefault();
             setSelectedTaskId(mountInfo.event.id);
@@ -2181,9 +2229,16 @@ export function App() {
             return;
         }
 
+        const dateOnlyScheduledStart = getDateOnlyScheduledStartIso(
+            formState.scheduled_start,
+        );
+        const isDateOnlyTask =
+            Boolean(dateOnlyScheduledStart) && !formState.scheduled_end;
+
         if (
-            hasIncompleteDateTimeValue(formState.scheduled_start) ||
-            hasIncompleteDateTimeValue(formState.scheduled_end)
+            !isDateOnlyTask &&
+            (hasIncompleteDateTimeValue(formState.scheduled_start) ||
+                hasIncompleteDateTimeValue(formState.scheduled_end))
         ) {
             setFormError("Start and end must include both date and time");
             return;
@@ -2199,7 +2254,10 @@ export function App() {
             return;
         }
 
-        if (formState.recurrence_frequency && !formState.scheduled_start) {
+        if (
+            formState.recurrence_frequency &&
+            !isCompleteDateTimeValue(formState.scheduled_start)
+        ) {
             setFormError("Recurring tasks require a start time");
             return;
         }
@@ -2232,8 +2290,12 @@ export function App() {
                 title: formState.title.trim(),
                 list_id: formState.list_id || null,
                 notes: formState.notes.trim() || null,
-                scheduled_start: toIsoOrNull(formState.scheduled_start),
-                scheduled_end: toIsoOrNull(formState.scheduled_end),
+                scheduled_start: isDateOnlyTask
+                    ? dateOnlyScheduledStart
+                    : toIsoOrNull(formState.scheduled_start),
+                scheduled_end: isDateOnlyTask ? null : toIsoOrNull(formState.scheduled_end),
+                all_day: isDateOnlyTask,
+                due_at: null,
                 recurrence_rule: buildRecurrenceRule(formState),
                 notification_enabled: notificationSettings.enabled,
                 notification_offset_minutes:
@@ -2290,9 +2352,16 @@ export function App() {
             return;
         }
 
+        const dateOnlyScheduledStart = getDateOnlyScheduledStartIso(
+            editState.scheduled_start,
+        );
+        const isDateOnlyTask =
+            Boolean(dateOnlyScheduledStart) && !editState.scheduled_end;
+
         if (
-            hasIncompleteDateTimeValue(editState.scheduled_start) ||
-            hasIncompleteDateTimeValue(editState.scheduled_end)
+            !isDateOnlyTask &&
+            (hasIncompleteDateTimeValue(editState.scheduled_start) ||
+                hasIncompleteDateTimeValue(editState.scheduled_end))
         ) {
             setFormError("Start and end must include both date and time");
             return;
@@ -2308,7 +2377,10 @@ export function App() {
             return;
         }
 
-        if (editState.recurrence_frequency && !editState.scheduled_start) {
+        if (
+            editState.recurrence_frequency &&
+            !isCompleteDateTimeValue(editState.scheduled_start)
+        ) {
             setFormError("Recurring tasks require a start time");
             return;
         }
@@ -4923,17 +4995,6 @@ export function App() {
                         role="tablist"
                         aria-label="Calendar view"
                     >
-                        {isTimeGridView && (
-                            <button
-                                type="button"
-                                className="calendar-toolbar-button calendar-hours-toggle"
-                                onClick={() =>
-                                    setIsFullDayTimelineVisible((current) => !current)
-                                }
-                            >
-                                {isFullDayTimelineVisible ? "Full" : "Work"}
-                            </button>
-                        )}
                         <button
                             type="button"
                             className="calendar-toolbar-button calendar-view-cycle-button"
@@ -4941,6 +5002,17 @@ export function App() {
                         >
                             {calendarViewToggleLabel}
                         </button>
+                        {isTimeGridView && (
+                            <button
+                                type="button"
+                                className="calendar-toolbar-button calendar-hours-toggle"
+                                onClick={() =>
+                                    setIsFullDayTimelineVisible((current) => !current)
+                                }
+                                >
+                                    {isFullDayTimelineVisible ? "Full" : "Work"}
+                                </button>
+                        )}
                     </div>
                 </div>
 
@@ -5039,9 +5111,8 @@ export function App() {
                                             }
 
                                             setMobileMonthPreviewDate(null);
-                                            openCreatePanel(
+                                            openDateOnlyCreatePanel(
                                                 selectedDate,
-                                                addLocalDays(selectedDate, 1),
                                             );
                                         }}
                                     >
@@ -5261,7 +5332,7 @@ export function App() {
                 </div>
             )}
 
-            {contextMenu && (
+            {contextMenu && !isNarrowScreen() && (
                 <div
                     className="context-menu"
                     style={{ left: contextMenu.x, top: contextMenu.y }}
@@ -5529,8 +5600,18 @@ function buildTaskUpdates(
     const title = editState.title.trim();
     const listId = editState.list_id || null;
     const notes = editState.notes.trim() || null;
-    const scheduledStart = toIsoOrNull(editState.scheduled_start);
-    const scheduledEnd = toIsoOrNull(editState.scheduled_end);
+    const dateOnlyScheduledStart = getDateOnlyScheduledStartIso(
+        editState.scheduled_start,
+    );
+    const isDateOnlyTask =
+        Boolean(dateOnlyScheduledStart) && !editState.scheduled_end;
+    const scheduledStart = isDateOnlyTask
+        ? dateOnlyScheduledStart
+        : toIsoOrNull(editState.scheduled_start);
+    const scheduledEnd = isDateOnlyTask
+        ? null
+        : toIsoOrNull(editState.scheduled_end);
+    const allDay = isDateOnlyTask;
     const recurrenceRule = buildRecurrenceRule(editState);
     const notificationSettings = getNotificationSettings(editState);
     const notificationEnabled = notificationSettings.enabled;
@@ -5551,6 +5632,9 @@ function buildTaskUpdates(
     }
     if (scheduledEnd !== (selectedTask.scheduled_end ?? null)) {
         updates.scheduled_end = scheduledEnd;
+    }
+    if (allDay !== Boolean(selectedTask.all_day)) {
+        updates.all_day = allDay;
     }
     if (editState.completed !== selectedTask.completed) {
         updates.completed = editState.completed;
@@ -5585,6 +5669,7 @@ function buildTaskUpdateInputFromSnapshot(
         completed: task.completed,
         scheduled_start: task.scheduled_start,
         scheduled_end: task.scheduled_end,
+        all_day: Boolean(task.all_day),
         due_at: task.due_at,
         unscheduled_order: task.unscheduled_order,
         recurrence_rule: task.recurrence_rule,
@@ -5628,6 +5713,9 @@ function assignTaskUpdateField(
             break;
         case "scheduled_end":
             update.scheduled_end = snapshot.scheduled_end;
+            break;
+        case "all_day":
+            update.all_day = snapshot.all_day;
             break;
         case "due_at":
             update.due_at = snapshot.due_at;
@@ -5726,6 +5814,7 @@ function hasRecurringDetachUpdate(
         "list_id",
         "scheduled_start",
         "scheduled_end",
+        "all_day",
         "notification_enabled",
         "notification_offset_minutes",
         "notification_channel",
@@ -5742,6 +5831,7 @@ function buildTaskCreateInputFromSnapshot(
         completed: task.completed,
         scheduled_start: task.scheduled_start,
         scheduled_end: task.scheduled_end,
+        all_day: Boolean(task.all_day),
         due_at: task.due_at,
         timezone: task.timezone,
         priority: task.priority,
@@ -5763,11 +5853,12 @@ function buildDuplicateTaskInput(
         completed: false,
         scheduled_start: task.scheduled_start,
         scheduled_end: task.scheduled_end,
+        all_day: Boolean(task.all_day),
         due_at: task.due_at,
         timezone: task.timezone,
         priority: task.priority,
         unscheduled_order:
-            !task.scheduled_start && !task.scheduled_end
+            !task.scheduled_start && !task.scheduled_end && !task.due_at
                 ? task.unscheduled_order
                 : null,
         notification_enabled: task.notification_enabled,
@@ -5861,6 +5952,7 @@ function shouldPromptRecurringTaskEdit(
         "notes",
         "scheduled_start",
         "scheduled_end",
+        "all_day",
         "recurrence_rule",
         "notification_enabled",
         "notification_offset_minutes",
@@ -5891,7 +5983,12 @@ function filterTasksForView(
         }
 
         if (activeView === "unscheduled") {
-            return !task.completed && !task.scheduled_start && !task.scheduled_end;
+            return (
+                !task.completed &&
+                !task.scheduled_start &&
+                !task.scheduled_end &&
+                !task.due_at
+            );
         }
 
         if (activeView === "all") {
@@ -6120,7 +6217,7 @@ function buildUnscheduledOrderUpdates(
     tasks: ScheduledTask[],
 ): Array<{ taskId: string; unscheduled_order: number }> {
     const unscheduledTasks = tasks.filter(
-        (task) => !task.scheduled_start && !task.scheduled_end,
+        (task) => !task.scheduled_start && !task.scheduled_end && !task.due_at,
     );
     const taskById = new Map(unscheduledTasks.map((task) => [task.id, task]));
     const reconciledOrder = reconcileTaskOrder(
@@ -6235,6 +6332,10 @@ function isWithinUpcomingDays(value: Date, now: Date, days: number): boolean {
 function formatScheduledRange(task: ScheduledTask): string {
     if (!task.scheduled_start) {
         return "";
+    }
+
+    if (task.all_day) {
+        return formatDateOnlyLabel(toAllDayCalendarDate(task.scheduled_start));
     }
 
     const start = formatDateTime(task.scheduled_start);
@@ -6386,6 +6487,15 @@ function formatDate(value: string): string {
     }).format(parseTaskDate(value));
 }
 
+function formatDateOnlyLabel(value: string): string {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Intl.DateTimeFormat(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+    }).format(new Date(year, month - 1, day));
+}
+
 function formatDateFromDate(value: Date): string {
     return new Intl.DateTimeFormat(undefined, {
         month: "short",
@@ -6402,11 +6512,13 @@ function compareTasksByScheduledStart(
     left: ScheduledTask,
     right: ScheduledTask,
 ): number {
-    const leftTime = left.scheduled_start
-        ? parseTaskDate(left.scheduled_start).getTime()
+    const leftDate = left.scheduled_start ?? left.due_at;
+    const rightDate = right.scheduled_start ?? right.due_at;
+    const leftTime = leftDate
+        ? parseTaskDate(leftDate).getTime()
         : 0;
-    const rightTime = right.scheduled_start
-        ? parseTaskDate(right.scheduled_start).getTime()
+    const rightTime = rightDate
+        ? parseTaskDate(rightDate).getTime()
         : 0;
 
     return leftTime - rightTime || left.title.localeCompare(right.title);
@@ -6460,8 +6572,21 @@ function hasIncompleteDateTimeValue(value: string): boolean {
 
 function toDateInputValue(value: string): string {
     const date = parseTaskDate(value);
+    return dateToDateInputValue(date);
+}
+
+function dateToDateInputValue(date: Date): string {
     const offsetMs = date.getTimezoneOffset() * 60_000;
     return new Date(date.getTime() - offsetMs).toISOString().slice(0, 10);
+}
+
+function dateOnlyToApiDateTime(value: string): string {
+    return `${value}T00:00:00`;
+}
+
+function getDateOnlyScheduledStartIso(value: string): string | null {
+    const { datePart, timePart } = splitDateTimeInputValue(value);
+    return datePart && !timePart ? dateOnlyToApiDateTime(datePart) : null;
 }
 
 function endOfLocalDateToIso(value: string): string {
@@ -6469,20 +6594,32 @@ function endOfLocalDateToIso(value: string): string {
     return date.toISOString();
 }
 
-function getCalendarEventScheduleUpdate(event: EventApi): {
+function getCalendarEventScheduleUpdate(event: EventApi, task?: ScheduledTask): {
     scheduled_start: string | null;
     scheduled_end: string | null;
+    all_day: boolean;
+    due_at?: string | null;
 } {
     if (!event.start) {
-        return { scheduled_start: null, scheduled_end: null };
+        return { scheduled_start: null, scheduled_end: null, all_day: false, due_at: null };
     }
 
-    const end =
-        event.end ?? (event.allDay ? addLocalDays(event.start, 1) : null);
+    if (event.allDay) {
+        return {
+            scheduled_start: dateOnlyToApiDateTime(
+                dateToDateInputValue(event.start),
+            ),
+            scheduled_end: null,
+            all_day: true,
+            ...(task?.due_at ? { due_at: null } : {}),
+        };
+    }
 
     return {
         scheduled_start: event.start.toISOString(),
-        scheduled_end: end?.toISOString() ?? null,
+        scheduled_end: event.end?.toISOString() ?? null,
+        all_day: false,
+        ...(task?.due_at ? { due_at: null } : {}),
     };
 }
 
@@ -6490,18 +6627,29 @@ function getCalendarDropScheduleUpdate(
     task: ScheduledTask,
     dropInfo: DropArg,
 ): {
-    scheduled_start: string;
-    scheduled_end: string;
+    scheduled_start: string | null;
+    scheduled_end: string | null;
+    all_day: boolean;
+    due_at?: string | null;
 } {
     const start = dropInfo.date;
+    if (dropInfo.allDay) {
+        return {
+            scheduled_start: dateOnlyToApiDateTime(dateToDateInputValue(start)),
+            scheduled_end: null,
+            all_day: true,
+            ...(task.due_at ? { due_at: null } : {}),
+        };
+    }
+
     const durationMinutes = getTaskDragDurationMinutes(task, dropInfo.allDay);
-    const end = dropInfo.allDay
-        ? addLocalDays(start, Math.max(1, Math.ceil(durationMinutes / 1440)))
-        : new Date(start.getTime() + durationMinutes * 60_000);
+    const end = new Date(start.getTime() + durationMinutes * 60_000);
 
     return {
         scheduled_start: start.toISOString(),
         scheduled_end: end.toISOString(),
+        all_day: false,
+        ...(task.due_at ? { due_at: null } : {}),
     };
 }
 
@@ -6509,14 +6657,6 @@ function addLocalDays(date: Date, days: number): Date {
     const next = new Date(date);
     next.setDate(next.getDate() + days);
     return next;
-}
-
-function normalizeAllDayEnd(start: Date, end: Date | null): Date {
-    if (!end || end <= start) {
-        return addLocalDays(start, 1);
-    }
-
-    return end;
 }
 
 function getTaskDragDuration(task: ScheduledTask): {
@@ -6571,49 +6711,15 @@ function taskCategoryColor(
         : defaultCategoryColor;
 }
 
-function isAllDayScheduledTask(task: ScheduledTask): boolean {
-    if (!task.scheduled_start || !task.scheduled_end) {
-        return false;
-    }
-
-    const start = parseTaskDate(task.scheduled_start);
-    const end = parseTaskDate(task.scheduled_end);
-    const dayMs = 24 * 60 * 60 * 1000;
-    const formatter = new Intl.DateTimeFormat("en-CA", {
-        timeZone: task.timezone,
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hourCycle: "h23",
-    });
-    const startClock = formatter.formatToParts(start);
-    const endClock = formatter.formatToParts(end);
-
-    return (
-        getPartValue(startClock, "hour") === "00" &&
-        getPartValue(startClock, "minute") === "00" &&
-        getPartValue(startClock, "second") === "00" &&
-        getPartValue(endClock, "hour") === "00" &&
-        getPartValue(endClock, "minute") === "00" &&
-        getPartValue(endClock, "second") === "00" &&
-        end.getTime() - start.getTime() >= dayMs
-    );
+function toAllDayCalendarDate(value: string): string {
+    return value.slice(0, 10);
 }
 
-function toCalendarDate(value: string, timeZone: string): string {
-    return new Intl.DateTimeFormat("en-CA", {
-        timeZone,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-    }).format(parseTaskDate(value));
-}
-
-function getPartValue(
-    parts: Intl.DateTimeFormatPart[],
-    type: Intl.DateTimeFormatPartTypes,
-): string {
-    return parts.find((part) => part.type === type)?.value ?? "";
+function addCalendarDateDays(value: string, days: number): string {
+    const [year, month, day] = value.split("-").map(Number);
+    const date = new Date(year, month - 1, day);
+    date.setDate(date.getDate() + days);
+    return dateToDateInputValue(date);
 }
 
 function mapTaskToCalendarEvent(
@@ -6621,7 +6727,12 @@ function mapTaskToCalendarEvent(
     categoryColorById: Map<string, string>,
 ): EventInput {
     const color = taskCategoryColor(task, categoryColorById);
-    const allDay = isAllDayScheduledTask(task);
+    const scheduledStart = task.scheduled_start;
+    const allDay = Boolean(task.all_day);
+    const allDayStart =
+        allDay && scheduledStart
+            ? toAllDayCalendarDate(scheduledStart)
+            : undefined;
     const classNames = task.completed
         ? ["task-event", "task-event--completed"]
         : ["task-event"];
@@ -6630,13 +6741,15 @@ function mapTaskToCalendarEvent(
         id: task.id,
         title: task.title,
         start:
-            allDay && task.scheduled_start
-                ? toCalendarDate(task.scheduled_start, task.timezone)
-                : (task.scheduled_start ?? undefined),
+            allDayStart ?? scheduledStart ?? undefined,
         end:
-            allDay && task.scheduled_end
-                ? toCalendarDate(task.scheduled_end, task.timezone)
-                : (task.scheduled_end ?? undefined),
+            allDay && !task.scheduled_end
+                ? allDayStart
+                    ? addCalendarDateDays(allDayStart, 1)
+                    : undefined
+                : allDay && task.scheduled_end
+                  ? toAllDayCalendarDate(task.scheduled_end)
+                  : (task.scheduled_end ?? undefined),
         allDay,
         display: "block",
         editable: true,

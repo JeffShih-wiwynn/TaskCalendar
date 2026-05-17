@@ -98,6 +98,7 @@ def test_task_read_serializes_datetimes_in_configured_timezone(
         completed=False,
         scheduled_start=parse_dt("2026-05-08T14:00:00+00:00"),
         scheduled_end=parse_dt("2026-05-08T15:00:00+00:00"),
+        all_day=False,
         timezone="UTC",
         notification_enabled=False,
         notification_offset_minutes=0,
@@ -213,6 +214,93 @@ def test_range_filtering(db_session: Session, user_id: uuid.UUID) -> None:
     )
 
     assert [task.id for task in tasks] == [included.id]
+
+
+def test_range_filtering_includes_date_only_all_day_tasks(
+    db_session: Session,
+    user_id: uuid.UUID,
+) -> None:
+    all_day = create_task(
+        db_session,
+        user_id,
+        title="All-day task",
+        scheduled_start=parse_dt("2026-05-07T00:00:00+00:00"),
+        scheduled_end=None,
+        all_day=True,
+    )
+    create_task(
+        db_session,
+        user_id,
+        title="Timed midnight task",
+        scheduled_start=parse_dt("2026-05-08T00:00:00+00:00"),
+        scheduled_end=parse_dt("2026-05-08T01:00:00+00:00"),
+        all_day=False,
+    )
+
+    tasks = service.list_tasks(
+        db_session,
+        range_start=parse_dt("2026-05-07T00:00:00+00:00"),
+        range_end=parse_dt("2026-05-08T00:00:00+00:00"),
+    )
+
+    assert [task.id for task in tasks] == [all_day.id]
+
+
+def test_all_day_create_preserves_date_without_end(
+    db_session: Session,
+    user_id: uuid.UUID,
+) -> None:
+    task = create_task(
+        db_session,
+        user_id,
+        title="Date-only",
+        scheduled_start=parse_dt("2026-05-07T00:00:00+00:00"),
+        scheduled_end=None,
+        all_day=True,
+    )
+
+    assert task.scheduled_start == parse_dt("2026-05-07T00:00:00+00:00").replace(tzinfo=None)
+    assert task.scheduled_end is None
+    assert task.all_day is True
+
+
+def test_all_day_create_normalizes_to_app_calendar_date(
+    db_session: Session,
+    user_id: uuid.UUID,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "app_timezone", "Asia/Taipei")
+
+    task = create_task(
+        db_session,
+        user_id,
+        title="Taipei all-day",
+        scheduled_start=parse_dt("2026-05-17T16:00:00+00:00"),
+        scheduled_end=parse_dt("2026-05-17T17:00:00+00:00"),
+        all_day=True,
+    )
+
+    assert task.scheduled_start == parse_dt("2026-05-18T00:00:00")
+    assert task.scheduled_end is None
+    assert task.all_day is True
+
+
+def test_unscheduled_task_cannot_remain_all_day(
+    db_session: Session,
+    user_id: uuid.UUID,
+) -> None:
+    task = create_task(
+        db_session,
+        user_id,
+        title="Inbox",
+        scheduled_start=None,
+        scheduled_end=None,
+        all_day=True,
+    )
+
+    assert task.scheduled_start is None
+    assert task.scheduled_end is None
+    assert task.all_day is False
 
 
 def test_overdue_filtering(db_session: Session, user_id: uuid.UUID) -> None:
@@ -861,6 +949,7 @@ def create_task(
     title: str,
     scheduled_start: datetime | None = None,
     scheduled_end: datetime | None = None,
+    all_day: bool | None = None,
     due_at: datetime | None = None,
     recurrence_rule: str | None = None,
     notification_enabled: bool | None = None,
@@ -876,6 +965,7 @@ def create_task(
             title=title,
             scheduled_start=scheduled_start,
             scheduled_end=scheduled_end,
+            all_day=all_day,
             due_at=due_at,
             recurrence_rule=recurrence_rule,
             notification_enabled=notification_enabled,
