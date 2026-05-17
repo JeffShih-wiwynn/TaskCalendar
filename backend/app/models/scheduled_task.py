@@ -30,6 +30,7 @@ class ScheduledTask(Base):
     completed: Mapped[bool] = mapped_column(Boolean, default=False)
     scheduled_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     scheduled_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    all_day: Mapped[bool] = mapped_column(Boolean, default=False)
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     timezone: Mapped[str] = mapped_column(String(100), default=get_app_timezone_name)
     priority: Mapped[int | None] = mapped_column(Integer, nullable=True)

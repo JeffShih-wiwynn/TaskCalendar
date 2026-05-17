@@ -1,5 +1,6 @@
 import type {
     DatesSetArg,
+    DayCellContentArg,
     EventApi,
     EventClickArg,
     EventContentArg,
@@ -91,6 +92,7 @@ type TaskView =
     | "all";
 type ThemeMode = "light" | "dark";
 type CalendarView = "dayGridMonth" | "timeGridWeek" | "timeGridDay";
+type MobileScreen = "today" | "upcoming" | "unscheduled" | "calendar" | "settings";
 type CalendarTransitionKind = "neutral" | "view" | "prev" | "next" | "today";
 type DragTargetMode = "reorder" | "schedule" | null;
 type AuthMode = "login" | "register";
@@ -101,6 +103,7 @@ type WorkingHoursSettings = {
 const defaultSidebarWidth = 300;
 const minSidebarWidth = 240;
 const minCalendarWidth = 320;
+const mobileLayoutQuery = "(max-width: 860px)";
 const defaultWorkingHours: WorkingHoursSettings = {
     start: "08:00",
     end: "22:00",
@@ -236,6 +239,14 @@ const motionTimings = {
     calendarEventAnimationHoldMs: 300,
 } as const;
 
+function isNarrowScreen(): boolean {
+    return (
+        typeof window !== "undefined" &&
+        typeof window.matchMedia === "function" &&
+        window.matchMedia(mobileLayoutQuery).matches
+    );
+}
+
 export function App() {
     const prefersReducedMotion = useReducedMotion();
     const calendarTransitionControls = useAnimationControls();
@@ -261,6 +272,7 @@ export function App() {
         tasks: [],
     });
     const [activeView, setActiveView] = useState<TaskView>("today");
+    const [mobileScreen, setMobileScreen] = useState<MobileScreen>("today");
     const [upcomingDays, setUpcomingDays] = useState(7);
     const [showCompletedTasks, setShowCompletedTasks] = useState(true);
     const [activeListId, setActiveListId] = useState<string | null>(null);
@@ -340,6 +352,8 @@ export function App() {
         useState<CalendarView>("timeGridWeek");
     const [calendarTitle, setCalendarTitle] = useState("");
     const [calendarDate, setCalendarDate] = useState(new Date());
+    const [mobileMonthPreviewDate, setMobileMonthPreviewDate] =
+        useState<Date | null>(null);
     const [isYearPickerOpen, setIsYearPickerOpen] = useState(false);
     const [yearDraft, setYearDraft] = useState(
         String(new Date().getFullYear()),
@@ -462,10 +476,26 @@ export function App() {
         calendarView === "timeGridWeek" || calendarView === "timeGridDay";
 
     const events = useMemo<EventInput[]>(() => {
-        return calendarTasks
-            .filter((task) => task.scheduled_start)
-            .map((task) => mapTaskToCalendarEvent(task, categoryColorById));
+        return mapTasksToCalendarEvents(calendarTasks, categoryColorById);
     }, [calendarTasks, categoryColorById]);
+    const mobileMonthPreviewTasks = useMemo(() => {
+        if (!mobileMonthPreviewDate) {
+            return [];
+        }
+
+        return calendarTasks
+            .filter((task) => {
+                if (!task.scheduled_start) {
+                    return false;
+                }
+
+                return isSameLocalDay(
+                    parseTaskDate(task.scheduled_start),
+                    mobileMonthPreviewDate,
+                );
+            })
+            .sort(compareTasksByScheduledStart);
+    }, [calendarTasks, mobileMonthPreviewDate]);
     const calendarSlotMinTime = isFullDayTimelineVisible
         ? "00:00:00"
         : `${workingHours.start}:00`;
@@ -674,7 +704,10 @@ export function App() {
         setEditState({
             title: selectedTask.title,
             notes: selectedTask.notes ?? "",
-            scheduled_start: toDateTimeLocalValue(selectedTask.scheduled_start),
+            scheduled_start:
+                Boolean(selectedTask.all_day) && selectedTask.scheduled_start
+                    ? toAllDayCalendarDate(selectedTask.scheduled_start)
+                    : toDateTimeLocalValue(selectedTask.scheduled_start),
             scheduled_end: toDateTimeLocalValue(selectedTask.scheduled_end),
             completed: selectedTask.completed,
             list_id: selectedTask.list_id ?? "",
@@ -906,7 +939,10 @@ export function App() {
 
     useEffect(() => {
         const unscheduledTaskIds = tasks
-            .filter((task) => !task.scheduled_start && !task.scheduled_end)
+            .filter(
+                (task) =>
+                    !task.scheduled_start && !task.scheduled_end && !task.due_at,
+            )
             .map((task) => task.id);
         setUnscheduledOrder((current) => {
             const next = reconcileTaskOrder(current, unscheduledTaskIds);
@@ -1345,7 +1381,7 @@ export function App() {
     const handleEventDrop = useCallback(
         async (dropInfo: EventDropArg) => {
             const task = tasks.find((item) => item.id === dropInfo.event.id);
-            const updates = getCalendarEventScheduleUpdate(dropInfo.event);
+            const updates = getCalendarEventScheduleUpdate(dropInfo.event, task);
             clearUndoState();
 
             if (task && shouldPromptRecurringTaskEdit(task, updates)) {
@@ -1426,6 +1462,10 @@ export function App() {
             setIsCategoryMenuOpen(false);
             setIsAddingCategory(false);
             setContextMenu(null);
+            if (isNarrowScreen()) {
+                setIsSidebarOpen(true);
+                setMobileScreen("calendar");
+            }
             setDetailPanelMode("create");
             setSelectedTaskId(null);
             setFormState({
@@ -1433,6 +1473,36 @@ export function App() {
                 list_id: selectedListIdForForms,
                 scheduled_start: dateToDateTimeLocalValue(start),
                 scheduled_end: dateToDateTimeLocalValue(end),
+            });
+            window.setTimeout(() => {
+                createFormRef.current?.scrollIntoView?.({
+                    block: "nearest",
+                    behavior: "smooth",
+                });
+                titleInputRef.current?.focus();
+            }, 0);
+        },
+        [selectedListIdForForms],
+    );
+
+    const openDateOnlyCreatePanel = useCallback(
+        (date: Date) => {
+            setFormError(null);
+            setIsViewMenuOpen(false);
+            setIsCategoryMenuOpen(false);
+            setIsAddingCategory(false);
+            setContextMenu(null);
+            if (isNarrowScreen()) {
+                setIsSidebarOpen(true);
+                setMobileScreen("calendar");
+            }
+            setDetailPanelMode("create");
+            setSelectedTaskId(null);
+            setFormState({
+                ...initialFormState,
+                list_id: selectedListIdForForms,
+                scheduled_start: dateToDateInputValue(date),
+                scheduled_end: "",
             });
             window.setTimeout(() => {
                 createFormRef.current?.scrollIntoView?.({
@@ -1466,27 +1536,54 @@ export function App() {
         }, 0);
     }, [selectedListIdForForms]);
 
+    const openTaskDetailPanel = useCallback((taskId: string) => {
+        setFormError(null);
+        setIsViewMenuOpen(false);
+        setIsCategoryMenuOpen(false);
+        setIsAddingCategory(false);
+        setContextMenu(null);
+        setIsDetailPanelClosing(false);
+        if (isNarrowScreen()) {
+            setIsSidebarOpen(true);
+        }
+        setDetailPanelMode("edit");
+        setSelectedTaskId(taskId);
+    }, []);
+
     const handleDateSelect = useCallback(
         (selectInfo: DateSelectArg) => {
+            if (selectInfo.allDay) {
+                openDateOnlyCreatePanel(selectInfo.start);
+                return;
+            }
+
             openCreatePanel(
                 selectInfo.start,
-                selectInfo.allDay
-                    ? normalizeAllDayEnd(selectInfo.start, selectInfo.end)
-                    : selectInfo.end,
+                selectInfo.end,
             );
         },
-        [openCreatePanel],
+        [openCreatePanel, openDateOnlyCreatePanel],
     );
 
     const handleDateClick = useCallback(
         (clickInfo: DateClickArg) => {
+            if (calendarView === "dayGridMonth" && isNarrowScreen()) {
+                setMobileMonthPreviewDate(clickInfo.date);
+                return;
+            }
+
             const start = clickInfo.date;
+            if (clickInfo.allDay) {
+                openDateOnlyCreatePanel(start);
+                return;
+            }
+
             const end = clickInfo.allDay
                 ? addLocalDays(start, 1)
                 : new Date(start.getTime() + 60 * 60 * 1000);
             openCreatePanel(start, end);
         },
-        [openCreatePanel],
+        [calendarView, openCreatePanel, openDateOnlyCreatePanel],
     );
 
     const handleCheckboxChange = useCallback(
@@ -1617,17 +1714,51 @@ export function App() {
     );
     const taskContentKey = `${activeView}-${categoryFilterKey}-${upcomingDays}`;
 
+    const renderDayCellContent = useCallback((dayCellInfo: DayCellContentArg) => {
+        return (
+            <div className="calendar-month-day-cell-content">
+                <span className="calendar-month-day-number">
+                    {dayCellInfo.dayNumberText}
+                </span>
+            </div>
+        );
+    }, []);
+
     const renderEventContent = useCallback(
         (eventInfo: EventContentArg) => {
             const task =
                 (eventInfo.event.extendedProps.task as ScheduledTask | undefined) ??
                 tasksRef.current.find((item) => item.id === eventInfo.event.id);
+            const isMobileMonthEvent =
+                eventInfo.view.type === "dayGridMonth" && isNarrowScreen();
 
             if (!task) {
                 return (
-                    <div className="calendar-task">
+                    <div
+                        className={
+                            isMobileMonthEvent
+                                ? "calendar-task calendar-task-month-summary"
+                                : "calendar-task"
+                        }
+                    >
                         <span className="calendar-task-title task-title">
                             {eventInfo.event.title}
+                        </span>
+                    </div>
+                );
+            }
+
+            if (isMobileMonthEvent) {
+                return (
+                    <div className="calendar-task calendar-task-month-summary">
+                        <span
+                            className={
+                                task.completed
+                                    ? "calendar-task-title task-title completed"
+                                    : "calendar-task-title task-title"
+                            }
+                        >
+                            {task.title}
                         </span>
                     </div>
                 );
@@ -1665,9 +1796,22 @@ export function App() {
     );
 
     const handleEventClick = useCallback((clickInfo: EventClickArg) => {
+        if (
+            clickInfo.view.type === "dayGridMonth" &&
+            isNarrowScreen() &&
+            clickInfo.event.start
+        ) {
+            setMobileMonthPreviewDate(clickInfo.event.start);
+            return;
+        }
+
         setIsViewMenuOpen(false);
         setIsCategoryMenuOpen(false);
         setIsAddingCategory(false);
+        if (isNarrowScreen()) {
+            setIsSidebarOpen(true);
+            setMobileScreen("calendar");
+        }
         setDetailPanelMode("edit");
         setSelectedTaskId(clickInfo.event.id);
         setContextMenu(null);
@@ -1911,6 +2055,39 @@ export function App() {
         [activeView, applyLocalUnscheduledOrder, persistUnscheduledOrder],
     );
 
+    const moveUnscheduledTaskByOffset = useCallback(
+        (taskId: string, offset: number) => {
+            if (activeView !== "unscheduled" || offset === 0) {
+                return;
+            }
+
+            const currentOrder = unscheduledOrderRef.current;
+            const currentIndex = currentOrder.indexOf(taskId);
+            if (currentIndex < 0) {
+                return;
+            }
+
+            const nextIndex = currentIndex + offset;
+            if (nextIndex < 0 || nextIndex >= currentOrder.length) {
+                return;
+            }
+
+            const nextOrder = [...currentOrder];
+            [nextOrder[currentIndex], nextOrder[nextIndex]] = [
+                nextOrder[nextIndex],
+                nextOrder[currentIndex],
+            ];
+
+            if (areStringArraysEqual(currentOrder, nextOrder)) {
+                return;
+            }
+
+            applyLocalUnscheduledOrder(nextOrder);
+            persistUnscheduledOrder(nextOrder);
+        },
+        [activeView, applyLocalUnscheduledOrder, persistUnscheduledOrder],
+    );
+
     const endScheduleDragHighlight = useCallback(() => {
         scheduleDragCleanupRef.current?.();
         scheduleDragCleanupRef.current = null;
@@ -2025,6 +2202,10 @@ export function App() {
             );
         }
 
+        if (isNarrowScreen()) {
+            return;
+        }
+
         const handleContextMenu = (event: MouseEvent) => {
             event.preventDefault();
             setSelectedTaskId(mountInfo.event.id);
@@ -2048,9 +2229,16 @@ export function App() {
             return;
         }
 
+        const dateOnlyScheduledStart = getDateOnlyScheduledStartIso(
+            formState.scheduled_start,
+        );
+        const isDateOnlyTask =
+            Boolean(dateOnlyScheduledStart) && !formState.scheduled_end;
+
         if (
-            hasIncompleteDateTimeValue(formState.scheduled_start) ||
-            hasIncompleteDateTimeValue(formState.scheduled_end)
+            !isDateOnlyTask &&
+            (hasIncompleteDateTimeValue(formState.scheduled_start) ||
+                hasIncompleteDateTimeValue(formState.scheduled_end))
         ) {
             setFormError("Start and end must include both date and time");
             return;
@@ -2066,7 +2254,10 @@ export function App() {
             return;
         }
 
-        if (formState.recurrence_frequency && !formState.scheduled_start) {
+        if (
+            formState.recurrence_frequency &&
+            !isCompleteDateTimeValue(formState.scheduled_start)
+        ) {
             setFormError("Recurring tasks require a start time");
             return;
         }
@@ -2099,8 +2290,12 @@ export function App() {
                 title: formState.title.trim(),
                 list_id: formState.list_id || null,
                 notes: formState.notes.trim() || null,
-                scheduled_start: toIsoOrNull(formState.scheduled_start),
-                scheduled_end: toIsoOrNull(formState.scheduled_end),
+                scheduled_start: isDateOnlyTask
+                    ? dateOnlyScheduledStart
+                    : toIsoOrNull(formState.scheduled_start),
+                scheduled_end: isDateOnlyTask ? null : toIsoOrNull(formState.scheduled_end),
+                all_day: isDateOnlyTask,
+                due_at: null,
                 recurrence_rule: buildRecurrenceRule(formState),
                 notification_enabled: notificationSettings.enabled,
                 notification_offset_minutes:
@@ -2157,9 +2352,16 @@ export function App() {
             return;
         }
 
+        const dateOnlyScheduledStart = getDateOnlyScheduledStartIso(
+            editState.scheduled_start,
+        );
+        const isDateOnlyTask =
+            Boolean(dateOnlyScheduledStart) && !editState.scheduled_end;
+
         if (
-            hasIncompleteDateTimeValue(editState.scheduled_start) ||
-            hasIncompleteDateTimeValue(editState.scheduled_end)
+            !isDateOnlyTask &&
+            (hasIncompleteDateTimeValue(editState.scheduled_start) ||
+                hasIncompleteDateTimeValue(editState.scheduled_end))
         ) {
             setFormError("Start and end must include both date and time");
             return;
@@ -2175,7 +2377,10 @@ export function App() {
             return;
         }
 
-        if (editState.recurrence_frequency && !editState.scheduled_start) {
+        if (
+            editState.recurrence_frequency &&
+            !isCompleteDateTimeValue(editState.scheduled_start)
+        ) {
             setFormError("Recurring tasks require a start time");
             return;
         }
@@ -2624,6 +2829,40 @@ export function App() {
         isWorkingHoursSettingsOpen ||
         isWebhookSettingsOpen ||
         isBackupSettingsOpen;
+    const openMobileTaskScreen = useCallback(
+        (screen: Extract<MobileScreen, "today" | "upcoming" | "unscheduled">) => {
+            setMobileScreen(screen);
+            setActiveView(screen);
+            setIsSidebarOpen(true);
+            setIsSettingsMenuOpen(false);
+            setIsWorkingHoursSettingsOpen(false);
+            setIsWebhookSettingsOpen(false);
+            setIsBackupSettingsOpen(false);
+            closeDetailPanel();
+        },
+        [closeDetailPanel],
+    );
+    const openMobileCalendarScreen = useCallback(() => {
+        setMobileScreen("calendar");
+        setIsSidebarOpen(false);
+        setIsSettingsMenuOpen(false);
+        setIsWorkingHoursSettingsOpen(false);
+        setIsWebhookSettingsOpen(false);
+        setIsBackupSettingsOpen(false);
+        closeDetailPanel();
+        window.setTimeout(() => {
+            calendarRef.current?.getApi().updateSize();
+        }, 0);
+    }, [closeDetailPanel]);
+    const openMobileSettingsScreen = useCallback(() => {
+        setMobileScreen("settings");
+        closeDetailPanel();
+        setIsSidebarOpen(true);
+        setIsWorkingHoursSettingsOpen(false);
+        setIsWebhookSettingsOpen(false);
+        setIsBackupSettingsOpen(false);
+        setIsSettingsMenuOpen(true);
+    }, [closeDetailPanel]);
 
     if (!authToken) {
         return (
@@ -2646,7 +2885,7 @@ export function App() {
     return (
         <main
             ref={appShellRef}
-            className={`app-shell ${themeMode} ${isSidebarOpen ? "sidebar-open" : "sidebar-collapsed"}`}
+            className={`app-shell ${themeMode} ${isSidebarOpen ? "sidebar-open" : "sidebar-collapsed"} mobile-screen-${mobileScreen} ${detailPanelMode ? "detail-panel-open" : ""}`}
             style={appShellStyle}
             onTransitionEnd={(event) => {
                 if (
@@ -2666,6 +2905,63 @@ export function App() {
                 setIsCategoryMenuOpen(false);
             }}
         >
+            <nav className="mobile-app-nav" aria-label="Mobile app navigation">
+                <button
+                    type="button"
+                    aria-label="Mobile Today"
+                    className={`mobile-app-nav-button ${mobileScreen === "today" ? "active" : ""}`}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        openMobileTaskScreen("today");
+                    }}
+                >
+                    Today
+                </button>
+                <button
+                    type="button"
+                    aria-label="Mobile Upcoming"
+                    className={`mobile-app-nav-button ${mobileScreen === "upcoming" ? "active" : ""}`}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        openMobileTaskScreen("upcoming");
+                    }}
+                >
+                    Upcoming
+                </button>
+                <button
+                    type="button"
+                    aria-label="Mobile Inbox"
+                    className={`mobile-app-nav-button ${mobileScreen === "unscheduled" ? "active" : ""}`}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        openMobileTaskScreen("unscheduled");
+                    }}
+                >
+                    Inbox
+                </button>
+                <button
+                    type="button"
+                    aria-label="Mobile Calendar"
+                    className={`mobile-app-nav-button ${mobileScreen === "calendar" ? "active" : ""}`}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        openMobileCalendarScreen();
+                    }}
+                >
+                    Calendar
+                </button>
+                <button
+                    type="button"
+                    aria-label="Mobile Settings"
+                    className={`mobile-app-nav-button ${mobileScreen === "settings" ? "active" : ""}`}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        openMobileSettingsScreen();
+                    }}
+                >
+                    Settings
+                </button>
+            </nav>
             <aside
                 className={`task-sidebar ${isSidebarOpen ? "task-sidebar-open" : "task-sidebar-collapsed"}`}
                 aria-hidden={!isSidebarOpen}
@@ -3132,7 +3428,7 @@ export function App() {
                             className="filter-section"
                             aria-label="Task filters"
                         >
-                            <div className="filter-field">
+                            <div className="filter-field task-view-filter-field">
                                 <span>View</span>
                                 <div
                                     className="filter-dropdown"
@@ -3329,17 +3625,23 @@ export function App() {
                                                     >
                                                         <div
                                                             className="category-filter-row category-filter-row-custom"
-                                                            onContextMenu={(
-                                                                event,
-                                                            ) => {
-                                                                event.preventDefault();
-                                                                setContextMenu({
-                                                                    kind: "category",
-                                                                    id: taskList.id,
-                                                                    x: event.clientX,
-                                                                    y: event.clientY,
-                                                                });
-                                                            }}
+                                                            onContextMenu={
+                                                                isNarrowScreen()
+                                                                    ? undefined
+                                                                    : (
+                                                                          event,
+                                                                      ) => {
+                                                                          event.preventDefault();
+                                                                          setContextMenu(
+                                                                              {
+                                                                                  kind: "category",
+                                                                                  id: taskList.id,
+                                                                                  x: event.clientX,
+                                                                                  y: event.clientY,
+                                                                              },
+                                                                          );
+                                                                      }
+                                                            }
                                                         >
                                                             <span className="category-filter-label">
                                                                 <span
@@ -3582,7 +3884,7 @@ export function App() {
                         {detailPanelMode && (
                             <motion.section
                                 key={detailPanelMode}
-                                className="task-detail-panel"
+                                className="task-detail-panel mobile-task-sheet"
                                 aria-label={
                                     detailPanelMode === "create"
                                         ? "Create task panel"
@@ -4153,6 +4455,7 @@ export function App() {
                                                             : undefined
                                                     }
                                                     className={`task-row ${activeView === "unscheduled" ? "task-row--reorderable" : ""} ${!task.completed && isOverdueTask(task, new Date()) ? "task-row--overdue" : ""} ${selectedTaskId === task.id ? "selected" : ""}`}
+                                                    data-task-index={taskIndex}
                                                     style={{
                                                         borderLeftColor:
                                                             taskCategoryColor(
@@ -4225,10 +4528,7 @@ export function App() {
                                                                 null;
                                                             return;
                                                         }
-                                                        setDetailPanelMode(
-                                                            "edit",
-                                                        );
-                                                        setSelectedTaskId(
+                                                        openTaskDetailPanel(
                                                             task.id,
                                                         );
                                                     }}
@@ -4245,25 +4545,28 @@ export function App() {
                                                         }
 
                                                         event.preventDefault();
-                                                        setDetailPanelMode(
-                                                            "edit",
-                                                        );
-                                                        setSelectedTaskId(
+                                                        openTaskDetailPanel(
                                                             task.id,
                                                         );
                                                     }}
-                                                    onContextMenu={(event) => {
-                                                        event.preventDefault();
-                                                        setSelectedTaskId(
-                                                            task.id,
-                                                        );
-                                                        setContextMenu({
-                                                            kind: "task",
-                                                            id: task.id,
-                                                            x: event.clientX,
-                                                            y: event.clientY,
-                                                        });
-                                                    }}
+                                                    onContextMenu={
+                                                        isNarrowScreen()
+                                                            ? undefined
+                                                            : (event) => {
+                                                                  event.preventDefault();
+                                                                  setSelectedTaskId(
+                                                                      task.id,
+                                                                  );
+                                                                  setContextMenu(
+                                                                      {
+                                                                          kind: "task",
+                                                                          id: task.id,
+                                                                          x: event.clientX,
+                                                                          y: event.clientY,
+                                                                      },
+                                                                  );
+                                                              }
+                                                    }
                                                 >
                                                     <motion.input
                                                         type="checkbox"
@@ -4319,30 +4622,89 @@ export function App() {
                                                     <span className="task-order-actions task-order-actions--aligned">
                                                         {activeView ===
                                                             "unscheduled" && (
-                                                            <button
-                                                                type="button"
-                                                                className="task-order-button task-order-button-top"
-                                                                aria-label={`Move ${task.title} to top`}
-                                                                disabled={
-                                                                    taskIndex ===
-                                                                    0
-                                                                }
-                                                                onPointerDown={(
-                                                                    event,
-                                                                ) =>
-                                                                    event.stopPropagation()
-                                                                }
-                                                                onClick={(
-                                                                    event,
-                                                                ) => {
-                                                                    event.stopPropagation();
-                                                                    moveUnscheduledTaskToTop(
-                                                                        task.id,
-                                                                    );
-                                                                }}
-                                                            >
-                                                                ⇡
-                                                            </button>
+                                                            <>
+                                                                {mobileScreen ===
+                                                                "unscheduled" ? (
+                                                                    <>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="task-order-button task-order-button-up task-order-button-mobile-order"
+                                                                            aria-label={`Move ${task.title} up`}
+                                                                            disabled={
+                                                                                taskIndex ===
+                                                                                0
+                                                                            }
+                                                                            onPointerDown={(
+                                                                                event,
+                                                                            ) =>
+                                                                                event.stopPropagation()
+                                                                            }
+                                                                            onClick={(
+                                                                                event,
+                                                                            ) => {
+                                                                                event.stopPropagation();
+                                                                                moveUnscheduledTaskByOffset(
+                                                                                    task.id,
+                                                                                    -1,
+                                                                                );
+                                                                            }}
+                                                                        >
+                                                                            ⇡
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="task-order-button task-order-button-down task-order-button-mobile-order"
+                                                                            aria-label={`Move ${task.title} down`}
+                                                                            disabled={
+                                                                                taskIndex ===
+                                                                                orderedVisibleTasks.length -
+                                                                                    1
+                                                                            }
+                                                                            onPointerDown={(
+                                                                                event,
+                                                                            ) =>
+                                                                                event.stopPropagation()
+                                                                            }
+                                                                            onClick={(
+                                                                                event,
+                                                                            ) => {
+                                                                                event.stopPropagation();
+                                                                                moveUnscheduledTaskByOffset(
+                                                                                    task.id,
+                                                                                    1,
+                                                                                );
+                                                                            }}
+                                                                        >
+                                                                            ⇣
+                                                                        </button>
+                                                                    </>
+                                                                ) : (
+                                                                    <button
+                                                                        type="button"
+                                                                        className="task-order-button task-order-button-top task-order-button-desktop-top"
+                                                                        aria-label={`Move ${task.title} to top`}
+                                                                        disabled={
+                                                                            taskIndex ===
+                                                                            0
+                                                                        }
+                                                                        onPointerDown={(
+                                                                            event,
+                                                                        ) =>
+                                                                            event.stopPropagation()
+                                                                        }
+                                                                        onClick={(
+                                                                            event,
+                                                                        ) => {
+                                                                            event.stopPropagation();
+                                                                            moveUnscheduledTaskToTop(
+                                                                                task.id,
+                                                                            );
+                                                                        }}
+                                                                    >
+                                                                        ⇡
+                                                                    </button>
+                                                                )}
+                                                            </>
                                                         )}
                                                         <button
                                                             type="button"
@@ -4515,7 +4877,7 @@ export function App() {
                     </motion.div>
                 )}
 
-                <div className="calendar-toolbar">
+                <div className={`calendar-toolbar calendar-toolbar-${calendarView}`}>
                     <div className="calendar-toolbar-group">
                         {!isSidebarOpen && (
                             <button
@@ -4550,6 +4912,38 @@ export function App() {
                         >
                             Today
                         </button>
+                        <div className="mobile-calendar-period-control">
+                            {isYearPickerOpen ? (
+                                <form
+                                    className="calendar-year-form"
+                                    onSubmit={(event) =>
+                                        void submitYearChange(event)
+                                    }
+                                >
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        step={1}
+                                        value={yearDraft}
+                                        onChange={(event) =>
+                                            setYearDraft(event.target.value)
+                                        }
+                                        aria-label="Calendar year"
+                                    />
+                                </form>
+                            ) : (
+                                <button
+                                    type="button"
+                                    className="calendar-toolbar-button mobile-calendar-period-button"
+                                    onClick={() => setIsYearPickerOpen(true)}
+                                >
+                                    {calendarDate.getFullYear()}{" "}
+                                    {new Intl.DateTimeFormat(undefined, {
+                                        month: "short",
+                                    }).format(calendarDate)}
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     <div className="calendar-toolbar-title">
@@ -4601,17 +4995,6 @@ export function App() {
                         role="tablist"
                         aria-label="Calendar view"
                     >
-                        {isTimeGridView && (
-                            <button
-                                type="button"
-                                className="calendar-toolbar-button calendar-hours-toggle"
-                                onClick={() =>
-                                    setIsFullDayTimelineVisible((current) => !current)
-                                }
-                            >
-                                {isFullDayTimelineVisible ? "Full" : "Work"}
-                            </button>
-                        )}
                         <button
                             type="button"
                             className="calendar-toolbar-button calendar-view-cycle-button"
@@ -4619,11 +5002,22 @@ export function App() {
                         >
                             {calendarViewToggleLabel}
                         </button>
+                        {isTimeGridView && (
+                            <button
+                                type="button"
+                                className="calendar-toolbar-button calendar-hours-toggle"
+                                onClick={() =>
+                                    setIsFullDayTimelineVisible((current) => !current)
+                                }
+                                >
+                                    {isFullDayTimelineVisible ? "Full" : "Work"}
+                                </button>
+                        )}
                     </div>
                 </div>
 
                 <motion.div
-                    className={`calendar-transition-shell${
+                    className={`calendar-transition-shell calendar-view-${calendarView}${
                         isWorkingTimeGridView
                             ? " calendar-working-range"
                             : ""
@@ -4645,6 +5039,13 @@ export function App() {
                             hour12: false,
                         }}
                         eventContent={renderEventContent}
+                        dayCellContent={renderDayCellContent}
+                        dayMaxEventRows={
+                            calendarView === "dayGridMonth" &&
+                            isNarrowScreen()
+                                ? true
+                                : false
+                        }
                         eventClick={handleEventClick}
                         eventDidMount={handleEventDidMount}
                         dateClick={handleDateClick}
@@ -4681,6 +5082,112 @@ export function App() {
                             : {})}
                     />
                 </motion.div>
+                {calendarView === "dayGridMonth" && (
+                    <section
+                        className={`mobile-month-task-preview${
+                            mobileMonthPreviewDate
+                                ? " mobile-month-task-preview-open"
+                                : ""
+                        }`}
+                        aria-label="Selected day tasks"
+                    >
+                        <div className="mobile-month-task-preview-header">
+                            <h2>
+                                {mobileMonthPreviewDate
+                                    ? formatDateFromDate(mobileMonthPreviewDate)
+                                    : "Select a day"}
+                            </h2>
+                            {mobileMonthPreviewDate && (
+                                <div className="mobile-month-task-preview-actions">
+                                    <button
+                                        type="button"
+                                        className="sidebar-create-task-button mobile-month-task-preview-add"
+                                        aria-label="Add task for selected day"
+                                        onClick={() => {
+                                            const selectedDate =
+                                                mobileMonthPreviewDate;
+                                            if (!selectedDate) {
+                                                return;
+                                            }
+
+                                            setMobileMonthPreviewDate(null);
+                                            openDateOnlyCreatePanel(
+                                                selectedDate,
+                                            );
+                                        }}
+                                    >
+                                        Add
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="mobile-month-task-preview-close"
+                                        aria-label="Close selected day tasks"
+                                        onClick={() =>
+                                            setMobileMonthPreviewDate(null)
+                                        }
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                        <div className="mobile-month-task-list">
+                            {mobileMonthPreviewDate &&
+                            mobileMonthPreviewTasks.length === 0 ? (
+                                <p className="muted">No tasks this day.</p>
+                            ) : null}
+                            {!mobileMonthPreviewDate ? (
+                                <p className="muted">
+                                    Tap a day to preview tasks.
+                                </p>
+                            ) : null}
+                            {mobileMonthPreviewTasks.map((task) => (
+                                <button
+                                    key={task.id}
+                                    type="button"
+                                    className="mobile-month-task-row"
+                                    style={{
+                                        borderLeftColor: taskCategoryColor(
+                                            task,
+                                            categoryColorById,
+                                        ),
+                                    }}
+                                    onClick={() => {
+                                        setMobileMonthPreviewDate(null);
+                                        openTaskDetailPanel(task.id);
+                                    }}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        className="task-checkbox"
+                                        checked={task.completed}
+                                        onChange={() =>
+                                            void handleCheckboxChange(task)
+                                        }
+                                        onClick={(event) =>
+                                            event.stopPropagation()
+                                        }
+                                        aria-label={`Toggle ${task.title}`}
+                                    />
+                                    <span className="mobile-month-task-main">
+                                        <span
+                                            className={
+                                                task.completed
+                                                    ? "task-title completed"
+                                                    : "task-title"
+                                            }
+                                        >
+                                            {task.title}
+                                        </span>
+                                        <span className="task-meta">
+                                            {formatTaskMeta(task)}
+                                        </span>
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    </section>
+                )}
             </section>
 
             {pendingDeleteTask && (
@@ -4825,7 +5332,7 @@ export function App() {
                 </div>
             )}
 
-            {contextMenu && (
+            {contextMenu && !isNarrowScreen() && (
                 <div
                     className="context-menu"
                     style={{ left: contextMenu.x, top: contextMenu.y }}
@@ -5093,8 +5600,18 @@ function buildTaskUpdates(
     const title = editState.title.trim();
     const listId = editState.list_id || null;
     const notes = editState.notes.trim() || null;
-    const scheduledStart = toIsoOrNull(editState.scheduled_start);
-    const scheduledEnd = toIsoOrNull(editState.scheduled_end);
+    const dateOnlyScheduledStart = getDateOnlyScheduledStartIso(
+        editState.scheduled_start,
+    );
+    const isDateOnlyTask =
+        Boolean(dateOnlyScheduledStart) && !editState.scheduled_end;
+    const scheduledStart = isDateOnlyTask
+        ? dateOnlyScheduledStart
+        : toIsoOrNull(editState.scheduled_start);
+    const scheduledEnd = isDateOnlyTask
+        ? null
+        : toIsoOrNull(editState.scheduled_end);
+    const allDay = isDateOnlyTask;
     const recurrenceRule = buildRecurrenceRule(editState);
     const notificationSettings = getNotificationSettings(editState);
     const notificationEnabled = notificationSettings.enabled;
@@ -5115,6 +5632,9 @@ function buildTaskUpdates(
     }
     if (scheduledEnd !== (selectedTask.scheduled_end ?? null)) {
         updates.scheduled_end = scheduledEnd;
+    }
+    if (allDay !== Boolean(selectedTask.all_day)) {
+        updates.all_day = allDay;
     }
     if (editState.completed !== selectedTask.completed) {
         updates.completed = editState.completed;
@@ -5149,6 +5669,7 @@ function buildTaskUpdateInputFromSnapshot(
         completed: task.completed,
         scheduled_start: task.scheduled_start,
         scheduled_end: task.scheduled_end,
+        all_day: Boolean(task.all_day),
         due_at: task.due_at,
         unscheduled_order: task.unscheduled_order,
         recurrence_rule: task.recurrence_rule,
@@ -5192,6 +5713,9 @@ function assignTaskUpdateField(
             break;
         case "scheduled_end":
             update.scheduled_end = snapshot.scheduled_end;
+            break;
+        case "all_day":
+            update.all_day = snapshot.all_day;
             break;
         case "due_at":
             update.due_at = snapshot.due_at;
@@ -5290,6 +5814,7 @@ function hasRecurringDetachUpdate(
         "list_id",
         "scheduled_start",
         "scheduled_end",
+        "all_day",
         "notification_enabled",
         "notification_offset_minutes",
         "notification_channel",
@@ -5306,6 +5831,7 @@ function buildTaskCreateInputFromSnapshot(
         completed: task.completed,
         scheduled_start: task.scheduled_start,
         scheduled_end: task.scheduled_end,
+        all_day: Boolean(task.all_day),
         due_at: task.due_at,
         timezone: task.timezone,
         priority: task.priority,
@@ -5327,11 +5853,12 @@ function buildDuplicateTaskInput(
         completed: false,
         scheduled_start: task.scheduled_start,
         scheduled_end: task.scheduled_end,
+        all_day: Boolean(task.all_day),
         due_at: task.due_at,
         timezone: task.timezone,
         priority: task.priority,
         unscheduled_order:
-            !task.scheduled_start && !task.scheduled_end
+            !task.scheduled_start && !task.scheduled_end && !task.due_at
                 ? task.unscheduled_order
                 : null,
         notification_enabled: task.notification_enabled,
@@ -5425,6 +5952,7 @@ function shouldPromptRecurringTaskEdit(
         "notes",
         "scheduled_start",
         "scheduled_end",
+        "all_day",
         "recurrence_rule",
         "notification_enabled",
         "notification_offset_minutes",
@@ -5455,7 +5983,12 @@ function filterTasksForView(
         }
 
         if (activeView === "unscheduled") {
-            return !task.completed && !task.scheduled_start && !task.scheduled_end;
+            return (
+                !task.completed &&
+                !task.scheduled_start &&
+                !task.scheduled_end &&
+                !task.due_at
+            );
         }
 
         if (activeView === "all") {
@@ -5684,7 +6217,7 @@ function buildUnscheduledOrderUpdates(
     tasks: ScheduledTask[],
 ): Array<{ taskId: string; unscheduled_order: number }> {
     const unscheduledTasks = tasks.filter(
-        (task) => !task.scheduled_start && !task.scheduled_end,
+        (task) => !task.scheduled_start && !task.scheduled_end && !task.due_at,
     );
     const taskById = new Map(unscheduledTasks.map((task) => [task.id, task]));
     const reconciledOrder = reconcileTaskOrder(
@@ -5799,6 +6332,10 @@ function isWithinUpcomingDays(value: Date, now: Date, days: number): boolean {
 function formatScheduledRange(task: ScheduledTask): string {
     if (!task.scheduled_start) {
         return "";
+    }
+
+    if (task.all_day) {
+        return formatDateOnlyLabel(toAllDayCalendarDate(task.scheduled_start));
     }
 
     const start = formatDateTime(task.scheduled_start);
@@ -5950,8 +6487,41 @@ function formatDate(value: string): string {
     }).format(parseTaskDate(value));
 }
 
+function formatDateOnlyLabel(value: string): string {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Intl.DateTimeFormat(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+    }).format(new Date(year, month - 1, day));
+}
+
+function formatDateFromDate(value: Date): string {
+    return new Intl.DateTimeFormat(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+    }).format(value);
+}
+
 function parseTaskDate(value: string): Date {
     return new Date(value);
+}
+
+function compareTasksByScheduledStart(
+    left: ScheduledTask,
+    right: ScheduledTask,
+): number {
+    const leftDate = left.scheduled_start ?? left.due_at;
+    const rightDate = right.scheduled_start ?? right.due_at;
+    const leftTime = leftDate
+        ? parseTaskDate(leftDate).getTime()
+        : 0;
+    const rightTime = rightDate
+        ? parseTaskDate(rightDate).getTime()
+        : 0;
+
+    return leftTime - rightTime || left.title.localeCompare(right.title);
 }
 
 function splitDateTimeInputValue(value: string): {
@@ -6002,8 +6572,21 @@ function hasIncompleteDateTimeValue(value: string): boolean {
 
 function toDateInputValue(value: string): string {
     const date = parseTaskDate(value);
+    return dateToDateInputValue(date);
+}
+
+function dateToDateInputValue(date: Date): string {
     const offsetMs = date.getTimezoneOffset() * 60_000;
     return new Date(date.getTime() - offsetMs).toISOString().slice(0, 10);
+}
+
+function dateOnlyToApiDateTime(value: string): string {
+    return `${value}T00:00:00`;
+}
+
+function getDateOnlyScheduledStartIso(value: string): string | null {
+    const { datePart, timePart } = splitDateTimeInputValue(value);
+    return datePart && !timePart ? dateOnlyToApiDateTime(datePart) : null;
 }
 
 function endOfLocalDateToIso(value: string): string {
@@ -6011,20 +6594,32 @@ function endOfLocalDateToIso(value: string): string {
     return date.toISOString();
 }
 
-function getCalendarEventScheduleUpdate(event: EventApi): {
+function getCalendarEventScheduleUpdate(event: EventApi, task?: ScheduledTask): {
     scheduled_start: string | null;
     scheduled_end: string | null;
+    all_day: boolean;
+    due_at?: string | null;
 } {
     if (!event.start) {
-        return { scheduled_start: null, scheduled_end: null };
+        return { scheduled_start: null, scheduled_end: null, all_day: false, due_at: null };
     }
 
-    const end =
-        event.end ?? (event.allDay ? addLocalDays(event.start, 1) : null);
+    if (event.allDay) {
+        return {
+            scheduled_start: dateOnlyToApiDateTime(
+                dateToDateInputValue(event.start),
+            ),
+            scheduled_end: null,
+            all_day: true,
+            ...(task?.due_at ? { due_at: null } : {}),
+        };
+    }
 
     return {
         scheduled_start: event.start.toISOString(),
-        scheduled_end: end?.toISOString() ?? null,
+        scheduled_end: event.end?.toISOString() ?? null,
+        all_day: false,
+        ...(task?.due_at ? { due_at: null } : {}),
     };
 }
 
@@ -6032,18 +6627,29 @@ function getCalendarDropScheduleUpdate(
     task: ScheduledTask,
     dropInfo: DropArg,
 ): {
-    scheduled_start: string;
-    scheduled_end: string;
+    scheduled_start: string | null;
+    scheduled_end: string | null;
+    all_day: boolean;
+    due_at?: string | null;
 } {
     const start = dropInfo.date;
+    if (dropInfo.allDay) {
+        return {
+            scheduled_start: dateOnlyToApiDateTime(dateToDateInputValue(start)),
+            scheduled_end: null,
+            all_day: true,
+            ...(task.due_at ? { due_at: null } : {}),
+        };
+    }
+
     const durationMinutes = getTaskDragDurationMinutes(task, dropInfo.allDay);
-    const end = dropInfo.allDay
-        ? addLocalDays(start, Math.max(1, Math.ceil(durationMinutes / 1440)))
-        : new Date(start.getTime() + durationMinutes * 60_000);
+    const end = new Date(start.getTime() + durationMinutes * 60_000);
 
     return {
         scheduled_start: start.toISOString(),
         scheduled_end: end.toISOString(),
+        all_day: false,
+        ...(task.due_at ? { due_at: null } : {}),
     };
 }
 
@@ -6051,14 +6657,6 @@ function addLocalDays(date: Date, days: number): Date {
     const next = new Date(date);
     next.setDate(next.getDate() + days);
     return next;
-}
-
-function normalizeAllDayEnd(start: Date, end: Date | null): Date {
-    if (!end || end <= start) {
-        return addLocalDays(start, 1);
-    }
-
-    return end;
 }
 
 function getTaskDragDuration(task: ScheduledTask): {
@@ -6113,49 +6711,15 @@ function taskCategoryColor(
         : defaultCategoryColor;
 }
 
-function isAllDayScheduledTask(task: ScheduledTask): boolean {
-    if (!task.scheduled_start || !task.scheduled_end) {
-        return false;
-    }
-
-    const start = parseTaskDate(task.scheduled_start);
-    const end = parseTaskDate(task.scheduled_end);
-    const dayMs = 24 * 60 * 60 * 1000;
-    const formatter = new Intl.DateTimeFormat("en-CA", {
-        timeZone: task.timezone,
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hourCycle: "h23",
-    });
-    const startClock = formatter.formatToParts(start);
-    const endClock = formatter.formatToParts(end);
-
-    return (
-        getPartValue(startClock, "hour") === "00" &&
-        getPartValue(startClock, "minute") === "00" &&
-        getPartValue(startClock, "second") === "00" &&
-        getPartValue(endClock, "hour") === "00" &&
-        getPartValue(endClock, "minute") === "00" &&
-        getPartValue(endClock, "second") === "00" &&
-        end.getTime() - start.getTime() >= dayMs
-    );
+function toAllDayCalendarDate(value: string): string {
+    return value.slice(0, 10);
 }
 
-function toCalendarDate(value: string, timeZone: string): string {
-    return new Intl.DateTimeFormat("en-CA", {
-        timeZone,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-    }).format(parseTaskDate(value));
-}
-
-function getPartValue(
-    parts: Intl.DateTimeFormatPart[],
-    type: Intl.DateTimeFormatPartTypes,
-): string {
-    return parts.find((part) => part.type === type)?.value ?? "";
+function addCalendarDateDays(value: string, days: number): string {
+    const [year, month, day] = value.split("-").map(Number);
+    const date = new Date(year, month - 1, day);
+    date.setDate(date.getDate() + days);
+    return dateToDateInputValue(date);
 }
 
 function mapTaskToCalendarEvent(
@@ -6163,19 +6727,29 @@ function mapTaskToCalendarEvent(
     categoryColorById: Map<string, string>,
 ): EventInput {
     const color = taskCategoryColor(task, categoryColorById);
-    const allDay = isAllDayScheduledTask(task);
+    const scheduledStart = task.scheduled_start;
+    const allDay = Boolean(task.all_day);
+    const allDayStart =
+        allDay && scheduledStart
+            ? toAllDayCalendarDate(scheduledStart)
+            : undefined;
+    const classNames = task.completed
+        ? ["task-event", "task-event--completed"]
+        : ["task-event"];
 
     return {
         id: task.id,
         title: task.title,
         start:
-            allDay && task.scheduled_start
-                ? toCalendarDate(task.scheduled_start, task.timezone)
-                : (task.scheduled_start ?? undefined),
+            allDayStart ?? scheduledStart ?? undefined,
         end:
-            allDay && task.scheduled_end
-                ? toCalendarDate(task.scheduled_end, task.timezone)
-                : (task.scheduled_end ?? undefined),
+            allDay && !task.scheduled_end
+                ? allDayStart
+                    ? addCalendarDateDays(allDayStart, 1)
+                    : undefined
+                : allDay && task.scheduled_end
+                  ? toAllDayCalendarDate(task.scheduled_end)
+                  : (task.scheduled_end ?? undefined),
         allDay,
         display: "block",
         editable: true,
@@ -6184,13 +6758,20 @@ function mapTaskToCalendarEvent(
             : color,
         borderColor: color,
         textColor: task.completed ? "#50615b" : readableTextColor(color),
-        classNames: task.completed
-            ? ["task-event", "task-event--completed"]
-            : ["task-event"],
+        classNames,
         extendedProps: {
             task,
         },
     };
+}
+
+function mapTasksToCalendarEvents(
+    tasks: ScheduledTask[],
+    categoryColorById: Map<string, string>,
+): EventInput[] {
+    return tasks
+        .filter((task) => task.scheduled_start)
+        .map((task) => mapTaskToCalendarEvent(task, categoryColorById));
 }
 
 function readableTextColor(hexColor: string): string {

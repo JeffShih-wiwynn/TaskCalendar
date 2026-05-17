@@ -12,6 +12,7 @@ export type ScheduledTask = {
   completed: boolean;
   scheduled_start: string | null;
   scheduled_end: string | null;
+  all_day: boolean;
   due_at: string | null;
   timezone: string;
   priority: number | null;
@@ -34,6 +35,7 @@ export type CreateScheduledTaskInput = {
   completed?: boolean;
   scheduled_start?: string | null;
   scheduled_end?: string | null;
+  all_day?: boolean;
   due_at?: string | null;
   timezone?: string;
   priority?: number | null;
@@ -52,6 +54,7 @@ export type UpdateScheduledTaskInput = Partial<
     | 'notes'
     | 'scheduled_start'
     | 'scheduled_end'
+    | 'all_day'
     | 'due_at'
     | 'completed'
     | 'unscheduled_order'
@@ -151,11 +154,13 @@ export async function deleteTask(
 }
 
 export function mapTaskToEvent(task: ScheduledTask): EventInput {
+  const allDayStart = task.all_day && task.scheduled_start ? task.scheduled_start.slice(0, 10) : undefined;
   return {
     id: task.id,
     title: task.title,
-    start: task.scheduled_start ?? undefined,
-    end: task.scheduled_end ?? undefined,
+    start: allDayStart ?? task.scheduled_start ?? undefined,
+    end: task.all_day ? undefined : (task.scheduled_end ?? undefined),
+    allDay: task.all_day,
     display: 'block',
     editable: true,
     classNames: task.completed ? ['task-event', 'task-event--completed'] : ['task-event'],

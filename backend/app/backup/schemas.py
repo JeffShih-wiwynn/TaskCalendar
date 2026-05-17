@@ -36,6 +36,7 @@ class BackupTaskImport(BaseModel):
     completed: bool
     scheduled_start: datetime | None
     scheduled_end: datetime | None
+    all_day: bool = False
     due_at: datetime | None
     timezone: str = Field(min_length=1, max_length=100)
     priority: int | None

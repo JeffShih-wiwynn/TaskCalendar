@@ -20,6 +20,7 @@ This file records the architecture decisions that should stay stable unless the 
 - Discord webhook notifications are the first MVP notification channel; push notifications remain future work.
 - `notification_enabled`, `notification_offset_minutes`, `notification_channel`, and `notification_sent_at` are the notification fields to preserve across API layers.
 - FullCalendar drag mirrors should avoid transformed ancestors; the calendar uses a body-level fixed mirror parent so month-view external drag previews stay aligned with the cursor.
+- Phase 1 PWA support should cache built static frontend assets only. API, auth, backup, and health requests should continue to go to the backend normally until an explicit offline editing and conflict strategy exists.
 
 ## Implications
 

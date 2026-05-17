@@ -13,6 +13,7 @@ class ScheduledTaskBase(BaseModel):
     completed: bool | None = None
     scheduled_start: datetime | None = None
     scheduled_end: datetime | None = None
+    all_day: bool | None = None
     due_at: datetime | None = None
     timezone: str | None = Field(default=None, min_length=1, max_length=100)
     priority: int | None = None
@@ -66,6 +67,7 @@ class ScheduledTaskRead(BaseModel):
     completed: bool
     scheduled_start: datetime | None
     scheduled_end: datetime | None
+    all_day: bool
     due_at: datetime | None
     timezone: str
     priority: int | None

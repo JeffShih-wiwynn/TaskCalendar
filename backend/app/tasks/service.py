@@ -3,10 +3,10 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import HTTPException, status
-from sqlalchemy import Select, case, func, select
+from sqlalchemy import Select, and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.timezone import now_in_app_timezone
+from app.core.timezone import now_in_app_timezone, to_app_timezone
 from app.models.scheduled_task import ScheduledTask
 from app.models.task_list import TaskList
 from app.models.user import User
@@ -23,6 +23,7 @@ SINGLE_OCCURRENCE_INDEPENDENT_FIELDS = {
     "list_id",
     "scheduled_start",
     "scheduled_end",
+    "all_day",
     "notification_enabled",
     "notification_offset_minutes",
     "notification_channel",
@@ -102,7 +103,14 @@ def list_tasks(
             )
         statement = statement.where(
             ScheduledTask.scheduled_start < range_end,
-            ScheduledTask.scheduled_end > range_start,
+            or_(
+                ScheduledTask.scheduled_end > range_start,
+                and_(
+                    ScheduledTask.all_day.is_(True),
+                    ScheduledTask.scheduled_end.is_(None),
+                    ScheduledTask.scheduled_start >= range_start,
+                ),
+            ),
         )
 
     return list(db.scalars(statement).all())
@@ -119,6 +127,11 @@ def create_task(
     ensure_task_list_belongs_to_user(db, task_data.get("list_id"), task_data["user_id"])
     if task_data.get("notification_enabled") is None:
         task_data["notification_enabled"] = False
+    if task_data.get("all_day") is None:
+        task_data["all_day"] = False
+    if task_data.get("scheduled_start") is None:
+        task_data["all_day"] = False
+    normalize_all_day_schedule(task_data)
     if task_data.get("notification_offset_minutes") is None:
         task_data["notification_offset_minutes"] = 0
     if task_data.get("notification_enabled") and task_data.get("notification_channel") is None:
@@ -397,6 +410,7 @@ def serialize_task_for_rebuild(task: ScheduledTask) -> dict:
         "scheduled_end": ensure_aware_datetime(task.scheduled_end)
         if task.scheduled_end is not None
         else None,
+        "all_day": task.all_day,
         "due_at": ensure_aware_datetime(task.due_at)
         if task.due_at is not None
         else None,
@@ -436,8 +450,13 @@ def apply_task_updates(task: ScheduledTask, updates: dict) -> None:
         elif not updates["completed"]:
             task.completed_at = None
 
+    normalize_all_day_schedule(updates)
+
     for field, value in updates.items():
         setattr(task, field, value)
+
+    if task.scheduled_start is None:
+        task.all_day = False
 
     if task.scheduled_start is not None or task.scheduled_end is not None:
         task.unscheduled_order = None
@@ -448,6 +467,26 @@ def apply_task_updates(task: ScheduledTask, updates: dict) -> None:
         task.notification_offset_minutes = 0
 
     task.updated_at = datetime.now(UTC)
+
+
+def normalize_all_day_schedule(values: dict) -> None:
+    if not values.get("all_day"):
+        return
+
+    scheduled_start = values.get("scheduled_start")
+    if scheduled_start is None:
+        values["all_day"] = False
+        return
+
+    local_start = to_app_timezone(ensure_aware_datetime(scheduled_start))
+    values["scheduled_start"] = local_start.replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+        tzinfo=None,
+    )
+    values["scheduled_end"] = None
 
 
 def detach_task_from_series_if_needed(task: ScheduledTask, updates: dict) -> None:
