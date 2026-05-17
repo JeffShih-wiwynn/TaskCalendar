@@ -2497,74 +2497,12 @@ input[type="checkbox"].task-checkbox:checked {
   .calendar-panel {
     min-width: 0;
     min-height: calc(100dvh - 100px - env(safe-area-inset-bottom));
-    padding: 12px;
-    gap: 8px;
+    padding: 10px;
+    gap: 6px;
   }
 
   .calendar-transition-shell {
     min-height: 0;
-  }
-
-  .calendar-view-dayGridMonth .fc-daygrid-event {
-    width: 100%;
-    min-width: 0;
-    height: 100%;
-    margin: 0;
-    border: 0;
-    border-radius: 999px;
-    padding: 0;
-    background: transparent;
-    overflow: hidden;
-  }
-
-  .calendar-view-dayGridMonth .fc-daygrid-event-harness {
-    display: block;
-    width: 100%;
-    height: 100%;
-  }
-
-  .calendar-view-dayGridMonth .fc-daygrid-event-harness:has(.mobile-month-event-hidden) {
-    display: none;
-  }
-
-  .calendar-view-dayGridMonth .fc-daygrid-day-events {
-    display: grid;
-    grid-template-columns: repeat(2, 16px);
-    grid-auto-rows: 16px;
-    align-content: flex-start;
-    justify-content: start;
-    gap: 2px;
-    min-height: 34px;
-    max-height: 34px;
-    overflow: hidden;
-  }
-
-  .calendar-view-dayGridMonth .calendar-task,
-  .calendar-view-dayGridMonth .fc-event-time,
-  .calendar-view-dayGridMonth .fc-event-title {
-    display: none;
-  }
-
-  .mobile-month-category-indicator {
-    width: 16px;
-    height: 16px;
-    min-width: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 5px;
-    padding: 0;
-    color: var(--month-category-text, #ffffff);
-    background: var(--month-category-color, var(--muted));
-    font-size: 0.64rem;
-    font-weight: 800;
-    line-height: 1;
-    text-align: center;
-  }
-
-  .mobile-month-category-overflow {
-    color: #ffffff;
-    background: #7a8782;
   }
 
   .mobile-month-task-preview {
@@ -2593,6 +2531,20 @@ input[type="checkbox"].task-checkbox:checked {
     align-items: center;
     justify-content: space-between;
     min-width: 0;
+    gap: 8px;
+  }
+
+  .mobile-month-task-preview-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+  }
+
+  .mobile-month-task-preview-add {
+    width: auto;
+    min-height: 36px;
+    padding: 8px 12px;
   }
 
   .mobile-month-task-preview-close {
@@ -2719,7 +2671,7 @@ input[type="checkbox"].task-checkbox:checked {
   }
 
   .calendar-toolbar-dayGridMonth .calendar-toolbar-group:first-child {
-    gap: 5px;
+    gap: 4px;
   }
 
   .calendar-toolbar-dayGridMonth .mobile-calendar-period-control {
@@ -2732,10 +2684,6 @@ input[type="checkbox"].task-checkbox:checked {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .calendar-toolbar-dayGridMonth .calendar-view-switcher {
-    flex: 0 0 auto;
   }
 
   .calendar-toolbar-button,
@@ -2758,13 +2706,19 @@ input[type="checkbox"].task-checkbox:checked {
 
   .calendar-toolbar .calendar-toolbar-button,
   .calendar-toolbar .calendar-year-button {
-    padding: 7px 7px;
-    font-size: 0.86rem;
+    padding: 6px 6px;
+    font-size: 0.84rem;
   }
 
   .calendar-toolbar .calendar-nav-button {
-    width: 38px;
-    height: 38px;
+    width: 36px;
+    height: 36px;
+  }
+
+  .calendar-task {
+    gap: 4px;
+    font-size: 0.78rem;
+    line-height: 1.1;
   }
 
   .calendar-title-month {
@@ -2806,12 +2760,95 @@ input[type="checkbox"].task-checkbox:checked {
   .fc .fc-daygrid-day-number {
     overflow-wrap: anywhere;
   }
+
+  .fc-dayGridMonth-view .fc-scrollgrid-section-header th {
+    padding: 0 1px;
+  }
+
+  .fc-dayGridMonth-view .fc-col-header-cell-cushion {
+    padding: 1px 2px;
+    font-size: 0.65rem;
+    line-height: 1.05;
+  }
+
+  .fc-dayGridMonth-view .fc-daygrid-day-frame {
+    min-height: 0;
+    padding: 0 1px;
+  }
+
+  .fc-dayGridMonth-view .fc-daygrid-day-top {
+    min-height: 14px;
+    padding: 0;
+  }
+
+  .fc-dayGridMonth-view .fc-daygrid-day-number {
+    padding: 0 2px;
+    font-size: 0.66rem;
+    line-height: 1.05;
+  }
+
+  .fc-dayGridMonth-view .fc-daygrid-event {
+    margin-top: -1px;
+    overflow: hidden;
+  }
+
+  .fc-dayGridMonth-view .fc-h-event {
+    min-height: clamp(11px, 3vw, 14px);
+    border-width: 0 0 0 1px;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .fc-dayGridMonth-view .fc-h-event .fc-event-main {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .fc-dayGridMonth-view .fc-h-event .fc-event-main-frame {
+    align-items: center;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .fc-dayGridMonth-view .fc-h-event .fc-event-time,
+  .fc-dayGridMonth-view .fc-h-event .fc-event-title {
+    padding: 0;
+    font-size: clamp(8px, 2.45vw, 10px);
+    line-height: clamp(10px, 2.8vw, 12px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .fc-dayGridMonth-view .calendar-task {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .fc-dayGridMonth-view .calendar-task-month-summary .calendar-task-title {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .fc-dayGridMonth-view .fc-daygrid-more-link {
+    font-size: clamp(8px, 2.35vw, 10px);
+    line-height: clamp(10px, 2.6vw, 12px);
+    padding: 0;
+  }
+
 }
 
 @media (max-width: 480px) {
   .app-shell {
     padding: max(8px, env(safe-area-inset-top)) 8px
       calc(76px + env(safe-area-inset-bottom)) 8px;
+  }
+
+  .app-shell.mobile-screen-calendar {
+    padding-bottom: calc(86px + env(safe-area-inset-bottom));
   }
 
   .task-sidebar {
@@ -2828,12 +2865,30 @@ input[type="checkbox"].task-checkbox:checked {
     padding: 10px;
   }
 
+  .app-shell.mobile-screen-calendar .calendar-panel {
+    min-height: calc(100dvh - 96px - env(safe-area-inset-bottom));
+    padding: 8px;
+  }
+
   .calendar-toolbar-title {
     font-size: 1.12rem;
   }
 
   .calendar-toolbar-group {
     flex-wrap: wrap;
+  }
+
+  .calendar-toolbar-dayGridMonth .calendar-toolbar-group {
+    flex-wrap: nowrap;
+  }
+
+  .calendar-toolbar-dayGridMonth .mobile-calendar-period-button {
+    max-width: 6.5rem;
+  }
+
+  .calendar-task .task-checkbox {
+    --checkbox-size: 14px;
+    --checkbox-radius: 3px;
   }
 
   .calendar-year-control {
@@ -2872,5 +2927,27 @@ input[type="checkbox"].task-checkbox:checked {
   .auth-form button {
     min-height: 44px;
     font-size: 16px;
+  }
+}
+
+@media (max-width: 420px) {
+  .calendar-task {
+    font-size: 0.72rem;
+    line-height: 1.02;
+  }
+
+  .fc-dayGridMonth-view .fc-h-event {
+    min-height: clamp(10px, 2.8vw, 13px);
+  }
+
+  .fc-dayGridMonth-view .fc-h-event .fc-event-time,
+  .fc-dayGridMonth-view .fc-h-event .fc-event-title {
+    font-size: clamp(7px, 2.25vw, 9px);
+    line-height: clamp(9px, 2.5vw, 11px);
+  }
+
+  .fc-dayGridMonth-view .fc-daygrid-more-link {
+    font-size: clamp(7px, 2.15vw, 9px);
+    line-height: clamp(9px, 2.35vw, 11px);
   }
 }

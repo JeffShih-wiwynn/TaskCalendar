@@ -1500,6 +1500,20 @@ export function App() {
         }, 0);
     }, [selectedListIdForForms]);
 
+    const openTaskDetailPanel = useCallback((taskId: string) => {
+        setFormError(null);
+        setIsViewMenuOpen(false);
+        setIsCategoryMenuOpen(false);
+        setIsAddingCategory(false);
+        setContextMenu(null);
+        setIsDetailPanelClosing(false);
+        if (isNarrowScreen()) {
+            setIsSidebarOpen(true);
+        }
+        setDetailPanelMode("edit");
+        setSelectedTaskId(taskId);
+    }, []);
+
     const handleDateSelect = useCallback(
         (selectInfo: DateSelectArg) => {
             openCreatePanel(
@@ -1668,62 +1682,39 @@ export function App() {
 
     const renderEventContent = useCallback(
         (eventInfo: EventContentArg) => {
-            const monthGroupCount =
-                typeof eventInfo.event.extendedProps.mobileMonthGroupCount ===
-                "number"
-                    ? eventInfo.event.extendedProps.mobileMonthGroupCount
-                    : null;
-            const monthGroupColor =
-                typeof eventInfo.event.extendedProps.mobileMonthGroupColor ===
-                "string"
-                    ? eventInfo.event.extendedProps.mobileMonthGroupColor
-                    : eventInfo.event.backgroundColor;
-            const resolvedMonthGroupColor = monthGroupColor ?? "#176b58";
-            const monthGroupTextColor =
-                typeof eventInfo.event.extendedProps.mobileMonthGroupTextColor ===
-                "string"
-                    ? eventInfo.event.extendedProps.mobileMonthGroupTextColor
-                    : readableTextColor(resolvedMonthGroupColor);
+            const task =
+                (eventInfo.event.extendedProps.task as ScheduledTask | undefined) ??
+                tasksRef.current.find((item) => item.id === eventInfo.event.id);
+            const isMobileMonthEvent =
+                eventInfo.view.type === "dayGridMonth" && isNarrowScreen();
 
-            if (
-                eventInfo.view?.type === "dayGridMonth" &&
-                isNarrowScreen() &&
-                monthGroupCount !== null
-            ) {
-                const isOverflowSummary =
-                    eventInfo.event.extendedProps.mobileMonthGroupOverflow ===
-                    true;
-
+            if (!task) {
                 return (
                     <div
                         className={
-                            isOverflowSummary
-                                ? "mobile-month-category-indicator mobile-month-category-overflow"
-                                : "mobile-month-category-indicator"
+                            isMobileMonthEvent
+                                ? "calendar-task calendar-task-month-summary"
+                                : "calendar-task"
                         }
-                        style={{
-                            "--month-category-color": resolvedMonthGroupColor,
-                            "--month-category-text": monthGroupTextColor,
-                        } as CSSProperties}
                     >
-                        <span className="mobile-month-category-count">
-                            {isOverflowSummary || monthGroupCount > 9
-                                ? "*"
-                                : monthGroupCount}
+                        <span className="calendar-task-title task-title">
+                            {eventInfo.event.title}
                         </span>
                     </div>
                 );
             }
 
-            const task =
-                (eventInfo.event.extendedProps.task as ScheduledTask | undefined) ??
-                tasksRef.current.find((item) => item.id === eventInfo.event.id);
-
-            if (!task) {
+            if (isMobileMonthEvent) {
                 return (
-                    <div className="calendar-task">
-                        <span className="calendar-task-title task-title">
-                            {eventInfo.event.title}
+                    <div className="calendar-task calendar-task-month-summary">
+                        <span
+                            className={
+                                task.completed
+                                    ? "calendar-task-title task-title completed"
+                                    : "calendar-task-title task-title"
+                            }
+                        >
+                            {task.title}
                         </span>
                     </div>
                 );
@@ -3562,17 +3553,23 @@ export function App() {
                                                     >
                                                         <div
                                                             className="category-filter-row category-filter-row-custom"
-                                                            onContextMenu={(
-                                                                event,
-                                                            ) => {
-                                                                event.preventDefault();
-                                                                setContextMenu({
-                                                                    kind: "category",
-                                                                    id: taskList.id,
-                                                                    x: event.clientX,
-                                                                    y: event.clientY,
-                                                                });
-                                                            }}
+                                                            onContextMenu={
+                                                                isNarrowScreen()
+                                                                    ? undefined
+                                                                    : (
+                                                                          event,
+                                                                      ) => {
+                                                                          event.preventDefault();
+                                                                          setContextMenu(
+                                                                              {
+                                                                                  kind: "category",
+                                                                                  id: taskList.id,
+                                                                                  x: event.clientX,
+                                                                                  y: event.clientY,
+                                                                              },
+                                                                          );
+                                                                      }
+                                                            }
                                                         >
                                                             <span className="category-filter-label">
                                                                 <span
@@ -4459,10 +4456,7 @@ export function App() {
                                                                 null;
                                                             return;
                                                         }
-                                                        setDetailPanelMode(
-                                                            "edit",
-                                                        );
-                                                        setSelectedTaskId(
+                                                        openTaskDetailPanel(
                                                             task.id,
                                                         );
                                                     }}
@@ -4479,25 +4473,28 @@ export function App() {
                                                         }
 
                                                         event.preventDefault();
-                                                        setDetailPanelMode(
-                                                            "edit",
-                                                        );
-                                                        setSelectedTaskId(
+                                                        openTaskDetailPanel(
                                                             task.id,
                                                         );
                                                     }}
-                                                    onContextMenu={(event) => {
-                                                        event.preventDefault();
-                                                        setSelectedTaskId(
-                                                            task.id,
-                                                        );
-                                                        setContextMenu({
-                                                            kind: "task",
-                                                            id: task.id,
-                                                            x: event.clientX,
-                                                            y: event.clientY,
-                                                        });
-                                                    }}
+                                                    onContextMenu={
+                                                        isNarrowScreen()
+                                                            ? undefined
+                                                            : (event) => {
+                                                                  event.preventDefault();
+                                                                  setSelectedTaskId(
+                                                                      task.id,
+                                                                  );
+                                                                  setContextMenu(
+                                                                      {
+                                                                          kind: "task",
+                                                                          id: task.id,
+                                                                          x: event.clientX,
+                                                                          y: event.clientY,
+                                                                      },
+                                                                  );
+                                                              }
+                                                    }
                                                 >
                                                     <motion.input
                                                         type="checkbox"
@@ -4971,6 +4968,12 @@ export function App() {
                         }}
                         eventContent={renderEventContent}
                         dayCellContent={renderDayCellContent}
+                        dayMaxEventRows={
+                            calendarView === "dayGridMonth" &&
+                            isNarrowScreen()
+                                ? true
+                                : false
+                        }
                         eventClick={handleEventClick}
                         eventDidMount={handleEventDidMount}
                         dateClick={handleDateClick}
@@ -5023,16 +5026,38 @@ export function App() {
                                     : "Select a day"}
                             </h2>
                             {mobileMonthPreviewDate && (
-                                <button
-                                    type="button"
-                                    className="mobile-month-task-preview-close"
-                                    aria-label="Close selected day tasks"
-                                    onClick={() =>
-                                        setMobileMonthPreviewDate(null)
-                                    }
-                                >
-                                    Close
-                                </button>
+                                <div className="mobile-month-task-preview-actions">
+                                    <button
+                                        type="button"
+                                        className="sidebar-create-task-button mobile-month-task-preview-add"
+                                        aria-label="Add task for selected day"
+                                        onClick={() => {
+                                            const selectedDate =
+                                                mobileMonthPreviewDate;
+                                            if (!selectedDate) {
+                                                return;
+                                            }
+
+                                            setMobileMonthPreviewDate(null);
+                                            openCreatePanel(
+                                                selectedDate,
+                                                addLocalDays(selectedDate, 1),
+                                            );
+                                        }}
+                                    >
+                                        Add
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="mobile-month-task-preview-close"
+                                        aria-label="Close selected day tasks"
+                                        onClick={() =>
+                                            setMobileMonthPreviewDate(null)
+                                        }
+                                    >
+                                        Close
+                                    </button>
+                                </div>
                             )}
                         </div>
                         <div className="mobile-month-task-list">
@@ -5057,8 +5082,8 @@ export function App() {
                                         ),
                                     }}
                                     onClick={() => {
-                                        setDetailPanelMode("edit");
-                                        setSelectedTaskId(task.id);
+                                        setMobileMonthPreviewDate(null);
+                                        openTaskDetailPanel(task.id);
                                     }}
                                 >
                                     <input
@@ -6201,14 +6226,6 @@ function isSameLocalDay(left: Date, right: Date): boolean {
     );
 }
 
-function localDateKey(value: Date): string {
-    return [
-        value.getFullYear(),
-        String(value.getMonth() + 1).padStart(2, "0"),
-        String(value.getDate()).padStart(2, "0"),
-    ].join("-");
-}
-
 function isWithinUpcomingDays(value: Date, now: Date, days: number): boolean {
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const end = addLocalDays(start, Math.max(1, days));
@@ -6602,26 +6619,12 @@ function getPartValue(
 function mapTaskToCalendarEvent(
     task: ScheduledTask,
     categoryColorById: Map<string, string>,
-    mobileMonthGroup?: {
-        count: number;
-        color: string;
-        hidden: boolean;
-        overflow: boolean;
-        overflowCount: number;
-    },
 ): EventInput {
     const color = taskCategoryColor(task, categoryColorById);
     const allDay = isAllDayScheduledTask(task);
     const classNames = task.completed
         ? ["task-event", "task-event--completed"]
         : ["task-event"];
-
-    if (mobileMonthGroup?.hidden) {
-        classNames.push("mobile-month-event-hidden");
-    }
-    if (mobileMonthGroup?.overflow) {
-        classNames.push("mobile-month-event-overflow");
-    }
 
     return {
         id: task.id,
@@ -6645,16 +6648,6 @@ function mapTaskToCalendarEvent(
         classNames,
         extendedProps: {
             task,
-            mobileMonthGroupCount: mobileMonthGroup?.overflow
-                ? mobileMonthGroup.overflowCount
-                : mobileMonthGroup?.count,
-            mobileMonthGroupColor: mobileMonthGroup?.overflow
-                ? "#7a8782"
-                : mobileMonthGroup?.color,
-            mobileMonthGroupTextColor: mobileMonthGroup?.overflow
-                ? "#ffffff"
-                : readableTextColor(mobileMonthGroup?.color ?? color),
-            mobileMonthGroupOverflow: mobileMonthGroup?.overflow ?? false,
         },
     };
 }
@@ -6663,70 +6656,9 @@ function mapTasksToCalendarEvents(
     tasks: ScheduledTask[],
     categoryColorById: Map<string, string>,
 ): EventInput[] {
-    const scheduledTasks = tasks.filter((task) => task.scheduled_start);
-    const groupByKey = new Map<
-        string,
-        {
-            color: string;
-            taskIds: string[];
-        }
-    >();
-
-    for (const task of scheduledTasks) {
-        if (!task.scheduled_start) {
-            continue;
-        }
-
-        const dayKey = localDateKey(parseTaskDate(task.scheduled_start));
-        const categoryKey = task.list_id ?? "__uncategorized__";
-        const groupKey = `${dayKey}:${categoryKey}`;
-        const group = groupByKey.get(groupKey) ?? {
-            color: taskCategoryColor(task, categoryColorById),
-            taskIds: [],
-        };
-
-        group.taskIds.push(task.id);
-        groupByKey.set(groupKey, group);
-    }
-
-    const visibleGroupKeysByDay = new Map<string, string[]>();
-    for (const groupKey of groupByKey.keys()) {
-        const dayKey = groupKey.slice(0, groupKey.indexOf(":"));
-        const dayGroups = visibleGroupKeysByDay.get(dayKey) ?? [];
-        dayGroups.push(groupKey);
-        visibleGroupKeysByDay.set(dayKey, dayGroups);
-    }
-
-    return scheduledTasks.map((task) => {
-        const dayKey = localDateKey(parseTaskDate(task.scheduled_start ?? ""));
-        const categoryKey = task.list_id ?? "__uncategorized__";
-        const groupKey = `${dayKey}:${categoryKey}`;
-        const group = groupByKey.get(groupKey);
-        const visibleGroupKeys = visibleGroupKeysByDay.get(dayKey) ?? [];
-        const groupIndex = visibleGroupKeys.indexOf(groupKey);
-        const isFirstInGroup = group?.taskIds[0] === task.id;
-        const hasOverflowGroups = visibleGroupKeys.length > 4;
-        const visibleGroupLimit = hasOverflowGroups ? 3 : 4;
-        const overflowGroupCount = Math.max(
-            0,
-            visibleGroupKeys.length - visibleGroupLimit,
-        );
-        const isOverflowSummary =
-            hasOverflowGroups &&
-            groupIndex === visibleGroupLimit &&
-            isFirstInGroup;
-
-        return mapTaskToCalendarEvent(task, categoryColorById, {
-            count: group?.taskIds.length ?? 1,
-            color: group?.color ?? taskCategoryColor(task, categoryColorById),
-            hidden:
-                !isFirstInGroup ||
-                groupIndex > visibleGroupLimit ||
-                (groupIndex === visibleGroupLimit && overflowGroupCount <= 0),
-            overflow: isOverflowSummary,
-            overflowCount: overflowGroupCount,
-        });
-    });
+    return tasks
+        .filter((task) => task.scheduled_start)
+        .map((task) => mapTaskToCalendarEvent(task, categoryColorById));
 }
 
 function readableTextColor(hexColor: string): string {

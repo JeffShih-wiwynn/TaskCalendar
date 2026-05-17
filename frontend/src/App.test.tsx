@@ -3,13 +3,12 @@ import {
     fireEvent,
     render,
     screen,
+    within,
     waitFor,
     waitForElementToBeRemoved,
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type {
-    EventInput,
-} from "@fullcalendar/core";
+import type { EventInput } from "@fullcalendar/core";
 import {
     forwardRef,
     useEffect,
@@ -30,10 +29,14 @@ const mocks = vi.hoisted(() => ({
     },
     fullCalendarProps: {
         events: [] as EventInput[],
+        dateClick: undefined as
+            | ((arg: { date: Date; allDay: boolean }) => void)
+            | undefined,
         scrollTime: undefined as string | undefined,
         scrollTimeReset: undefined as boolean | undefined,
         slotMinTime: undefined as string | undefined,
         slotMaxTime: undefined as string | undefined,
+        dayMaxEventRows: undefined as number | boolean | undefined,
     },
     fullCalendarMount: vi.fn(),
     fullCalendarRefetchEvents: vi.fn(),
@@ -183,6 +186,7 @@ vi.mock("@fullcalendar/react", () => ({
             scrollTimeReset,
             slotMinTime,
             slotMaxTime,
+            dayMaxEventRows,
         }: {
             dateClick?: (arg: { date: Date; allDay: boolean }) => void;
             datesSet?: (arg: {
@@ -223,6 +227,7 @@ vi.mock("@fullcalendar/react", () => ({
                     allDay: boolean;
                     extendedProps: Record<string, unknown>;
                 };
+                view: { type: string };
             }) => ReactNode;
             events?: EventInput[];
             initialView?: string;
@@ -230,6 +235,7 @@ vi.mock("@fullcalendar/react", () => ({
             scrollTimeReset?: boolean;
             slotMinTime?: string;
             slotMaxTime?: string;
+            dayMaxEventRows?: number | boolean;
         },
         ref: ForwardedRef<{
             getApi: () => {
@@ -302,10 +308,12 @@ vi.mock("@fullcalendar/react", () => ({
         }, [currentDate, datesSet, view]);
 
         mocks.fullCalendarProps.events = events ?? [];
+        mocks.fullCalendarProps.dateClick = dateClick;
         mocks.fullCalendarProps.scrollTime = scrollTime;
         mocks.fullCalendarProps.scrollTimeReset = scrollTimeReset;
         mocks.fullCalendarProps.slotMinTime = slotMinTime;
         mocks.fullCalendarProps.slotMaxTime = slotMaxTime;
+        mocks.fullCalendarProps.dayMaxEventRows = dayMaxEventRows;
         const renderMockEvent = (
             event: EventInput & {
                 extendedProps?: Record<string, unknown>;
@@ -333,6 +341,7 @@ vi.mock("@fullcalendar/react", () => ({
                             allDay: Boolean(event.allDay),
                             extendedProps: event.extendedProps ?? {},
                         },
+                        view: { type: view },
                     }) ?? title}
                 </div>
             );
@@ -426,6 +435,17 @@ vi.mock("@fullcalendar/react", () => ({
                     }}
                 >
                     Receive external task
+                </button>
+                <button
+                    type="button"
+                    onClick={() =>
+                        dateClick?.({
+                            date: new Date(2026, 4, 8, 0, 0, 0, 0),
+                            allDay: true,
+                        })
+                    }
+                >
+                    Select month day
                 </button>
                 <div data-testid="calendar-events">
                     {showExternalMirror &&
@@ -588,11 +608,39 @@ function makeTask(overrides: Record<string, unknown> = {}): Record<string, unkno
     };
 }
 
+function setMobileLayout(matches: boolean): void {
+    Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        writable: true,
+        value: vi.fn((query: string) => ({
+            matches,
+            media: query,
+            onchange: null,
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            dispatchEvent: vi.fn(),
+        })),
+    });
+}
+
 describe("App", () => {
     beforeEach(() => {
+        setMobileLayout(false);
         window.localStorage.clear();
         window.localStorage.setItem("calendar-auth-token", "test-token");
         mocks.tasks = [];
+        mocks.taskLists = [
+            {
+                id: "list-1",
+                user_id: "user-1",
+                name: "Work",
+                color: "#2f80ed",
+                created_at: "",
+                updated_at: "",
+            },
+        ];
         mocks.listTasks.mockClear();
         mocks.listTasks.mockImplementation(() =>
             Promise.resolve([...mocks.tasks].sort(sortTasksForApiMock)),
@@ -684,6 +732,8 @@ describe("App", () => {
         mocks.fullCalendarMount.mockClear();
         mocks.fullCalendarRefetchEvents.mockClear();
         mocks.fullCalendarProps.events = [];
+        mocks.fullCalendarProps.dateClick = undefined;
+        mocks.fullCalendarProps.dayMaxEventRows = undefined;
         mocks.dragRevert.mockClear();
         mocks.draggableConstruct.mockClear();
         mocks.draggableDestroy.mockClear();
@@ -984,6 +1034,154 @@ describe("App", () => {
         expect(
             screen.queryByRole("button", { name: "Full" }),
         ).not.toBeInTheDocument();
+    });
+
+    it("uses FullCalendar overflow and summary-only events for mobile month view", async () => {
+        setMobileLayout(true);
+        mocks.tasks = [
+            makeTask({
+                id: "task-external",
+                title: "Compact mobile title",
+                scheduled_start: "2026-05-08T09:00:00.000Z",
+                scheduled_end: "2026-05-08T10:00:00.000Z",
+            }),
+        ];
+
+        render(<App />);
+
+        const weekEvent = await screen.findByTestId("calendar-event-task-external");
+        expect(weekEvent.querySelector(".task-checkbox")).not.toBeNull();
+        expect(mocks.fullCalendarProps.dayMaxEventRows).toBe(false);
+
+        await act(async () => {
+            fireEvent.click(await screen.findByRole("button", { name: "Week" }));
+        });
+        await waitFor(() =>
+            expect(screen.getByRole("button", { name: "Day" })).toBeInTheDocument(),
+        );
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole("button", { name: "Day" }));
+        });
+        await waitFor(() =>
+            expect(screen.getByRole("button", { name: "Month" })).toBeInTheDocument(),
+        );
+
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.dayMaxEventRows).toBe(true),
+        );
+        const monthEvent = screen.getByTestId("calendar-event-task-external");
+        expect(monthEvent).toHaveTextContent("Compact mobile title");
+        expect(monthEvent.querySelector(".task-checkbox")).toBeNull();
+    });
+
+    it("opens the edit panel from the selected-day list on first mobile month tap", async () => {
+        setMobileLayout(true);
+        mocks.tasks = [
+            makeTask({
+                id: "task-external",
+                title: "Preview edit task",
+                scheduled_start: "2026-05-08T09:00:00.000Z",
+                scheduled_end: "2026-05-08T10:00:00.000Z",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Mobile Calendar" }));
+        await waitFor(() =>
+            expect(screen.getByRole("button", { name: "Week" })).toBeInTheDocument(),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Week" }));
+        await waitFor(() =>
+            expect(screen.getByRole("button", { name: "Day" })).toBeInTheDocument(),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Day" }));
+        await waitFor(() =>
+            expect(screen.getByRole("button", { name: "Month" })).toBeInTheDocument(),
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: "Select month day" }));
+
+        const previewRegion = screen.getByRole("region", {
+            name: "Selected day tasks",
+        });
+        const previewTaskText = await within(previewRegion).findByText(
+            "Preview edit task",
+        );
+        fireEvent.click(previewTaskText.closest("button") as HTMLButtonElement);
+
+        expect(screen.getByRole("main")).toHaveClass("detail-panel-open");
+        expect(document.querySelector(".task-sidebar")).not.toHaveAttribute(
+            "inert",
+        );
+        expect(screen.getByLabelText("Edit task panel")).toBeInTheDocument();
+        expect(screen.getByLabelText("Title")).toHaveValue("Preview edit task");
+    });
+
+    it("opens the create panel from the mobile month selected-day list", async () => {
+        setMobileLayout(true);
+        mocks.tasks = [
+            makeTask({
+                id: "task-external",
+                title: "Preview create task",
+                scheduled_start: "2026-05-08T09:00:00.000Z",
+                scheduled_end: "2026-05-08T10:00:00.000Z",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Mobile Calendar" }));
+        await waitFor(() =>
+            expect(screen.getByRole("button", { name: "Week" })).toBeInTheDocument(),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Week" }));
+        await waitFor(() =>
+            expect(screen.getByRole("button", { name: "Day" })).toBeInTheDocument(),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Day" }));
+        await waitFor(() =>
+            expect(screen.getByRole("button", { name: "Month" })).toBeInTheDocument(),
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: "Select month day" }));
+
+        const previewRegion = screen.getByRole("region", {
+            name: "Selected day tasks",
+        });
+        fireEvent.click(
+            await within(previewRegion).findByRole("button", {
+                name: "Add task for selected day",
+            }),
+        );
+
+        expect(screen.getByRole("main")).toHaveClass("detail-panel-open");
+        expect(screen.getByLabelText("Create task panel")).toBeInTheDocument();
+        expect(screen.getByLabelText("Start")).toHaveValue("2026-05-08");
+    });
+
+    it("does not open the desktop context menu on mobile task rows", async () => {
+        setMobileLayout(true);
+        mocks.tasks = [
+            makeTask({
+                id: "task-mobile-context",
+                title: "Mobile context task",
+                scheduled_start: "2026-05-08T09:00:00.000Z",
+                scheduled_end: "2026-05-08T10:00:00.000Z",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Mobile Today" }));
+        const taskRow = await screen.findByRole("button", {
+            name: /Mobile context task/i,
+        });
+        fireEvent.contextMenu(taskRow, { clientX: 120, clientY: 180 });
+
+        expect(screen.queryByRole("button", { name: "Duplicate" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
     });
 
     it("shows backup summary before downloading", async () => {
