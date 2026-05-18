@@ -1,6 +1,7 @@
 import type {
     DatesSetArg,
     DayCellContentArg,
+    DayHeaderContentArg,
     EventApi,
     EventClickArg,
     EventContentArg,
@@ -8,6 +9,7 @@ import type {
     EventInput,
     EventMountArg,
     DateSelectArg,
+    SlotLabelContentArg,
 } from "@fullcalendar/core";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin, {
@@ -352,6 +354,7 @@ export function App() {
         useState<CalendarView>("timeGridWeek");
     const [calendarTitle, setCalendarTitle] = useState("");
     const [calendarDate, setCalendarDate] = useState(new Date());
+    const [isMobileLayout, setIsMobileLayout] = useState(isNarrowScreen);
     const [mobileMonthPreviewDate, setMobileMonthPreviewDate] =
         useState<Date | null>(null);
     const [isYearPickerOpen, setIsYearPickerOpen] = useState(false);
@@ -502,7 +505,6 @@ export function App() {
     const calendarSlotMaxTime = isFullDayTimelineVisible
         ? "24:00:00"
         : `${workingHours.end}:00`;
-    const isWorkingTimeGridView = isTimeGridView && !isFullDayTimelineVisible;
     const calendarViewToggleLabel =
         calendarView === "timeGridWeek"
             ? "Week"
@@ -956,18 +958,46 @@ export function App() {
         saveUnscheduledOrder(unscheduledOrder);
     }, [unscheduledOrder]);
 
+    useEffect(() => {
+        if (
+            typeof window === "undefined" ||
+            typeof window.matchMedia !== "function"
+        ) {
+            return;
+        }
+
+        const mediaQuery = window.matchMedia(mobileLayoutQuery);
+        const handleLayoutChange = () => {
+            setIsMobileLayout((current) => {
+                if (current === mediaQuery.matches) {
+                    return current;
+                }
+
+                window.requestAnimationFrame(() => {
+                    calendarRef.current?.getApi().updateSize();
+                });
+                return mediaQuery.matches;
+            });
+        };
+
+        mediaQuery.addEventListener("change", handleLayoutChange);
+
+        return () => {
+            mediaQuery.removeEventListener("change", handleLayoutChange);
+        };
+    }, []);
+
     useLayoutEffect(() => {
         const api = calendarRef.current?.getApi();
         if (!api) {
             return;
         }
 
-        api.scrollToTime(
-            isFullDayTimelineVisible ? "00:00:00" : `${workingHours.start}:00`,
-        );
+        api.scrollToTime(`${workingHours.start}:00`);
         api.updateSize();
     }, [
         calendarView,
+        isMobileLayout,
         isFullDayTimelineVisible,
         workingHours.end,
         workingHours.start,
@@ -1724,13 +1754,64 @@ export function App() {
         );
     }, []);
 
+    const renderDayHeaderContent = useCallback(
+        (dayHeaderInfo: DayHeaderContentArg) => {
+            if (
+                (dayHeaderInfo.view.type !== "timeGridWeek" &&
+                    dayHeaderInfo.view.type !== "timeGridDay") ||
+                !isMobileLayout
+            ) {
+                return dayHeaderInfo.text;
+            }
+
+            return (
+                <span className="mobile-week-day-header">
+                    <span className="mobile-week-day-label">
+                        {new Intl.DateTimeFormat(undefined, {
+                            weekday: "short",
+                        }).format(dayHeaderInfo.date)}
+                    </span>
+                    <span className="mobile-week-date-label">
+                        {new Intl.DateTimeFormat(undefined, {
+                            day: "2-digit",
+                        }).format(dayHeaderInfo.date)}
+                    </span>
+                </span>
+            );
+        },
+        [isMobileLayout],
+    );
+
+    const mobileCalendarPeriodLabel = useMemo(
+        () =>
+            `${calendarDate.getFullYear()} ${new Intl.DateTimeFormat(undefined, {
+                month: "short",
+            }).format(calendarDate)}`,
+        [calendarDate],
+    );
+
+    const renderSlotLabelContent = useCallback(
+        (slotLabelInfo: SlotLabelContentArg) => {
+            if (
+                (slotLabelInfo.view.type !== "timeGridWeek" &&
+                    slotLabelInfo.view.type !== "timeGridDay") ||
+                !isMobileLayout
+            ) {
+                return slotLabelInfo.text;
+            }
+
+            return String(slotLabelInfo.date.getHours()).padStart(2, "0");
+        },
+        [isMobileLayout],
+    );
+
     const renderEventContent = useCallback(
         (eventInfo: EventContentArg) => {
             const task =
                 (eventInfo.event.extendedProps.task as ScheduledTask | undefined) ??
                 tasksRef.current.find((item) => item.id === eventInfo.event.id);
             const isMobileMonthEvent =
-                eventInfo.view.type === "dayGridMonth" && isNarrowScreen();
+                eventInfo.view.type === "dayGridMonth" && isMobileLayout;
 
             if (!task) {
                 return (
@@ -1792,7 +1873,7 @@ export function App() {
                 </div>
             );
         },
-        [completionTransition, handleCheckboxChange],
+        [completionTransition, handleCheckboxChange, isMobileLayout],
     );
 
     const handleEventClick = useCallback((clickInfo: EventClickArg) => {
@@ -4985,6 +5066,10 @@ export function App() {
                                     </button>
                                 )}
                             </div>
+                        ) : isTimeGridView && isMobileLayout ? (
+                            <span className="calendar-toolbar-period-label">
+                                {mobileCalendarPeriodLabel}
+                            </span>
                         ) : (
                             <span>{calendarTitle}</span>
                         )}
@@ -4995,13 +5080,6 @@ export function App() {
                         role="tablist"
                         aria-label="Calendar view"
                     >
-                        <button
-                            type="button"
-                            className="calendar-toolbar-button calendar-view-cycle-button"
-                            onClick={cycleCalendarView}
-                        >
-                            {calendarViewToggleLabel}
-                        </button>
                         {isTimeGridView && (
                             <button
                                 type="button"
@@ -5013,15 +5091,18 @@ export function App() {
                                     {isFullDayTimelineVisible ? "Full" : "Work"}
                                 </button>
                         )}
+                        <button
+                            type="button"
+                            className="calendar-toolbar-button calendar-view-cycle-button"
+                            onClick={cycleCalendarView}
+                        >
+                            {calendarViewToggleLabel}
+                        </button>
                     </div>
                 </div>
 
                 <motion.div
-                    className={`calendar-transition-shell calendar-view-${calendarView}${
-                        isWorkingTimeGridView
-                            ? " calendar-working-range"
-                            : ""
-                    }`}
+                    className={`calendar-transition-shell calendar-view-${calendarView}`}
                     animate={calendarTransitionControls}
                     initial={false}
                 >
@@ -5040,9 +5121,9 @@ export function App() {
                         }}
                         eventContent={renderEventContent}
                         dayCellContent={renderDayCellContent}
+                        dayHeaderContent={renderDayHeaderContent}
                         dayMaxEventRows={
-                            calendarView === "dayGridMonth" &&
-                            isNarrowScreen()
+                            calendarView === "dayGridMonth" && isMobileLayout
                                 ? true
                                 : false
                         }
@@ -5055,9 +5136,26 @@ export function App() {
                         drop={handleExternalTaskDrop}
                         slotLabelFormat={{
                             hour: "2-digit",
-                            minute: "2-digit",
+                            ...((calendarView === "timeGridWeek" ||
+                                calendarView === "timeGridDay") &&
+                            isMobileLayout
+                                ? {}
+                                : { minute: "2-digit" }),
                             hour12: false,
                         }}
+                        slotLabelContent={renderSlotLabelContent}
+                        slotLabelInterval={
+                            (calendarView === "timeGridWeek" ||
+                                calendarView === "timeGridDay") &&
+                            isMobileLayout
+                                ? "01:00:00"
+                                : undefined
+                        }
+                        eventMinHeight={
+                            calendarView === "timeGridWeek" && isMobileLayout
+                                ? 18
+                                : undefined
+                        }
                         select={handleDateSelect}
                         editable
                         droppable
@@ -5066,20 +5164,10 @@ export function App() {
                         scrollTimeReset={false}
                         eventResizableFromStart
                         nowIndicator
-                        scrollTime={
-                            isFullDayTimelineVisible
-                                ? "00:00:00"
-                                : `${workingHours.start}:00`
-                        }
+                        scrollTime={`${workingHours.start}:00`}
                         slotMinTime={calendarSlotMinTime}
                         slotMaxTime={calendarSlotMaxTime}
-                        height={isWorkingTimeGridView ? "auto" : "100%"}
-                        {...(isWorkingTimeGridView
-                            ? {
-                                  contentHeight: "auto" as const,
-                                  expandRows: false as const,
-                              }
-                            : {})}
+                        height="100%"
                     />
                 </motion.div>
                 {calendarView === "dayGridMonth" && (

@@ -1619,32 +1619,32 @@ input[type="checkbox"].task-checkbox:checked {
   will-change: transform, opacity;
 }
 
-.calendar-working-range {
-  align-self: flex-start;
-  flex: 0 0 auto;
-  height: auto;
+.calendar-view-timeGridWeek,
+.calendar-view-timeGridDay {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.calendar-view-timeGridWeek > .fc,
+.calendar-view-timeGridDay > .fc {
+  flex: 1 1 auto;
   min-height: 0;
 }
 
-.calendar-working-range .fc-timeGridWeek-view,
-.calendar-working-range .fc-timeGridDay-view {
-  height: auto;
-  min-height: 0;
-}
-
-.calendar-working-range .fc-timeGridWeek-view .fc-view-harness,
-.calendar-working-range .fc-timeGridDay-view .fc-view-harness,
-.calendar-working-range .fc-timeGridWeek-view .fc-scrollgrid,
-.calendar-working-range .fc-timeGridDay-view .fc-scrollgrid,
-.calendar-working-range .fc-timeGridWeek-view .fc-timegrid-body,
-.calendar-working-range .fc-timeGridDay-view .fc-timegrid-body,
-.calendar-working-range .fc-timeGridWeek-view .fc-timegrid-slots,
-.calendar-working-range .fc-timeGridDay-view .fc-timegrid-slots,
-.calendar-working-range .fc-timeGridWeek-view .fc-timegrid-body table,
-.calendar-working-range .fc-timeGridDay-view .fc-timegrid-body table,
-.calendar-working-range .fc-timeGridWeek-view .fc-timegrid-slots table,
-.calendar-working-range .fc-timeGridDay-view .fc-timegrid-slots table {
-  height: auto;
+.calendar-view-timeGridWeek .fc-view-harness,
+.calendar-view-timeGridDay .fc-view-harness,
+.calendar-view-timeGridWeek .fc-view,
+.calendar-view-timeGridDay .fc-view,
+.calendar-view-timeGridWeek .fc-scrollgrid,
+.calendar-view-timeGridDay .fc-scrollgrid,
+.calendar-view-timeGridWeek .fc-scroller-harness,
+.calendar-view-timeGridDay .fc-scroller-harness,
+.calendar-view-timeGridWeek .fc-scroller,
+.calendar-view-timeGridDay .fc-scroller,
+.calendar-view-timeGridWeek .fc-timegrid-body,
+.calendar-view-timeGridDay .fc-timegrid-body {
   min-height: 0;
 }
 
@@ -1961,10 +1961,41 @@ input[type="checkbox"].task-checkbox:checked {
 .calendar-task-title {
   flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   overflow-wrap: normal;
+}
+
+.fc-timeGridWeek-view .fc-timegrid-event .calendar-task,
+.fc-timeGridDay-view .fc-timegrid-event .calendar-task {
+  align-items: flex-start;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.fc-timeGridWeek-view .fc-timegrid-event .calendar-task-title,
+.fc-timeGridDay-view .fc-timegrid-event .calendar-task-title {
+  min-height: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.fc-timeGridWeek-view .fc-timegrid-event .fc-event-main,
+.fc-timeGridDay-view .fc-timegrid-event .fc-event-main {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.fc-timeGridWeek-view .fc-timegrid-event,
+.fc-timeGridDay-view .fc-timegrid-event {
+  overflow: hidden;
 }
 
 .mobile-month-task-preview {
@@ -2223,6 +2254,11 @@ input[type="checkbox"].task-checkbox:checked {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
+.fc-timeGridWeek-view .fc-daygrid-day.fc-day-today .fc-daygrid-day-number::after,
+.fc-timeGridDay-view .fc-daygrid-day.fc-day-today .fc-daygrid-day-number::after {
+  content: none;
+}
+
 .fc .fc-col-header-cell.fc-day-today .fc-col-header-cell-cushion,
 .fc .fc-timegrid-col.fc-day-today .fc-col-header-cell-cushion {
   position: relative;
@@ -2251,17 +2287,6 @@ input[type="checkbox"].task-checkbox:checked {
 .app-shell.dark .fc-theme-standard th,
 .app-shell.dark .fc-theme-standard .fc-scrollgrid {
   border-color: var(--border);
-}
-
-.app-shell.dark .calendar-working-range .fc-timeGridWeek-view .fc-scrollgrid-section-header,
-.app-shell.dark .calendar-working-range .fc-timeGridDay-view .fc-scrollgrid-section-header,
-.app-shell.dark .calendar-working-range .fc-timeGridWeek-view .fc-col-header-cell,
-.app-shell.dark .calendar-working-range .fc-timeGridDay-view .fc-col-header-cell,
-.app-shell.dark .calendar-working-range .fc-timeGridWeek-view .fc-timegrid-axis,
-.app-shell.dark .calendar-working-range .fc-timeGridDay-view .fc-timegrid-axis,
-.app-shell.dark .calendar-working-range .fc-timeGridWeek-view .fc-timegrid-axis-frame,
-.app-shell.dark .calendar-working-range .fc-timeGridDay-view .fc-timegrid-axis-frame {
-  background: var(--panel-bg);
 }
 
 .app-shell.dark .fc .fc-daygrid-day,
@@ -2591,46 +2616,253 @@ input[type="checkbox"].task-checkbox:checked {
     gap: 3px;
   }
 
-  .calendar-view-timeGridWeek {
-    overflow-x: auto;
-    overflow-y: visible;
-    overscroll-behavior-x: contain;
-    padding-bottom: 4px;
+  .calendar-view-timeGridWeek,
+  .calendar-view-timeGridDay {
+    overflow-x: hidden;
+    overflow-y: hidden;
   }
 
-  .calendar-view-timeGridWeek .fc {
-    min-width: calc(var(--calendar-time-axis-width) + 7 * 112px);
+  .calendar-view-timeGridWeek .fc,
+  .calendar-view-timeGridDay .fc {
+    --mobile-week-axis-width: 2.15rem;
+    --calendar-time-axis-width: var(--mobile-week-axis-width);
+    min-width: 0;
+    --fc-small-font-size: 0.68rem;
+    --fc-border-color: color-mix(in srgb, var(--border) 76%, transparent);
   }
 
   .calendar-view-timeGridWeek .fc-scrollgrid,
+  .calendar-view-timeGridDay .fc-scrollgrid,
   .calendar-view-timeGridWeek .fc-col-header,
+  .calendar-view-timeGridDay .fc-col-header,
   .calendar-view-timeGridWeek .fc-col-header table,
+  .calendar-view-timeGridDay .fc-col-header table,
   .calendar-view-timeGridWeek .fc-timegrid .fc-daygrid-body,
+  .calendar-view-timeGridDay .fc-timegrid .fc-daygrid-body,
   .calendar-view-timeGridWeek .fc-timegrid .fc-daygrid-body table,
+  .calendar-view-timeGridDay .fc-timegrid .fc-daygrid-body table,
   .calendar-view-timeGridWeek .fc-timegrid-body,
+  .calendar-view-timeGridDay .fc-timegrid-body,
   .calendar-view-timeGridWeek .fc-timegrid-slots,
+  .calendar-view-timeGridDay .fc-timegrid-slots,
   .calendar-view-timeGridWeek .fc-timegrid-cols,
+  .calendar-view-timeGridDay .fc-timegrid-cols,
   .calendar-view-timeGridWeek .fc-timegrid-body table,
-  .calendar-view-timeGridWeek .fc-timegrid-cols table {
-    width: calc(var(--calendar-time-axis-width) + 7 * 112px) !important;
-    min-width: calc(var(--calendar-time-axis-width) + 7 * 112px) !important;
+  .calendar-view-timeGridDay .fc-timegrid-body table,
+  .calendar-view-timeGridWeek .fc-timegrid-cols table,
+  .calendar-view-timeGridDay .fc-timegrid-cols table {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .calendar-view-timeGridWeek .fc-col-header-cell-cushion,
+  .calendar-view-timeGridDay .fc-col-header-cell-cushion {
+    display: block;
+    padding: 4px 1px 5px;
+  }
+
+  .calendar-view-timeGridWeek
+    .fc-daygrid-day.fc-day-today
+    .fc-daygrid-day-number::after,
+  .calendar-view-timeGridDay
+    .fc-daygrid-day.fc-day-today
+    .fc-daygrid-day-number::after {
+    content: none;
+  }
+
+  .calendar-view-timeGridWeek
+    .fc-col-header-cell.fc-day-today
+    .fc-col-header-cell-cushion,
+  .calendar-view-timeGridDay
+    .fc-col-header-cell.fc-day-today
+    .fc-col-header-cell-cushion {
+    display: block;
+    position: relative;
+    font-weight: 700;
+  }
+
+  .calendar-view-timeGridWeek
+    .fc-col-header-cell.fc-day-today
+    .fc-col-header-cell-cushion::after,
+  .calendar-view-timeGridDay
+    .fc-col-header-cell.fc-day-today
+    .fc-col-header-cell-cushion::after {
+    position: absolute;
+    left: 50%;
+    bottom: 1px;
+    width: 18px;
+    height: 3px;
+    transform: translateX(-50%);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+
+  .mobile-week-day-header {
+    display: grid;
+    justify-items: center;
+    gap: 1px;
+    line-height: 1;
+  }
+
+  .mobile-week-day-label {
+    color: var(--muted);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  .mobile-week-date-label {
+    color: var(--text);
+    font-size: 0.88rem;
+    font-weight: 800;
+  }
+
+  .calendar-view-timeGridWeek .fc-timegrid-slot,
+  .calendar-view-timeGridDay .fc-timegrid-slot {
+    height: 34px;
+  }
+
+  .calendar-view-timeGridWeek .fc-timegrid-slot-minor,
+  .calendar-view-timeGridDay .fc-timegrid-slot-minor {
+    border-top-style: dotted;
+    border-top-color: color-mix(in srgb, var(--border) 48%, transparent);
+  }
+
+  .calendar-view-timeGridWeek .fc-timegrid-slot-label-cushion,
+  .calendar-view-timeGridDay .fc-timegrid-slot-label-cushion {
+    color: var(--muted);
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+
+  .calendar-view-timeGridWeek .fc-timegrid-axis-cushion,
+  .calendar-view-timeGridDay .fc-timegrid-axis-cushion {
+    color: var(--muted);
+    font-size: 0.64rem;
+    font-weight: 700;
+  }
+
+  .calendar-view-timeGridWeek .fc-timegrid-divider,
+  .calendar-view-timeGridDay .fc-timegrid-divider {
+    padding: 0;
+  }
+
+  .calendar-view-timeGridWeek .fc-timegrid-body .fc-scroller,
+  .calendar-view-timeGridDay .fc-timegrid-body .fc-scroller {
+    overscroll-behavior: contain;
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+
+  .calendar-view-timeGridWeek .fc-timegrid-event,
+  .calendar-view-timeGridDay .fc-timegrid-event,
+  .calendar-view-timeGridWeek .fc-daygrid-event {
+    border-width: 1px;
+    border-radius: 5px;
+    box-shadow: none;
+  }
+
+  .calendar-view-timeGridWeek .fc-timegrid-event .fc-event-main,
+  .calendar-view-timeGridDay .fc-timegrid-event .fc-event-main,
+  .calendar-view-timeGridWeek .fc-daygrid-event .fc-event-main {
+    padding: 1px 2px;
+  }
+
+  .calendar-view-timeGridWeek .calendar-task,
+  .calendar-view-timeGridDay .calendar-task {
+    gap: 3px;
+    font-size: 0.7rem;
+    line-height: 1.05;
+    align-items: flex-start;
+    height: 100%;
+  }
+
+  .calendar-view-timeGridWeek .calendar-task .task-checkbox,
+  .calendar-view-timeGridDay .calendar-task .task-checkbox {
+    --checkbox-size: 12px;
+    --checkbox-radius: 3px;
+    --checkbox-mark-size: 68%;
+    margin-top: 0;
+  }
+
+  .calendar-view-timeGridWeek .calendar-task-title,
+  .calendar-view-timeGridDay .calendar-task-title {
+    font-weight: 700;
+  }
+
+  .calendar-view-timeGridWeek .fc-timegrid-axis-frame,
+  .calendar-view-timeGridDay .fc-timegrid-axis-frame,
+  .calendar-view-timeGridWeek .fc-timegrid-slot-label-frame,
+  .calendar-view-timeGridDay .fc-timegrid-slot-label-frame {
+    padding-inline: 1px;
+  }
+
+  .calendar-view-timeGridWeek .fc-scrollgrid col:first-child {
+    width: var(--mobile-week-axis-width) !important;
+    min-width: var(--mobile-week-axis-width) !important;
+  }
+
+  .calendar-view-timeGridDay .fc-scrollgrid col:first-child {
+    width: var(--mobile-week-axis-width) !important;
+    min-width: var(--mobile-week-axis-width) !important;
+  }
+
+  .calendar-view-timeGridWeek .fc-scrollgrid-shrink,
+  .calendar-view-timeGridDay .fc-scrollgrid-shrink,
+  .calendar-view-timeGridWeek .fc-scrollgrid-shrink-frame,
+  .calendar-view-timeGridDay .fc-scrollgrid-shrink-frame,
+  .calendar-view-timeGridWeek .fc-scrollgrid-shrink-cushion {
+    box-sizing: border-box;
+    width: var(--mobile-week-axis-width) !important;
+    min-width: var(--mobile-week-axis-width) !important;
+    max-width: var(--mobile-week-axis-width) !important;
+  }
+
+  .calendar-view-timeGridDay .fc-scrollgrid-shrink-cushion {
+    box-sizing: border-box;
+    width: var(--mobile-week-axis-width) !important;
+    min-width: var(--mobile-week-axis-width) !important;
+    max-width: var(--mobile-week-axis-width) !important;
+  }
+
+  .calendar-view-timeGridWeek .fc-timegrid-axis-cushion,
+  .calendar-view-timeGridWeek .fc-timegrid-slot-label-cushion {
+    padding-inline: 0;
+  }
+
+  .calendar-view-timeGridDay .fc-timegrid-axis-cushion,
+  .calendar-view-timeGridDay .fc-timegrid-slot-label-cushion {
+    padding-inline: 0;
+  }
+
+  .calendar-view-timeGridWeek .fc-timegrid-divider,
+  .calendar-view-timeGridDay .fc-timegrid-divider {
+    width: 0;
   }
 
   .calendar-view-timeGridWeek .fc-timegrid-axis,
-  .calendar-view-timeGridWeek .fc-timegrid-slot-label {
-    position: sticky;
-    left: 0;
-    z-index: 4;
-    background: var(--panel-bg);
+  .calendar-view-timeGridDay .fc-timegrid-axis,
+  .calendar-view-timeGridWeek .fc-timegrid-slot-label,
+  .calendar-view-timeGridDay .fc-timegrid-slot-label {
+    min-width: var(--mobile-week-axis-width);
+    width: var(--mobile-week-axis-width);
   }
 
-  .calendar-view-timeGridWeek .fc-timegrid-axis {
-    z-index: 6;
+  .calendar-view-timeGridWeek .fc-timegrid-col,
+  .calendar-view-timeGridDay .fc-timegrid-col {
+    min-width: 0;
   }
 
-  .calendar-working-range {
-    align-self: stretch;
-    flex: 1 1 auto;
+  .calendar-view-timeGridWeek .calendar-task {
+    gap: 2px;
+  }
+
+  .calendar-view-timeGridWeek .calendar-task .task-checkbox {
+    flex-basis: 12px;
+  }
+
+  .calendar-view-timeGridWeek .calendar-task .task-title {
+    min-width: 0;
   }
 
   .calendar-toolbar {
@@ -2639,6 +2871,12 @@ input[type="checkbox"].task-checkbox:checked {
     gap: 8px;
     align-items: center;
     justify-items: stretch;
+  }
+
+  .calendar-toolbar-timeGridWeek,
+  .calendar-toolbar-timeGridDay {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "nav title view";
   }
 
   .calendar-toolbar > .calendar-toolbar-group:first-child {
@@ -2651,15 +2889,31 @@ input[type="checkbox"].task-checkbox:checked {
     display: none;
   }
 
+  .calendar-toolbar-timeGridWeek .calendar-toolbar-title,
+  .calendar-toolbar-timeGridDay .calendar-toolbar-title {
+    display: flex;
+    grid-area: title;
+    justify-content: center;
+    min-width: 0;
+    font-size: 0.84rem;
+    font-weight: 700;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .calendar-toolbar-period-label {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .calendar-view-switcher {
     grid-area: view;
     justify-content: flex-end;
     flex-wrap: nowrap;
     min-width: 0;
-  }
-
-  .calendar-hours-toggle {
-    order: 2;
   }
 
   .calendar-view-cycle-button {
