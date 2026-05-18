@@ -32,11 +32,24 @@ const mocks = vi.hoisted(() => ({
         dateClick: undefined as
             | ((arg: { date: Date; allDay: boolean }) => void)
             | undefined,
+        eventClick: undefined as
+            | ((arg: {
+                  el: HTMLElement;
+                  event: { id: string; start: Date | null };
+                  view: { type: string };
+              }) => void)
+            | undefined,
         scrollTime: undefined as string | undefined,
         scrollTimeReset: undefined as boolean | undefined,
         slotMinTime: undefined as string | undefined,
         slotMaxTime: undefined as string | undefined,
         dayMaxEventRows: undefined as number | boolean | undefined,
+        longPressDelay: undefined as number | undefined,
+        selectLongPressDelay: undefined as number | undefined,
+        eventLongPressDelay: undefined as number | undefined,
+        editable: undefined as boolean | undefined,
+        eventStartEditable: undefined as boolean | undefined,
+        eventDurationEditable: undefined as boolean | undefined,
     },
     fullCalendarMount: vi.fn(),
     fullCalendarRefetchEvents: vi.fn(),
@@ -177,6 +190,8 @@ vi.mock("@fullcalendar/react", () => ({
             dateClick,
             datesSet,
             drop,
+            eventClick,
+            eventClassNames,
             eventDrop,
             eventResize,
             eventContent,
@@ -187,6 +202,12 @@ vi.mock("@fullcalendar/react", () => ({
             slotMinTime,
             slotMaxTime,
             dayMaxEventRows,
+            longPressDelay,
+            selectLongPressDelay,
+            eventLongPressDelay,
+            editable,
+            eventStartEditable,
+            eventDurationEditable,
         }: {
             dateClick?: (arg: { date: Date; allDay: boolean }) => void;
             datesSet?: (arg: {
@@ -200,6 +221,22 @@ vi.mock("@fullcalendar/react", () => ({
                 jsEvent: MouseEvent;
                 view: unknown;
             }) => void;
+            eventClick?: (arg: {
+                el: HTMLElement;
+                event: { id: string; start: Date | null };
+                view: { type: string };
+            }) => void;
+            eventClassNames?: (arg: {
+                event: {
+                    id: string;
+                    title: string;
+                    start: Date | null;
+                    end: Date | null;
+                    allDay: boolean;
+                    extendedProps: Record<string, unknown>;
+                };
+                view: { type: string };
+            }) => string[];
             eventDrop?: (arg: {
                 event: {
                     id: string;
@@ -236,6 +273,12 @@ vi.mock("@fullcalendar/react", () => ({
             slotMinTime?: string;
             slotMaxTime?: string;
             dayMaxEventRows?: number | boolean;
+            longPressDelay?: number;
+            selectLongPressDelay?: number;
+            eventLongPressDelay?: number;
+            editable?: boolean;
+            eventStartEditable?: boolean;
+            eventDurationEditable?: boolean;
         },
         ref: ForwardedRef<{
             getApi: () => {
@@ -309,11 +352,18 @@ vi.mock("@fullcalendar/react", () => ({
 
         mocks.fullCalendarProps.events = events ?? [];
         mocks.fullCalendarProps.dateClick = dateClick;
+        mocks.fullCalendarProps.eventClick = eventClick;
         mocks.fullCalendarProps.scrollTime = scrollTime;
         mocks.fullCalendarProps.scrollTimeReset = scrollTimeReset;
         mocks.fullCalendarProps.slotMinTime = slotMinTime;
         mocks.fullCalendarProps.slotMaxTime = slotMaxTime;
         mocks.fullCalendarProps.dayMaxEventRows = dayMaxEventRows;
+        mocks.fullCalendarProps.longPressDelay = longPressDelay;
+        mocks.fullCalendarProps.selectLongPressDelay = selectLongPressDelay;
+        mocks.fullCalendarProps.eventLongPressDelay = eventLongPressDelay;
+        mocks.fullCalendarProps.editable = editable;
+        mocks.fullCalendarProps.eventStartEditable = eventStartEditable;
+        mocks.fullCalendarProps.eventDurationEditable = eventDurationEditable;
         const renderMockEvent = (
             event: EventInput & {
                 extendedProps?: Record<string, unknown>;
@@ -329,20 +379,32 @@ vi.mock("@fullcalendar/react", () => ({
                 typeof event.end === "string" || event.end instanceof Date
                     ? new Date(event.end)
                     : null;
+            const eventArg = {
+                event: {
+                    id,
+                    title,
+                    start,
+                    end,
+                    allDay: Boolean(event.allDay),
+                    extendedProps: event.extendedProps ?? {},
+                },
+                view: { type: view },
+            };
 
             return (
-                <div key={id} data-testid={`calendar-event-${id}`}>
-                    {eventContent?.({
-                        event: {
-                            id,
-                            title,
-                            start,
-                            end,
-                            allDay: Boolean(event.allDay),
-                            extendedProps: event.extendedProps ?? {},
-                        },
-                        view: { type: view },
-                    }) ?? title}
+                <div
+                    key={id}
+                    data-testid={`calendar-event-${id}`}
+                    className={eventClassNames?.(eventArg).join(" ")}
+                    onClick={(clickEvent) =>
+                        eventClick?.({
+                            el: clickEvent.currentTarget,
+                            event: { id, start },
+                            view: { type: view },
+                        })
+                    }
+                >
+                    {eventContent?.(eventArg) ?? title}
                 </div>
             );
         };
@@ -735,7 +797,14 @@ describe("App", () => {
         mocks.fullCalendarRefetchEvents.mockClear();
         mocks.fullCalendarProps.events = [];
         mocks.fullCalendarProps.dateClick = undefined;
+        mocks.fullCalendarProps.eventClick = undefined;
         mocks.fullCalendarProps.dayMaxEventRows = undefined;
+        mocks.fullCalendarProps.longPressDelay = undefined;
+        mocks.fullCalendarProps.selectLongPressDelay = undefined;
+        mocks.fullCalendarProps.eventLongPressDelay = undefined;
+        mocks.fullCalendarProps.editable = undefined;
+        mocks.fullCalendarProps.eventStartEditable = undefined;
+        mocks.fullCalendarProps.eventDurationEditable = undefined;
         mocks.dragRevert.mockClear();
         mocks.draggableConstruct.mockClear();
         mocks.draggableDestroy.mockClear();
@@ -1161,6 +1230,91 @@ describe("App", () => {
         expect(screen.getByRole("main")).toHaveClass("detail-panel-open");
         expect(screen.getByLabelText("Create task panel")).toBeInTheDocument();
         expect(screen.getByLabelText("Start")).toHaveValue("2026-05-08");
+    });
+
+    it("uses intentional mobile calendar taps for time-grid create and edit", async () => {
+        setMobileLayout(true);
+        mocks.tasks = [
+            makeTask({
+                id: "task-external",
+                title: "Mobile tap task",
+                scheduled_start: "2026-05-08T09:00:00.000Z",
+                scheduled_end: "2026-05-08T10:00:00.000Z",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Mobile Calendar" }));
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.longPressDelay).toBe(550),
+        );
+        expect(mocks.fullCalendarProps.selectLongPressDelay).toBe(550);
+        expect(mocks.fullCalendarProps.eventLongPressDelay).toBe(550);
+        expect(mocks.fullCalendarProps.editable).toBe(false);
+        expect(mocks.fullCalendarProps.eventStartEditable).toBe(false);
+        expect(mocks.fullCalendarProps.eventDurationEditable).toBe(false);
+
+        fireEvent.click(screen.getByRole("button", { name: "Open create task" }));
+        expect(
+            screen.queryByLabelText("Create task panel"),
+        ).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByTestId("calendar-event-task-external"));
+
+        await waitFor(() =>
+            expect(
+                screen.getByTestId("calendar-event-task-external"),
+            ).toHaveClass("fc-event-selected"),
+        );
+        expect(
+            screen.getByRole("region", { name: "Calendar task actions" }),
+        ).toBeInTheDocument();
+        expect(screen.getByText(/:00-.*:00/)).toBeInTheDocument();
+        expect(screen.getByText("Complete")).toBeInTheDocument();
+        expect(screen.queryByText("Uncomplete")).not.toBeInTheDocument();
+
+        fireEvent.click(
+            screen.getByRole("button", { name: "Move later 15 minutes" }),
+        );
+        await waitFor(() =>
+            expect(mocks.updateTask).toHaveBeenCalledWith("task-external", {
+                scheduled_start: "2026-05-08T09:15:00.000Z",
+                scheduled_end: "2026-05-08T10:15:00.000Z",
+                all_day: false,
+            }),
+        );
+        expect(screen.queryByLabelText("Edit task panel")).not.toBeInTheDocument();
+    });
+
+    it("keeps the mobile quick action completion label as Complete when already completed", async () => {
+        setMobileLayout(true);
+        mocks.tasks = [
+            makeTask({
+                id: "task-external",
+                title: "Mobile completed task",
+                completed: true,
+                completed_at: "2026-05-08T08:00:00.000Z",
+                scheduled_start: "2026-05-08T09:00:00.000Z",
+                scheduled_end: "2026-05-08T10:00:00.000Z",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Mobile Calendar" }));
+        fireEvent.click(screen.getByTestId("calendar-event-task-external"));
+
+        await waitFor(() =>
+            expect(
+                screen.getByRole("region", { name: "Calendar task actions" }),
+            ).toBeInTheDocument(),
+        );
+        expect(screen.getByText("Complete")).toBeInTheDocument();
+        expect(screen.queryByText("Uncomplete")).not.toBeInTheDocument();
+        expect(
+            screen.getByRole("checkbox", { name: "Toggle task completion" }),
+        ).toBeChecked();
     });
 
     it("does not open the desktop context menu on mobile task rows", async () => {
@@ -3674,7 +3828,7 @@ describe("App", () => {
         expect(screen.queryByText("Classified task")).not.toBeInTheDocument();
     });
 
-    it("keeps the existing category settings button available", async () => {
+    it("opens category edit mode from the row", async () => {
         render(<App />);
 
         fireEvent.click(
@@ -3682,6 +3836,24 @@ describe("App", () => {
         );
 
         expect(screen.getByRole("button", { name: "Edit Work" })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Edit Work" }));
+        expect(screen.getByLabelText("Edit category name")).toHaveValue("Work");
+    });
+
+    it("keeps the category switch from opening edit mode", async () => {
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Task category" }),
+        );
+
+        fireEvent.click(screen.getByRole("switch", { name: "All" }));
+        fireEvent.click(screen.getByRole("switch", { name: "Work" }));
+
+        expect(
+            screen.queryByLabelText("Edit category name"),
+        ).not.toBeInTheDocument();
+        expect(screen.getByRole("switch", { name: "Work" })).toBeInTheDocument();
     });
 
     it("maps explicit all-day tasks to all-day calendar events", async () => {

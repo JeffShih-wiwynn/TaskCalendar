@@ -24,6 +24,7 @@ The current app is web-first:
 - Draggable and resizable scheduled task events.
 - Week and day views default to the configured working-hours range and include a compact `Work` / `Full` viewport toggle for switching between working-hours and full-day time grids.
 - Task creation from selected calendar time ranges, including all-day slots.
+- Mobile calendar interactions use a quick action sheet for tap-to-edit and 15-minute adjustments.
 - Task editing for title, notes, category, scheduled start/end, and completion.
 - Recurring task creation with RRULE-style daily, weekly, monthly, and yearly intervals.
 - Task completion and uncompletion.
@@ -73,7 +74,7 @@ The current app is web-first:
 ## Important Edge Cases
 
 - Timezone: `APP_TIMEZONE` controls application datetime behavior and defaults to `UTC`. The frontend sends datetime-local values as ISO strings; naive backend datetimes are interpreted in `APP_TIMEZONE`.
-- All-day tasks: stored through scheduled start/end ranges and rendered as all-day calendar events when the range spans local midnight-to-midnight in the task timezone.
+- All-day tasks: stored with an explicit `all_day` marker and rendered as all-day calendar events while preserving the selected calendar date.
 - Timed tasks: both start and end should be present for calendar range behavior. Backend validation rejects end times that are not after start times when both are provided.
 - Recurring tasks: the backend materializes concrete task rows for each occurrence and links them with `recurrence_series_id`. Deleting a recurring task can target only the current occurrence or the current and following occurrences. Switching a whole series to no recurrence removes the sibling occurrences and keeps only the edited task.
 - Notifications: Discord delivery can be configured from the app UI through stored webhook settings, and message templates can include `{title}`, `{when}`, `{notes}`, and `{app_url}` placeholders.
