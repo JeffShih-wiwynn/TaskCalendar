@@ -668,6 +668,27 @@ h2 {
   box-shadow: 0 12px 28px rgb(24 32 38 / 14%);
   overflow: hidden;
   transform-origin: top center;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--subtle) 58%, var(--panel-bg))
+    color-mix(in srgb, var(--panel-bg) 88%, var(--border));
+}
+
+.filter-menu::-webkit-scrollbar {
+  width: 10px;
+}
+
+.filter-menu::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--panel-bg) 88%, var(--border));
+}
+
+.filter-menu::-webkit-scrollbar-thumb {
+  border: 2px solid color-mix(in srgb, var(--panel-bg) 88%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--subtle) 42%, var(--panel-bg));
+}
+
+.filter-menu::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--subtle) 58%, var(--panel-bg));
 }
 
 .category-row {
@@ -1019,6 +1040,22 @@ h2 {
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
+  gap: 8px;
+}
+
+.task-detail-header-actions--create {
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.task-detail-header-actions--edit {
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.task-detail-header-actions-group {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
 }
 
@@ -1532,24 +1569,6 @@ h2 {
   text-align: center;
 }
 
-.task-form .task-composer-soft-select {
-  border-color: color-mix(in srgb, var(--field-border) 68%, transparent);
-  border-radius: 999px;
-  color: color-mix(in srgb, var(--text) 92%, var(--muted));
-  background-color: color-mix(in srgb, var(--panel-bg) 62%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--field-border) 28%, transparent);
-  transition:
-    border-color var(--micro-duration-medium) var(--micro-ease),
-    background-color var(--micro-duration-medium) var(--micro-ease),
-    color var(--micro-duration-medium) var(--micro-ease),
-    box-shadow var(--micro-duration-medium) var(--micro-ease);
-}
-
-.task-form .task-composer-soft-select:hover {
-  border-color: color-mix(in srgb, var(--accent) 28%, var(--field-border));
-  background-color: color-mix(in srgb, var(--panel-bg) 76%, var(--accent-soft));
-}
-
 .task-recurrence-ends,
 .task-reminder-custom {
   display: grid;
@@ -1562,6 +1581,109 @@ h2 {
 .task-form label {
   display: grid;
   gap: 6px;
+}
+
+.task-form-field {
+  display: grid;
+  gap: 6px;
+}
+
+.task-form-custom-dropdown {
+  min-width: 0;
+}
+
+.task-form-custom-dropdown .filter-trigger,
+.task-form-custom-dropdown .filter-trigger[aria-expanded="true"] {
+  border: 1px solid var(--border) !important;
+  background-color: var(--panel-bg) !important;
+  color: var(--text);
+}
+
+.task-form-custom-dropdown .filter-trigger:hover,
+.task-form-custom-dropdown .filter-trigger:focus-visible {
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border)) !important;
+  background-color: color-mix(in srgb, var(--panel-bg) 92%, var(--accent) 8%) !important;
+}
+
+.task-recurrence-sentence .task-form-custom-dropdown {
+  flex: 1 1 150px;
+}
+
+.task-form-dropdown-trigger {
+  min-height: 40px;
+  border-color: var(--border);
+  color: var(--text);
+  background: var(--panel-bg);
+  transition:
+    border-color var(--micro-duration-medium) var(--micro-ease),
+    background-color var(--micro-duration-medium) var(--micro-ease),
+    color var(--micro-duration-medium) var(--micro-ease),
+    box-shadow var(--micro-duration-medium) var(--micro-ease);
+}
+
+.task-form-dropdown-trigger:hover {
+  border-color: color-mix(in srgb, var(--accent) 16%, var(--border));
+  background: color-mix(in srgb, var(--panel-bg) 92%, var(--accent) 8%);
+}
+
+.task-form-dropdown-trigger:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.task-form-dropdown-menu {
+  z-index: 30;
+  max-height: var(--task-form-dropdown-menu-max-height, 260px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background-color: var(--panel-bg) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 14px 30px rgb(24 32 38 / 16%);
+}
+
+.task-form-dropdown-menu-up {
+  top: auto;
+  bottom: calc(100% + 6px);
+  transform-origin: bottom center;
+}
+
+.task-form-dropdown-menu-down {
+  top: calc(100% + 6px);
+  bottom: auto;
+  transform-origin: top center;
+}
+
+.task-form-dropdown-menu .filter-option {
+  min-height: 36px;
+  padding: 7px 10px;
+  background-color: var(--panel-bg);
+}
+
+.task-form-dropdown-menu .filter-option:hover,
+.task-form-dropdown-menu .filter-option:focus-visible {
+  background-color: color-mix(in srgb, var(--panel-bg) 90%, var(--accent) 10%) !important;
+}
+
+.task-form-dropdown-menu .filter-option.active,
+.task-form-dropdown-menu .filter-option[aria-selected="true"] {
+  background-color: color-mix(in srgb, var(--panel-bg) 92%, var(--accent) 8%) !important;
+  color: color-mix(in srgb, var(--accent) 76%, var(--text));
+}
+
+.task-form-dropdown-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  border: 1px solid color-mix(in srgb, var(--field-border) 72%, transparent);
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--panel-bg) 58%, transparent);
+}
+
+.task-form-dropdown-dot-muted {
+  background:
+    linear-gradient(135deg, transparent 42%, var(--subtle) 42%, var(--subtle) 58%, transparent 58%);
+  opacity: 0.72;
 }
 
 .task-form-datetime-row {
@@ -2119,8 +2241,20 @@ input[type="checkbox"].task-checkbox:checked {
   color: var(--text);
 }
 
-.floating-panel-close {
+.floating-panel-close,
+.floating-panel-cancel {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel-bg) 92%, transparent);
+  border-color: var(--border);
+}
+
+.floating-panel-close:hover:not(:disabled),
+.floating-panel-close:focus-visible,
+.floating-panel-cancel:hover:not(:disabled),
+.floating-panel-cancel:focus-visible {
+  border-color: var(--border);
   color: var(--text);
+  background: color-mix(in srgb, var(--panel-bg) 86%, var(--border));
 }
 
 .floating-panel-create:hover:not(:disabled),
@@ -2134,12 +2268,6 @@ input[type="checkbox"].task-checkbox:checked {
   border-color: color-mix(in srgb, var(--danger) 42%, var(--border));
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 10%, var(--panel-bg));
-}
-
-.floating-panel-close:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--accent-soft);
 }
 
 .floating-panel-action:disabled {
@@ -2936,6 +3064,10 @@ input[type="checkbox"].task-checkbox:checked {
 
   .mobile-task-sheet .task-detail-header-actions {
     gap: 6px;
+  }
+
+  .mobile-task-sheet .task-detail-header-actions--create {
+    gap: 8px;
   }
 
   .floating-panel-action {

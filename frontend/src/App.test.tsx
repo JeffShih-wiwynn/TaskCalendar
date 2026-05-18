@@ -692,6 +692,17 @@ function setMobileLayout(matches: boolean): void {
     });
 }
 
+async function selectTaskDropdownOption(
+    label: string,
+    option: string,
+): Promise<void> {
+    fireEvent.click(screen.getByRole("button", { name: label }));
+    const listbox = await screen.findByRole("listbox", {
+        name: `${label} options`,
+    });
+    fireEvent.click(within(listbox).getByRole("option", { name: option }));
+}
+
 describe("App", () => {
     beforeEach(() => {
         setMobileLayout(false);
@@ -2661,24 +2672,16 @@ describe("App", () => {
         fireEvent.change(screen.getByLabelText("Title"), {
             target: { value: "New task" },
         });
-        fireEvent.change(screen.getByLabelText("Repeat"), {
-            target: { value: "DAILY" },
-        });
+        await selectTaskDropdownOption("Repeat", "Daily");
         fireEvent.change(screen.getByLabelText("Every"), {
             target: { value: "3" },
         });
-        fireEvent.change(screen.getByLabelText("Ends"), {
-            target: { value: "ON_DATE" },
-        });
+        await selectTaskDropdownOption("Ends", "On date");
         fireEvent.change(screen.getByLabelText("Repeat end date"), {
             target: { value: "2026-06-08" },
         });
-        fireEvent.change(screen.getByLabelText("Reminder"), {
-            target: { value: "CUSTOM" },
-        });
-        fireEvent.change(screen.getByLabelText("Reminder unit"), {
-            target: { value: "HOURS" },
-        });
+        await selectTaskDropdownOption("Reminder", "Custom");
+        await selectTaskDropdownOption("Reminder unit", "Hours");
         fireEvent.change(screen.getByLabelText("Reminder amount"), {
             target: { value: "4" },
         });
@@ -2715,12 +2718,8 @@ describe("App", () => {
         fireEvent.change(screen.getByLabelText("Title"), {
             target: { value: "New task" },
         });
-        fireEvent.change(screen.getByLabelText("Repeat"), {
-            target: { value: "DAILY" },
-        });
-        fireEvent.change(screen.getByLabelText("Ends"), {
-            target: { value: "ON_DATE" },
-        });
+        await selectTaskDropdownOption("Repeat", "Daily");
+        await selectTaskDropdownOption("Ends", "On date");
         fireEvent.change(screen.getByLabelText("Repeat end date"), {
             target: { value: "2026-05-07" },
         });
@@ -2797,6 +2796,57 @@ describe("App", () => {
         );
     });
 
+    it("cancels edit changes without saving", async () => {
+        const now = new Date();
+        const todayAtTen = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+            10,
+            0,
+            0,
+            0,
+        );
+
+        mocks.tasks = [
+            {
+                id: "task-edit-cancel",
+                user_id: "user-1",
+                list_id: "list-1",
+                title: "Cancel me",
+                notes: null,
+                completed: false,
+                scheduled_start: todayAtTen.toISOString(),
+                scheduled_end: new Date(
+                    todayAtTen.getTime() + 60 * 60 * 1000,
+                ).toISOString(),
+                due_at: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                created_at: now.toISOString(),
+                updated_at: now.toISOString(),
+                completed_at: null,
+            },
+        ];
+
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: /Cancel me/i }),
+        );
+        fireEvent.change(screen.getByLabelText("Title"), {
+            target: { value: "Edited but canceled" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("heading", { name: "Edit task" }),
+            ).not.toBeInTheDocument(),
+        );
+        expect(mocks.updateTask).not.toHaveBeenCalled();
+    });
+
     it("undoes a sidebar task edit and category change", async () => {
         mocks.tasks = [
             makeTask({
@@ -2814,9 +2864,7 @@ describe("App", () => {
         fireEvent.change(await screen.findByLabelText("Title"), {
             target: { value: "Edited task" },
         });
-        fireEvent.change(screen.getByLabelText("Category"), {
-            target: { value: "" },
-        });
+        await selectTaskDropdownOption("Category", "None");
         fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
         await screen.findByRole("button", { name: "Undo task change" });
@@ -2881,9 +2929,7 @@ describe("App", () => {
             }),
         );
         await screen.findByRole("heading", { name: "Edit task" });
-        fireEvent.change(screen.getByLabelText("Ends"), {
-            target: { value: "ON_DATE" },
-        });
+        await selectTaskDropdownOption("Ends", "On date");
         fireEvent.change(screen.getByLabelText("Repeat end date"), {
             target: { value: "2026-05-07" },
         });
@@ -3000,13 +3046,15 @@ describe("App", () => {
             await screen.findByRole("button", { name: /Notify me/i }),
         );
 
-        expect(screen.getByLabelText("Reminder")).toHaveValue("CUSTOM");
-        expect(screen.getByLabelText("Reminder unit")).toHaveValue("MINUTES");
+        expect(screen.getByRole("button", { name: "Reminder" })).toHaveTextContent(
+            "Custom",
+        );
+        expect(
+            screen.getByRole("button", { name: "Reminder unit" }),
+        ).toHaveTextContent("Minutes");
         expect(screen.getByLabelText("Reminder amount")).toHaveValue(15);
 
-        fireEvent.change(screen.getByLabelText("Reminder unit"), {
-            target: { value: "DAYS" },
-        });
+        await selectTaskDropdownOption("Reminder unit", "Days");
         fireEvent.change(screen.getByLabelText("Reminder amount"), {
             target: { value: "2" },
         });
@@ -3285,7 +3333,11 @@ describe("App", () => {
             screen.getByRole("button", { name: "Delete the recurrsive" }),
         ).toBeInTheDocument();
         expect(
-            screen.getByRole("button", { name: "Cancel" }),
+            within(
+                screen.getByRole("dialog", {
+                    name: "Delete recurring task",
+                }),
+            ).getByRole("button", { name: "Cancel" }),
         ).toBeInTheDocument();
 
         fireEvent.click(

@@ -55,7 +55,7 @@ This document summarizes what is already in the repository snapshot and where th
   - Tasks can opt into Discord notifications with an offset in minutes before `scheduled_start`.
   - The backend polls for due notifications and marks `notification_sent_at` after a successful send.
   - Discord webhook URL and message template can now be configured from the sidebar settings button.
-  - The webhook settings panel can send a one-off test message from the current draft values.
+  - The webhook settings panel now saves with `Done` and can send a one-off test message from the current draft values.
 - [x] Step 9: Backup export/import foundation
   - Backup export is available from the sidebar settings button.
   - Backup import is available from the sidebar settings button and requires explicit confirmation before replacing current user data.
@@ -77,6 +77,7 @@ This document summarizes what is already in the repository snapshot and where th
   - The service worker precaches built frontend assets only and avoids intentional caching for API, auth, backup, and health routes.
   - Narrow-screen CSS stacks the sidebar and calendar, hides the desktop sidebar resizer, improves touch target sizing, and prevents task forms from overflowing horizontally.
   - Mobile calendar interactions now use a quick action sheet for tap-to-edit and 15-minute time adjustments, while empty-space long press still creates a task.
+  - The current task composer uses compact icon footer actions, shared neutral cancel controls, and custom in-app dropdowns for recurrence, reminders, and categories.
 
 ## Current Notes
 

@@ -84,12 +84,13 @@ Current frontend behavior includes:
 - a clickable year control in month view
 - month view now keeps its date grid aligned on the initial render without needing a click to recalculate layout
 - mobile/PWA calendar quick actions for tap-to-edit, long-press create, and compact 15-minute time adjustments
-- Phase 1 PWA support with install metadata, app icons, and production static asset caching
+- Phase 1 PWA support with install metadata, app icons, standalone display mode, and production static asset caching
 - basic narrow-screen layout support for phone-sized browsers
 - category rows that open edit mode directly, with switches reserved for filtering
 - customizable `Upcoming` day ranges
 - backup export and import actions in the sidebar settings menu
-- a webhook settings form with `Test` and `Cancel` actions
+- a webhook settings form with `Done` and `Test` actions
+- a task detail panel with compact icon-only footer actions and neutral cancel controls
 - completed tasks stay category-colored in the calendar with increased transparency
 - a completed-task calendar toggle in the `Completed` view
 - right-click delete from calendar events and task-list rows
@@ -104,7 +105,7 @@ npm run build
 npm run preview
 ```
 
-Open the preview URL in Chrome or another PWA-capable browser. In DevTools, check **Application -> Manifest** for the app name, theme color, standalone display mode, and icons. Check **Application -> Service Workers** to confirm the generated service worker is registered. The service worker precaches built static assets only; task API, auth, backup, and health requests are not intentionally cached.
+Open the preview URL in Chrome or another PWA-capable browser. In DevTools, check **Application -> Manifest** for the app name, theme color, standalone display mode, and icons. Check **Application -> Service Workers** to confirm the generated service worker is registered. The service worker precaches built static assets only and uses a fetch handler for the app shell; task API, auth, backup, and health requests are not intentionally cached.
 
 To verify Add to Home Screen, use the browser install button from the address bar on desktop Chrome, or open the browser menu on Android Chrome and choose **Add to Home screen** or **Install app**.
 

@@ -400,6 +400,34 @@ const reminderPresets = [
 
 const reminderCustomValue = "CUSTOM";
 
+const recurrenceFrequencyOptions: TaskComposerDropdownOption[] = [
+    { value: "", label: "None" },
+    { value: "DAILY", label: "Daily" },
+    { value: "WEEKLY", label: "Weekly" },
+    { value: "MONTHLY", label: "Monthly" },
+    { value: "YEARLY", label: "Yearly" },
+];
+
+const recurrenceEndsOptions: TaskComposerDropdownOption[] = [
+    { value: "NEVER", label: "Never" },
+    { value: "ON_DATE", label: "On date" },
+];
+
+const reminderOptions: TaskComposerDropdownOption[] = [
+    ...reminderPresets.map((preset) => ({
+        value: preset.id,
+        label: preset.label,
+    })),
+    { value: reminderCustomValue, label: "Custom" },
+];
+
+const reminderUnitOptions: TaskComposerDropdownOption[] = notificationUnits
+    .filter((unit) => unit.id)
+    .map((unit) => ({
+        value: unit.id,
+        label: unit.label,
+    }));
+
 const defaultCategoryColor = "#176b58";
 
 const defaultCategoryVisibility: CategoryVisibilityState = {
@@ -4375,34 +4403,41 @@ export function App() {
                                         ? "Create task"
                                         : "Edit task"}
                                 </h2>
-                                <div className="task-detail-header-actions">
+                                <div
+                                    className={`task-detail-header-actions ${
+                                        detailPanelMode === "create"
+                                            ? "task-detail-header-actions--create"
+                                            : "task-detail-header-actions--edit"
+                                    }`}
+                                >
                                     {detailPanelMode === "create" ? (
-                                        <button
-                                            type="submit"
-                                            form="task-create-form"
-                                            className="floating-panel-action floating-panel-icon-button floating-panel-create"
-                                            disabled={isSaving}
-                                            aria-label="Create"
-                                            title="Create"
-                                        >
-                                            <span className="floating-panel-icon">
-                                                <IconSave />
-                                            </span>
-                                        </button>
-                                    ) : selectedTask && editState ? (
                                         <>
                                             <button
-                                                type="submit"
-                                                form="task-edit-form"
-                                                className="floating-panel-action floating-panel-icon-button floating-panel-done"
-                                                disabled={isEditSaving}
-                                                aria-label="Done"
-                                                title="Done"
+                                                type="button"
+                                                className="floating-panel-action floating-panel-icon-button floating-panel-close"
+                                                aria-label="Close"
+                                                title="Close"
+                                                onClick={closeDetailPanel}
                                             >
                                                 <span className="floating-panel-icon">
-                                                    <IconCheck />
+                                                    <IconClose />
                                                 </span>
                                             </button>
+                                            <button
+                                                type="submit"
+                                                form="task-create-form"
+                                                className="floating-panel-action floating-panel-icon-button floating-panel-create"
+                                                disabled={isSaving}
+                                                aria-label="Create"
+                                                title="Create"
+                                            >
+                                                <span className="floating-panel-icon">
+                                                    <IconSave />
+                                                </span>
+                                            </button>
+                                        </>
+                                    ) : selectedTask && editState ? (
+                                        <>
                                             <button
                                                 type="button"
                                                 className="floating-panel-action floating-panel-icon-button floating-panel-delete"
@@ -4417,21 +4452,34 @@ export function App() {
                                                     <IconTrash />
                                                 </span>
                                             </button>
+                                            <div className="task-detail-header-actions-group">
+                                                <button
+                                                    type="button"
+                                                    className="floating-panel-action floating-panel-icon-button floating-panel-close floating-panel-cancel"
+                                                    disabled={isEditSaving}
+                                                    aria-label="Cancel"
+                                                    title="Cancel"
+                                                    onClick={closeDetailPanel}
+                                                >
+                                                    <span className="floating-panel-icon">
+                                                        <IconClose />
+                                                    </span>
+                                                </button>
+                                                <button
+                                                    type="submit"
+                                                    form="task-edit-form"
+                                                    className="floating-panel-action floating-panel-icon-button floating-panel-done"
+                                                    disabled={isEditSaving}
+                                                    aria-label="Done"
+                                                    title="Done"
+                                                >
+                                                    <span className="floating-panel-icon">
+                                                        <IconCheck />
+                                                    </span>
+                                                </button>
+                                            </div>
                                         </>
                                     ) : null}
-                                    {detailPanelMode === "create" && (
-                                        <button
-                                            type="button"
-                                            className="floating-panel-action floating-panel-icon-button floating-panel-close"
-                                            aria-label="Close"
-                                            title="Close"
-                                            onClick={closeDetailPanel}
-                                        >
-                                            <span className="floating-panel-icon">
-                                                <IconClose />
-                                            </span>
-                                        </button>
-                                    )}
                                 </div>
                             </div>
 
@@ -6082,6 +6130,204 @@ function LabeledDateTimeInput({
     );
 }
 
+type TaskComposerDropdownOption = {
+    value: string;
+    label: string;
+    color?: string;
+    mutedDot?: boolean;
+};
+
+type TaskComposerDropdownProps = {
+    label: string;
+    value: string;
+    options: TaskComposerDropdownOption[];
+    onChange: (value: string) => void;
+    hasValue?: boolean;
+};
+
+function TaskComposerDropdown({
+    label,
+    value,
+    options,
+    onChange,
+    hasValue = Boolean(value),
+}: TaskComposerDropdownProps) {
+    const [isOpen, setIsOpen] = useState(false);
+    const [menuPlacement, setMenuPlacement] = useState<"down" | "up">("down");
+    const [menuMaxHeight, setMenuMaxHeight] = useState<number | null>(null);
+    const menuRef = useRef<HTMLDivElement | null>(null);
+    const triggerRef = useRef<HTMLButtonElement | null>(null);
+    const selectedOption =
+        options.find((option) => option.value === value) ?? options[0];
+    const selectedOptionHasDot =
+        Boolean(selectedOption?.color) || Boolean(selectedOption?.mutedDot);
+
+    const updateMenuPlacement = useCallback(() => {
+        const trigger = triggerRef.current;
+        if (!trigger || typeof window === "undefined") {
+            return;
+        }
+
+        const viewportMargin = 12;
+        const triggerRect = trigger.getBoundingClientRect();
+        const estimatedMenuHeight = Math.min(
+            Math.max(options.length * 39, 44),
+            260,
+        );
+        const spaceBelow =
+            window.innerHeight - triggerRect.bottom - viewportMargin;
+        const spaceAbove = triggerRect.top - viewportMargin;
+        const shouldOpenUp =
+            spaceBelow < estimatedMenuHeight && spaceAbove > spaceBelow;
+        const availableSpace = Math.max(
+            shouldOpenUp ? spaceAbove : spaceBelow,
+            120,
+        );
+
+        setMenuPlacement(shouldOpenUp ? "up" : "down");
+        setMenuMaxHeight(Math.min(estimatedMenuHeight, availableSpace));
+    }, [options.length]);
+
+    useEffect(() => {
+        if (!isOpen) {
+            return;
+        }
+
+        updateMenuPlacement();
+
+        const handlePointerDown = (event: PointerEvent) => {
+            if (
+                menuRef.current &&
+                !menuRef.current.contains(event.target as Node)
+            ) {
+                setIsOpen(false);
+            }
+        };
+        const handleViewportChange = () => updateMenuPlacement();
+
+        document.addEventListener("pointerdown", handlePointerDown);
+        window.addEventListener("resize", handleViewportChange);
+        window.addEventListener("scroll", handleViewportChange, true);
+        return () =>
+            {
+                document.removeEventListener(
+                    "pointerdown",
+                    handlePointerDown,
+                );
+                window.removeEventListener("resize", handleViewportChange);
+                window.removeEventListener(
+                    "scroll",
+                    handleViewportChange,
+                    true,
+                );
+            };
+    }, [isOpen, updateMenuPlacement]);
+
+    return (
+        <div
+            className="filter-dropdown task-form-custom-dropdown"
+            ref={menuRef}
+        >
+            <button
+                ref={triggerRef}
+                type="button"
+                className="filter-trigger task-form-dropdown-trigger"
+                aria-label={label}
+                aria-haspopup="listbox"
+                aria-expanded={isOpen}
+                onClick={() => setIsOpen((current) => !current)}
+                onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                        setIsOpen(false);
+                    }
+                }}
+            >
+                <span className="filter-trigger-value">
+                    {selectedOptionHasDot ? (
+                        <span
+                            className={`task-form-dropdown-dot ${
+                                selectedOption?.mutedDot
+                                    ? "task-form-dropdown-dot-muted"
+                                    : ""
+                            }`}
+                            style={
+                                selectedOption?.color
+                                    ? { backgroundColor: selectedOption.color }
+                                    : undefined
+                            }
+                            aria-hidden="true"
+                        />
+                    ) : null}
+                    {selectedOption?.label ?? ""}
+                </span>
+                <span className="filter-chevron" aria-hidden="true">
+                    ▾
+                </span>
+            </button>
+            <AnimatePresence initial={false}>
+                {isOpen && (
+                    <motion.div
+                        key={`${label}-menu`}
+                        className={`filter-menu task-form-dropdown-menu task-form-dropdown-menu-${menuPlacement}`}
+                        role="listbox"
+                        aria-label={`${label} options`}
+                        style={
+                            menuMaxHeight
+                                ? ({
+                                      "--task-form-dropdown-menu-max-height": `${menuMaxHeight}px`,
+                                  } as CSSProperties)
+                                : undefined
+                        }
+                        variants={{
+                            hidden: { opacity: 0, y: -4, scale: 0.98 },
+                            visible: { opacity: 1, y: 0, scale: 1 },
+                            exit: { opacity: 0, y: -4, scale: 0.98 },
+                        }}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        transition={motionTimings.dropdown}
+                    >
+                        {options.map((option) => (
+                            <button
+                                key={option.value}
+                                type="button"
+                                role="option"
+                                aria-selected={option.value === value}
+                                className={`filter-option ${option.value === value ? "active" : ""}`}
+                                onClick={() => {
+                                    onChange(option.value);
+                                    setIsOpen(false);
+                                }}
+                            >
+                                {option.color || option.mutedDot ? (
+                                    <span
+                                        className={`task-form-dropdown-dot ${
+                                            option.mutedDot
+                                                ? "task-form-dropdown-dot-muted"
+                                                : ""
+                                        }`}
+                                        style={
+                                            option.color
+                                                ? {
+                                                      backgroundColor:
+                                                          option.color,
+                                                  }
+                                                : undefined
+                                        }
+                                        aria-hidden="true"
+                                    />
+                                ) : null}
+                                <span>{option.label}</span>
+                            </button>
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+}
+
 type RecurrenceComposerState = Pick<
     TaskFormState,
     | "scheduled_start"
@@ -6124,56 +6370,48 @@ function RecurrenceComposer({ state, onChange }: RecurrenceComposerProps) {
                         Does not repeat
                     </span>
                 )}
-                <select
+                <TaskComposerDropdown
+                    label="Repeat"
                     value={state.recurrence_frequency}
-                    onChange={(event) =>
+                    options={recurrenceFrequencyOptions}
+                    hasValue={Boolean(state.recurrence_frequency)}
+                    onChange={(value) =>
                         onChange({
-                            recurrence_frequency:
-                                event.target.value as RecurrenceFrequency,
+                            recurrence_frequency: value as RecurrenceFrequency,
                             recurrence_interval:
-                                event.target.value && !state.recurrence_interval
+                                value && !state.recurrence_interval
                                     ? "1"
                                     : state.recurrence_interval,
-                            recurrence_until: event.target.value
+                            recurrence_until: value
                                 ? state.recurrence_until
                                 : "",
                         })
                     }
-                    aria-label="Repeat"
-                    className="task-composer-soft-select"
-                >
-                    <option value="">None</option>
-                    <option value="DAILY">Daily</option>
-                    <option value="WEEKLY">Weekly</option>
-                    <option value="MONTHLY">Monthly</option>
-                    <option value="YEARLY">Yearly</option>
-                </select>
+                />
             </div>
 
             {state.recurrence_frequency ? (
                 <div className="task-recurrence-ends">
-                    <label>
+                    <div className="task-form-field">
                         <span>Ends</span>
-                        <select
+                        <TaskComposerDropdown
+                            label="Ends"
                             value={endsMode}
-                            onChange={(event) =>
+                            options={recurrenceEndsOptions}
+                            hasValue={Boolean(state.recurrence_until)}
+                            onChange={(value) =>
                                 onChange({
                                     recurrence_until:
-                                        event.target.value === "NEVER"
+                                        value === "NEVER"
                                             ? ""
                                             : state.recurrence_until ||
                                               splitDateTimeInputValue(
                                                   state.scheduled_start,
                                               ).datePart,
-                                })
+                                        })
                             }
-                            aria-label="Ends"
-                            className="task-composer-soft-select"
-                        >
-                            <option value="NEVER">Never</option>
-                            <option value="ON_DATE">On date</option>
-                        </select>
-                    </label>
+                        />
+                    </div>
                     {endsMode === "ON_DATE" ? (
                         <label>
                             <span>Date</span>
@@ -6225,12 +6463,14 @@ function ReminderComposer({ state, onChange }: ReminderComposerProps) {
 
     return (
         <div className="task-composer-control-group task-reminder-composer">
-            <label className="task-reminder-select-label">
+            <div className="task-form-field task-reminder-select-label">
                 <span>Reminder</span>
-                <select
+                <TaskComposerDropdown
+                    label="Reminder"
                     value={presetValue}
-                    onChange={(event) => {
-                        const selectedValue = event.target.value;
+                    options={reminderOptions}
+                    hasValue={Boolean(state.notification_unit)}
+                    onChange={(selectedValue) => {
                         if (selectedValue === reminderCustomValue) {
                             onChange({
                                 notification_unit:
@@ -6251,17 +6491,8 @@ function ReminderComposer({ state, onChange }: ReminderComposerProps) {
                             notification_offset_value: preset?.value ?? "0",
                         });
                     }}
-                    aria-label="Reminder"
-                    className="task-composer-soft-select"
-                >
-                    {reminderPresets.map((preset) => (
-                        <option key={preset.id} value={preset.id}>
-                            {preset.label}
-                        </option>
-                    ))}
-                    <option value={reminderCustomValue}>Custom</option>
-                </select>
-            </label>
+                />
+            </div>
             {isCustomReminder ? (
                 <div className="task-reminder-custom">
                     <label>
@@ -6280,28 +6511,20 @@ function ReminderComposer({ state, onChange }: ReminderComposerProps) {
                             aria-label="Reminder amount"
                         />
                     </label>
-                    <label>
+                    <div className="task-form-field">
                         <span>Unit</span>
-                        <select
+                        <TaskComposerDropdown
+                            label="Reminder unit"
                             value={state.notification_unit || "MINUTES"}
-                            onChange={(event) =>
+                            options={reminderUnitOptions}
+                            hasValue={Boolean(state.notification_unit)}
+                            onChange={(value) =>
                                 onChange({
-                                    notification_unit:
-                                        event.target.value as NotificationUnit,
+                                    notification_unit: value as NotificationUnit,
                                 })
                             }
-                            aria-label="Reminder unit"
-                            className="task-composer-soft-select"
-                        >
-                            {notificationUnits
-                                .filter((unit) => unit.id)
-                                .map((unit) => (
-                                    <option key={unit.id} value={unit.id}>
-                                        {unit.label}
-                                    </option>
-                                ))}
-                        </select>
-                    </label>
+                        />
+                    </div>
                 </div>
             ) : null}
         </div>
@@ -6321,21 +6544,26 @@ function LabeledSelect({
     onChange,
     options,
 }: LabeledSelectProps) {
+    const categoryOptions: TaskComposerDropdownOption[] = [
+        { value: "", label: "None", mutedDot: true },
+        ...options.map((option) => ({
+            value: option.id,
+            label: option.name,
+            color: option.color,
+        })),
+    ];
+
     return (
-        <label>
+        <div className="task-form-field">
             <span>{label}</span>
-            <select
+            <TaskComposerDropdown
+                label={label}
                 value={value}
-                onChange={(event) => onChange(event.target.value)}
-            >
-                <option value="">None</option>
-                {options.map((option) => (
-                    <option key={option.id} value={option.id}>
-                        {option.name}
-                    </option>
-                ))}
-            </select>
-        </label>
+                options={categoryOptions}
+                onChange={onChange}
+                hasValue={Boolean(value)}
+            />
+        </div>
     );
 }
 
