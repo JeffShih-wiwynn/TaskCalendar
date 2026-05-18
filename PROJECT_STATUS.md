@@ -31,6 +31,8 @@ This file summarizes the current repository state for future contributors and AI
 - Overdue and completed task views
 - Single-step floating undo control for recent task changes, with stale undo state cleared on newer task mutations
 - Phase 1 PWA install support and basic phone-width responsive layout
+- Mobile calendar quick actions for tap-to-edit, long-press create, and 15-minute time adjustments
+- Category rows in the category dropdown now open edit mode directly, with switches reserved for filtering
 
 ## Recently Completed Work
 
@@ -45,6 +47,7 @@ This file summarizes the current repository state for future contributors and AI
 - Month view now renders with an aligned day grid on the initial switch without requiring a click to fix layout
 - Undo snackbar lifecycle cleanup so only the latest task mutation can own the undo control
 - Task and category routes now scope data to the authenticated user
+- Mobile quick action sheet UI for task adjustment on touch devices
 - Cross-user backend isolation tests
 - Login/register screen, logout action, and token-backed frontend API requests
 - Sidebar header icon button sizing refined to keep the hamburger and fold controls visually aligned
@@ -65,6 +68,7 @@ This file summarizes the current repository state for future contributors and AI
 - No CalDAV sync
 - No offline sync
 - No push notifications
+- Mobile calendar interactions are intentionally touch-first; desktop drag/resize remains available
 - Docker deployment is documented but not the primary production path yet
 
 ## Next Recommended Priority

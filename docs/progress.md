@@ -76,6 +76,7 @@ This document summarizes what is already in the repository snapshot and where th
   - Vite PWA support is configured with a generated manifest, app icons, standalone display mode, and static asset service worker.
   - The service worker precaches built frontend assets only and avoids intentional caching for API, auth, backup, and health routes.
   - Narrow-screen CSS stacks the sidebar and calendar, hides the desktop sidebar resizer, improves touch target sizing, and prevents task forms from overflowing horizontally.
+  - Mobile calendar interactions now use a quick action sheet for tap-to-edit and 15-minute time adjustments, while empty-space long press still creates a task.
 
 ## Current Notes
 
@@ -86,7 +87,7 @@ This document summarizes what is already in the repository snapshot and where th
 - Existing databases that already match the baseline schema should be adopted with `alembic stamp head` instead of relying on startup mutation.
 - Application timezone behavior is now configurable with `APP_TIMEZONE`, defaulting to `UTC` when unset.
 - Both Ubuntu and Docker production paths are documented, but Ubuntu remains the primary manual path.
-- All-day tasks are inferred from midnight-to-midnight ranges in the task timezone rather than from a separate all-day field.
+- All-day tasks use an explicit `all_day` marker alongside the stored calendar date.
 - Unscheduled tasks now have a dedicated `No time tasks` sidebar view.
 - `No time tasks` order is now stored on each unscheduled task as `unscheduled_order`, with `created_at` as the fallback sort when that field is null.
 - External drag-to-calendar now refreshes through the existing backend-confirmed task reload path, the no-time drag source rebinds after sidebar and panel transitions, the calendar month-view mirror is pinned to the document body, and the calendar event renderer no longer crashes when FullCalendar renders a transient event without a matching task in memory.

@@ -106,6 +106,7 @@ const defaultSidebarWidth = 300;
 const minSidebarWidth = 240;
 const minCalendarWidth = 320;
 const mobileLayoutQuery = "(max-width: 860px)";
+const mobileCalendarLongPressDelayMs = 550;
 const defaultWorkingHours: WorkingHoursSettings = {
     start: "08:00",
     end: "22:00",
@@ -113,6 +114,94 @@ const defaultWorkingHours: WorkingHoursSettings = {
 const workingHourOptions = Array.from({ length: 24 }, (_, index) =>
     `${String(index).padStart(2, "0")}:00`,
 );
+
+function IconArrowUp() {
+    return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+                d="M12 19V5m0 0-6 6m6-6 6 6"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+            />
+        </svg>
+    );
+}
+
+function IconArrowDown() {
+    return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+                d="M12 5v14m0 0 6-6m-6 6-6-6"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+            />
+        </svg>
+    );
+}
+
+function IconMinus() {
+    return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+                d="M6 12h12"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeWidth="2"
+            />
+        </svg>
+    );
+}
+
+function IconPlus() {
+    return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+                d="M12 5v14M5 12h14"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeWidth="2"
+            />
+        </svg>
+    );
+}
+
+function IconEdit() {
+    return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+                d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+            />
+        </svg>
+    );
+}
+
+function IconTrash() {
+    return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+                d="M5 7h14m-9 4v6m4-6v6M8 7l1 13h6l1-13M10 7V5h4v2"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+            />
+        </svg>
+    );
+}
 
 type TaskFormState = {
     title: string;
@@ -162,6 +251,8 @@ type PendingTaskDeleteState = {
     taskId: string;
     source: "detail" | "menu";
 };
+
+type MobileQuickAction = "earlier" | "later" | "shorten" | "extend";
 
 type PendingTaskEditState = {
     taskId: string;
@@ -357,6 +448,8 @@ export function App() {
     const [isMobileLayout, setIsMobileLayout] = useState(isNarrowScreen);
     const [mobileMonthPreviewDate, setMobileMonthPreviewDate] =
         useState<Date | null>(null);
+    const [mobileQuickActionTaskId, setMobileQuickActionTaskId] =
+        useState<string | null>(null);
     const [isYearPickerOpen, setIsYearPickerOpen] = useState(false);
     const [yearDraft, setYearDraft] = useState(
         String(new Date().getFullYear()),
@@ -366,6 +459,9 @@ export function App() {
     const calendarEventAnimationKindRef =
         useRef<CalendarTransitionKind>("neutral");
     const calendarEventAnimationTimeoutRef = useRef<number | null>(null);
+    const mobileEventCleanupRef = useRef<WeakMap<HTMLElement, () => void>>(
+        new WeakMap(),
+    );
     const appShellRef = useRef<HTMLElement | null>(null);
     const backupFileInputRef = useRef<HTMLInputElement | null>(null);
     const taskListRef = useRef<HTMLElement | null>(null);
@@ -409,6 +505,9 @@ export function App() {
         : undefined;
     const pendingDeleteTask = pendingTaskDelete
         ? tasks.find((task) => task.id === pendingTaskDelete.taskId)
+        : undefined;
+    const mobileQuickActionTask = mobileQuickActionTaskId
+        ? tasks.find((task) => task.id === mobileQuickActionTaskId)
         : undefined;
 
     const visibleTasks = useMemo(
@@ -1194,6 +1293,7 @@ export function App() {
         setIsViewMenuOpen(false);
         setIsCategoryMenuOpen(false);
         setContextMenu(null);
+        setMobileQuickActionTaskId(null);
         setIsDetailPanelClosing(true);
         setDetailPanelMode(null);
         setSelectedTaskId(null);
@@ -1325,10 +1425,11 @@ export function App() {
             );
 
             try {
+                let updatedTask: ScheduledTask;
                 if (updateScope === "series") {
-                    await updateTask(taskId, updates, { updateScope });
+                    updatedTask = await updateTask(taskId, updates, { updateScope });
                 } else {
-                    await updateTask(taskId, updates);
+                    updatedTask = await updateTask(taskId, updates);
                 }
                 if (previousTask) {
                     showTaskUndo(
@@ -1336,6 +1437,9 @@ export function App() {
                     );
                 }
                 setPendingTaskEdit(null);
+                if (source === "calendar") {
+                    replaceTaskInState(updatedTask);
+                }
                 reloadTasks();
                 if (source === "form") {
                     closeDetailPanel();
@@ -1354,7 +1458,14 @@ export function App() {
                 setIsEditSaving(false);
             }
         },
-        [clearUndoState, closeDetailPanel, pendingTaskEdit, reloadTasks, showTaskUndo],
+        [
+            clearUndoState,
+            closeDetailPanel,
+            pendingTaskEdit,
+            reloadTasks,
+            replaceTaskInState,
+            showTaskUndo,
+        ],
     );
 
     const navigateCalendar = useCallback((direction: "prev" | "next") => {
@@ -1492,6 +1603,7 @@ export function App() {
             setIsCategoryMenuOpen(false);
             setIsAddingCategory(false);
             setContextMenu(null);
+            setMobileQuickActionTaskId(null);
             if (isNarrowScreen()) {
                 setIsSidebarOpen(true);
                 setMobileScreen("calendar");
@@ -1522,6 +1634,7 @@ export function App() {
             setIsCategoryMenuOpen(false);
             setIsAddingCategory(false);
             setContextMenu(null);
+            setMobileQuickActionTaskId(null);
             if (isNarrowScreen()) {
                 setIsSidebarOpen(true);
                 setMobileScreen("calendar");
@@ -1551,6 +1664,7 @@ export function App() {
         setIsCategoryMenuOpen(false);
         setIsAddingCategory(false);
         setContextMenu(null);
+        setMobileQuickActionTaskId(null);
         setDetailPanelMode("create");
         setSelectedTaskId(null);
         setFormState({
@@ -1572,6 +1686,7 @@ export function App() {
         setIsCategoryMenuOpen(false);
         setIsAddingCategory(false);
         setContextMenu(null);
+        setMobileQuickActionTaskId(null);
         setIsDetailPanelClosing(false);
         if (isNarrowScreen()) {
             setIsSidebarOpen(true);
@@ -1597,8 +1712,13 @@ export function App() {
 
     const handleDateClick = useCallback(
         (clickInfo: DateClickArg) => {
-            if (calendarView === "dayGridMonth" && isNarrowScreen()) {
+            const isMobileCalendar = isNarrowScreen();
+            if (calendarView === "dayGridMonth" && isMobileCalendar) {
                 setMobileMonthPreviewDate(clickInfo.date);
+                return;
+            }
+
+            if (isMobileCalendar) {
                 return;
             }
 
@@ -1643,6 +1763,58 @@ export function App() {
             }
         },
         [clearUndoState, reloadTasks, showTaskUndo],
+    );
+
+    const applyMobileQuickAction = useCallback(
+        async (task: ScheduledTask, action: MobileQuickAction) => {
+            if (task.all_day || !task.scheduled_start || !task.scheduled_end) {
+                return;
+            }
+
+            const start = parseTaskDate(task.scheduled_start);
+            const end = parseTaskDate(task.scheduled_end);
+            const stepMs = 15 * 60 * 1000;
+            const minimumDurationMs = stepMs;
+            let nextStart = start;
+            let nextEnd = end;
+
+            if (action === "earlier") {
+                nextStart = new Date(start.getTime() - stepMs);
+                nextEnd = new Date(end.getTime() - stepMs);
+            } else if (action === "later") {
+                nextStart = new Date(start.getTime() + stepMs);
+                nextEnd = new Date(end.getTime() + stepMs);
+            } else if (action === "shorten") {
+                if (end.getTime() - start.getTime() <= minimumDurationMs) {
+                    return;
+                }
+                nextEnd = new Date(end.getTime() - stepMs);
+            } else {
+                nextEnd = new Date(end.getTime() + stepMs);
+            }
+
+            if (nextEnd <= nextStart) {
+                return;
+            }
+
+            const updates = {
+                scheduled_start: nextStart.toISOString(),
+                scheduled_end: nextEnd.toISOString(),
+                all_day: false,
+            };
+
+            if (shouldPromptRecurringTaskEdit(task, updates)) {
+                setPendingTaskEdit({
+                    taskId: task.id,
+                    updates,
+                    source: "calendar",
+                });
+                return;
+            }
+
+            await runTaskUpdate(task.id, updates, "single", "calendar");
+        },
+        [runTaskUpdate],
     );
 
     const completionTransition = useMemo(
@@ -1886,6 +2058,24 @@ export function App() {
             return;
         }
 
+        if (isNarrowScreen()) {
+            if (clickInfo.el.dataset.mobileLongPressOpened === "true") {
+                delete clickInfo.el.dataset.mobileLongPressOpened;
+                return;
+            }
+
+            setIsViewMenuOpen(false);
+            setIsCategoryMenuOpen(false);
+            setIsAddingCategory(false);
+            setIsDetailPanelClosing(false);
+            setDetailPanelMode(null);
+            setSelectedTaskId(clickInfo.event.id);
+            setMobileQuickActionTaskId(clickInfo.event.id);
+            setContextMenu(null);
+            setMobileScreen("calendar");
+            return;
+        }
+
         setIsViewMenuOpen(false);
         setIsCategoryMenuOpen(false);
         setIsAddingCategory(false);
@@ -1894,6 +2084,7 @@ export function App() {
             setMobileScreen("calendar");
         }
         setDetailPanelMode("edit");
+        setMobileQuickActionTaskId(null);
         setSelectedTaskId(clickInfo.event.id);
         setContextMenu(null);
     }, []);
@@ -2284,6 +2475,62 @@ export function App() {
         }
 
         if (isNarrowScreen()) {
+            let longPressTimer: number | null = null;
+            let startX = 0;
+            let startY = 0;
+
+            const clearLongPressTimer = () => {
+                if (longPressTimer !== null) {
+                    window.clearTimeout(longPressTimer);
+                    longPressTimer = null;
+                }
+            };
+            const handlePointerDown = (event: PointerEvent) => {
+                if (event.pointerType !== "touch") {
+                    return;
+                }
+
+                startX = event.clientX;
+                startY = event.clientY;
+                clearLongPressTimer();
+                longPressTimer = window.setTimeout(() => {
+                    longPressTimer = null;
+                    mountInfo.el.dataset.mobileLongPressOpened = "true";
+                    openTaskDetailPanel(mountInfo.event.id);
+                }, mobileCalendarLongPressDelayMs);
+            };
+            const handlePointerMove = (event: PointerEvent) => {
+                if (event.pointerType !== "touch" || longPressTimer === null) {
+                    return;
+                }
+
+                const moved =
+                    Math.abs(event.clientX - startX) > 8 ||
+                    Math.abs(event.clientY - startY) > 8;
+                if (moved) {
+                    clearLongPressTimer();
+                }
+            };
+            const handlePointerEnd = () => {
+                clearLongPressTimer();
+            };
+            const handleContextMenu = (event: MouseEvent) => {
+                event.preventDefault();
+            };
+
+            mountInfo.el.addEventListener("pointerdown", handlePointerDown);
+            mountInfo.el.addEventListener("pointermove", handlePointerMove);
+            mountInfo.el.addEventListener("pointerup", handlePointerEnd);
+            mountInfo.el.addEventListener("pointercancel", handlePointerEnd);
+            mountInfo.el.addEventListener("contextmenu", handleContextMenu);
+            mobileEventCleanupRef.current.set(mountInfo.el, () => {
+                clearLongPressTimer();
+                mountInfo.el.removeEventListener("pointerdown", handlePointerDown);
+                mountInfo.el.removeEventListener("pointermove", handlePointerMove);
+                mountInfo.el.removeEventListener("pointerup", handlePointerEnd);
+                mountInfo.el.removeEventListener("pointercancel", handlePointerEnd);
+                mountInfo.el.removeEventListener("contextmenu", handleContextMenu);
+            });
             return;
         }
 
@@ -2299,7 +2546,24 @@ export function App() {
         };
 
         mountInfo.el.addEventListener("contextmenu", handleContextMenu);
+    }, [openTaskDetailPanel]);
+
+    const handleEventWillUnmount = useCallback((mountInfo: EventMountArg) => {
+        const cleanup = mobileEventCleanupRef.current.get(mountInfo.el);
+        cleanup?.();
+        mobileEventCleanupRef.current.delete(mountInfo.el);
     }, []);
+
+    const handleEventClassNames = useCallback(
+        (eventInfo: EventContentArg) => {
+            if (!isMobileLayout || eventInfo.event.id !== selectedTaskId) {
+                return [];
+            }
+
+            return ["fc-event-selected", "calendar-task-event-selected"];
+        },
+        [isMobileLayout, selectedTaskId],
+    );
 
     const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -2945,6 +3209,13 @@ export function App() {
         setIsSettingsMenuOpen(true);
     }, [closeDetailPanel]);
 
+    const mobileQuickActionCanAdjust = Boolean(
+        mobileQuickActionTask &&
+            !mobileQuickActionTask.all_day &&
+            mobileQuickActionTask.scheduled_start &&
+            mobileQuickActionTask.scheduled_end,
+    );
+
     if (!authToken) {
         return (
             <AuthScreen
@@ -2966,7 +3237,7 @@ export function App() {
     return (
         <main
             ref={appShellRef}
-            className={`app-shell ${themeMode} ${isSidebarOpen ? "sidebar-open" : "sidebar-collapsed"} mobile-screen-${mobileScreen} ${detailPanelMode ? "detail-panel-open" : ""}`}
+            className={`app-shell ${themeMode} ${isSidebarOpen ? "sidebar-open" : "sidebar-collapsed"} mobile-screen-${mobileScreen} ${detailPanelMode ? "detail-panel-open" : ""} ${mobileQuickActionTaskId ? "mobile-quick-action-open" : ""}`}
             style={appShellStyle}
             onTransitionEnd={(event) => {
                 if (
@@ -3706,6 +3977,29 @@ export function App() {
                                                     >
                                                         <div
                                                             className="category-filter-row category-filter-row-custom"
+                                                            role="button"
+                                                            tabIndex={0}
+                                                            aria-label={`Edit ${taskList.name}`}
+                                                            onClick={() =>
+                                                                startEditingTaskList(
+                                                                    taskList,
+                                                                )
+                                                            }
+                                                            onKeyDown={(
+                                                                event,
+                                                            ) => {
+                                                                if (
+                                                                    event.key ===
+                                                                        "Enter" ||
+                                                                    event.key ===
+                                                                        " "
+                                                                ) {
+                                                                    event.preventDefault();
+                                                                    startEditingTaskList(
+                                                                        taskList,
+                                                                    );
+                                                                }
+                                                            }}
                                                             onContextMenu={
                                                                 isNarrowScreen()
                                                                     ? undefined
@@ -3739,23 +4033,6 @@ export function App() {
                                                                     }
                                                                 </span>
                                                             </span>
-                                                            <button
-                                                                type="button"
-                                                                className="filter-option-action category-filter-action"
-                                                                aria-label={`Edit ${taskList.name}`}
-                                                                onClick={() =>
-                                                                    startEditingTaskList(
-                                                                        taskList,
-                                                                    )
-                                                                }
-                                                            >
-                                                                <span
-                                                                    aria-hidden="true"
-                                                                    className="filter-option-action-icon"
-                                                                >
-                                                                    ⚙
-                                                                </span>
-                                                            </button>
                                                             <button
                                                                 type="button"
                                                                 className={`sidebar-switch ${(categoryVisibility.lists[taskList.id] ?? true) ? "sidebar-switch-on" : ""}`}
@@ -5120,6 +5397,7 @@ export function App() {
                             hour12: false,
                         }}
                         eventContent={renderEventContent}
+                        eventClassNames={handleEventClassNames}
                         dayCellContent={renderDayCellContent}
                         dayHeaderContent={renderDayHeaderContent}
                         dayMaxEventRows={
@@ -5129,6 +5407,7 @@ export function App() {
                         }
                         eventClick={handleEventClick}
                         eventDidMount={handleEventDidMount}
+                        eventWillUnmount={handleEventWillUnmount}
                         dateClick={handleDateClick}
                         datesSet={handleDatesSet}
                         eventDrop={handleEventDrop}
@@ -5157,9 +5436,20 @@ export function App() {
                                 : undefined
                         }
                         select={handleDateSelect}
-                        editable
+                        editable={!isMobileLayout}
+                        eventStartEditable={!isMobileLayout}
+                        eventDurationEditable={!isMobileLayout}
                         droppable
                         selectable
+                        longPressDelay={
+                            isMobileLayout ? mobileCalendarLongPressDelayMs : undefined
+                        }
+                        selectLongPressDelay={
+                            isMobileLayout ? mobileCalendarLongPressDelayMs : undefined
+                        }
+                        eventLongPressDelay={
+                            isMobileLayout ? mobileCalendarLongPressDelayMs : undefined
+                        }
                         stickyFooterScrollbar={false}
                         scrollTimeReset={false}
                         eventResizableFromStart
@@ -5277,6 +5567,183 @@ export function App() {
                     </section>
                 )}
             </section>
+
+            <AnimatePresence initial={false}>
+                {isMobileLayout && mobileQuickActionTask && (
+                    <motion.section
+                        key={mobileQuickActionTask.id}
+                        className="mobile-calendar-action-sheet"
+                        aria-label="Calendar task actions"
+                        variants={panelVariants}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        transition={panelTransition}
+                    >
+                        <div className="mobile-calendar-action-header">
+                            <span className="mobile-calendar-action-copy">
+                                <strong>{mobileQuickActionTask.title}</strong>
+                                <span>
+                                    {formatQuickActionRange(
+                                        mobileQuickActionTask,
+                                    )}
+                                </span>
+                            </span>
+                            <button
+                                type="button"
+                                className="mobile-month-task-preview-close"
+                                onClick={() => setMobileQuickActionTaskId(null)}
+                            >
+                                Close
+                            </button>
+                        </div>
+                        <label className="mobile-calendar-complete-row">
+                            <span>Complete</span>
+                            <input
+                                type="checkbox"
+                                className="task-checkbox"
+                                checked={mobileQuickActionTask.completed}
+                                aria-label="Toggle task completion"
+                                onChange={() =>
+                                    void handleCheckboxChange(
+                                        mobileQuickActionTask,
+                                    )
+                                }
+                            />
+                        </label>
+                        <div className="mobile-calendar-adjust-grid">
+                            <button
+                                type="button"
+                                className="quick-action-button quick-action-button--blue"
+                                aria-label="Move earlier 15 minutes"
+                                disabled={
+                                    isEditSaving || !mobileQuickActionCanAdjust
+                                }
+                                onClick={() =>
+                                    void applyMobileQuickAction(
+                                        mobileQuickActionTask,
+                                        "earlier",
+                                    )
+                                }
+                            >
+                                <span className="quick-action-button__icon">
+                                    <IconArrowUp />
+                                </span>
+                                <span className="quick-action-button__label">
+                                    15 mins
+                                </span>
+                            </button>
+                            <button
+                                type="button"
+                                className="quick-action-button quick-action-button--blue"
+                                aria-label="Move later 15 minutes"
+                                disabled={
+                                    isEditSaving || !mobileQuickActionCanAdjust
+                                }
+                                onClick={() =>
+                                    void applyMobileQuickAction(
+                                        mobileQuickActionTask,
+                                        "later",
+                                    )
+                                }
+                            >
+                                <span className="quick-action-button__icon">
+                                    <IconArrowDown />
+                                </span>
+                                <span className="quick-action-button__label">
+                                    15 mins
+                                </span>
+                            </button>
+                            <button
+                                type="button"
+                                className="quick-action-button quick-action-button--green"
+                                aria-label="Shorten by 15 minutes"
+                                disabled={
+                                    isEditSaving ||
+                                    !canShortenQuickActionTask(
+                                        mobileQuickActionTask,
+                                    )
+                                }
+                                onClick={() =>
+                                    void applyMobileQuickAction(
+                                        mobileQuickActionTask,
+                                        "shorten",
+                                    )
+                                }
+                            >
+                                <span className="quick-action-button__icon">
+                                    <IconMinus />
+                                </span>
+                                <span className="quick-action-button__label">
+                                    15 mins
+                                </span>
+                            </button>
+                            <button
+                                type="button"
+                                className="quick-action-button quick-action-button--green"
+                                aria-label="Extend by 15 minutes"
+                                disabled={
+                                    isEditSaving || !mobileQuickActionCanAdjust
+                                }
+                                onClick={() =>
+                                    void applyMobileQuickAction(
+                                        mobileQuickActionTask,
+                                        "extend",
+                                    )
+                                }
+                            >
+                                <span className="quick-action-button__icon">
+                                    <IconPlus />
+                                </span>
+                                <span className="quick-action-button__label">
+                                    15 mins
+                                </span>
+                            </button>
+                        </div>
+                        <div className="mobile-calendar-action-row">
+                            <button
+                                type="button"
+                                className="quick-action-button quick-action-button--yellow quick-action-button--icon-only"
+                                aria-label="Edit details"
+                                onClick={() =>
+                                    openTaskDetailPanel(mobileQuickActionTask.id)
+                                }
+                            >
+                                <span className="quick-action-button__icon">
+                                    <IconEdit />
+                                </span>
+                            </button>
+                            <button
+                                type="button"
+                                className="quick-action-button quick-action-button--red quick-action-button--icon-only"
+                                aria-label="Delete task"
+                                disabled={isDeleting}
+                                onClick={() => {
+                                    if (
+                                        promptRecurringTaskDelete(
+                                            mobileQuickActionTask,
+                                            "detail",
+                                        )
+                                    ) {
+                                        setMobileQuickActionTaskId(null);
+                                        return;
+                                    }
+
+                                    setMobileQuickActionTaskId(null);
+                                    void runTaskDelete(
+                                        mobileQuickActionTask.id,
+                                        "detail",
+                                    );
+                                }}
+                            >
+                                <span className="quick-action-button__icon">
+                                    <IconTrash />
+                                </span>
+                            </button>
+                        </div>
+                    </motion.section>
+                )}
+            </AnimatePresence>
 
             {pendingDeleteTask && (
                 <div
@@ -6431,6 +6898,30 @@ function formatScheduledRange(task: ScheduledTask): string {
     return end ? `${start} - ${end}` : start;
 }
 
+function formatQuickActionRange(task: ScheduledTask): string {
+    if (!task.scheduled_start) {
+        return "No scheduled time";
+    }
+
+    if (task.all_day) {
+        return formatDateOnlyLabel(toAllDayCalendarDate(task.scheduled_start));
+    }
+
+    const start = formatTimeOnly(task.scheduled_start);
+    const end = task.scheduled_end ? formatTimeOnly(task.scheduled_end) : "";
+    return end ? `${start}-${end}` : start;
+}
+
+function canShortenQuickActionTask(task: ScheduledTask): boolean {
+    if (task.all_day || !task.scheduled_start || !task.scheduled_end) {
+        return false;
+    }
+
+    const start = parseTaskDate(task.scheduled_start);
+    const end = parseTaskDate(task.scheduled_end);
+    return end.getTime() - start.getTime() > 15 * 60 * 1000;
+}
+
 function formatTaskMeta(task: ScheduledTask): string {
     const parts: string[] = [];
     const scheduledRange = formatScheduledRange(task);
@@ -6561,6 +7052,14 @@ function formatDateTime(value: string): string {
     return new Intl.DateTimeFormat(undefined, {
         month: "short",
         day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+    }).format(parseTaskDate(value));
+}
+
+function formatTimeOnly(value: string): string {
+    return new Intl.DateTimeFormat(undefined, {
         hour: "2-digit",
         minute: "2-digit",
         hour12: false,

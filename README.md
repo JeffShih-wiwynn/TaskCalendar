@@ -83,9 +83,10 @@ Current frontend behavior includes:
 - a compact `Work` / `Full` toggle for week/day time-grid views, switching between working-hours and full-day ranges
 - a clickable year control in month view
 - month view now keeps its date grid aligned on the initial render without needing a click to recalculate layout
+- mobile/PWA calendar quick actions for tap-to-edit, long-press create, and compact 15-minute time adjustments
 - Phase 1 PWA support with install metadata, app icons, and production static asset caching
 - basic narrow-screen layout support for phone-sized browsers
-- category colors with inline category editing
+- category rows that open edit mode directly, with switches reserved for filtering
 - customizable `Upcoming` day ranges
 - backup export and import actions in the sidebar settings menu
 - a webhook settings form with `Test` and `Cancel` actions
