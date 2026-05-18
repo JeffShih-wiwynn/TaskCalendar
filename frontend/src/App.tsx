@@ -203,6 +203,59 @@ function IconTrash() {
     );
 }
 
+function IconSave() {
+    return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+                d="M5 4h12l2 2v14H5z"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+            />
+            <path
+                d="M8 4v6h8V4M8 20v-7h8v7"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+            />
+        </svg>
+    );
+}
+
+function IconCheck() {
+    return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+                d="m5 12 4.5 4.5L19 7"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+            />
+        </svg>
+    );
+}
+
+function IconClose() {
+    return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+                d="M6 6l12 12M18 6 6 18"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+            />
+        </svg>
+    );
+}
+
 type TaskFormState = {
     title: string;
     list_id: string;
@@ -225,6 +278,9 @@ type WebhookSettingsFormState = {
     discord_webhook_url: string;
     discord_message_template: string;
 };
+
+const DEFAULT_WEBHOOK_MESSAGE_TEMPLATE =
+    "Task due: {title}\nWhen: {when}\nNotes: {notes}\nOpen app: {app_url}";
 
 type CategoryVisibilityState = {
     none: boolean;
@@ -301,6 +357,48 @@ const notificationUnits: Array<{ id: NotificationUnit; label: string }> = [
     { id: "HOURS", label: "Hours" },
     { id: "DAYS", label: "Days" },
 ];
+
+const reminderPresets = [
+    { id: "", label: "None", unit: "" as NotificationUnit, value: "0" },
+    {
+        id: "0:MINUTES",
+        label: "At time of event",
+        unit: "MINUTES" as const,
+        value: "0",
+    },
+    {
+        id: "5:MINUTES",
+        label: "5 minutes before",
+        unit: "MINUTES" as const,
+        value: "5",
+    },
+    {
+        id: "10:MINUTES",
+        label: "10 minutes before",
+        unit: "MINUTES" as const,
+        value: "10",
+    },
+    {
+        id: "30:MINUTES",
+        label: "30 minutes before",
+        unit: "MINUTES" as const,
+        value: "30",
+    },
+    {
+        id: "1:HOURS",
+        label: "1 hour before",
+        unit: "HOURS" as const,
+        value: "1",
+    },
+    {
+        id: "1:DAYS",
+        label: "1 day before",
+        unit: "DAYS" as const,
+        value: "1",
+    },
+];
+
+const reminderCustomValue = "CUSTOM";
 
 const defaultCategoryColor = "#176b58";
 
@@ -1094,8 +1192,20 @@ export function App() {
 
         api.scrollToTime(`${workingHours.start}:00`);
         api.updateSize();
+        if (!isTimeGridView) {
+            return;
+        }
+
+        const resizeFrame = window.requestAnimationFrame(() => {
+            calendarRef.current?.getApi().updateSize();
+        });
+
+        return () => {
+            window.cancelAnimationFrame(resizeFrame);
+        };
     }, [
         calendarView,
+        isTimeGridView,
         isMobileLayout,
         isFullDayTimelineVisible,
         workingHours.end,
@@ -2996,10 +3106,10 @@ export function App() {
         }
     };
 
-    const handleSaveWebhookSettings = async (
-        event: FormEvent<HTMLFormElement>,
-    ) => {
-        event.preventDefault();
+    const normalizeWebhookMessageTemplate = (value: string) =>
+        value.trim() || null;
+
+    const saveWebhookSettings = async (): Promise<boolean> => {
         setFormError(null);
         setWebhookTestMessage(null);
         setIsWebhookSettingsSaving(true);
@@ -3008,9 +3118,9 @@ export function App() {
             const savedSettings = await updateSettings({
                 discord_webhook_url:
                     webhookSettingsDraft.discord_webhook_url.trim() || null,
-                discord_message_template:
-                    webhookSettingsDraft.discord_message_template.trim() ||
-                    null,
+                discord_message_template: normalizeWebhookMessageTemplate(
+                    webhookSettingsDraft.discord_message_template,
+                ),
             });
             setWebhookSettings(savedSettings);
             setWebhookSettingsDraft({
@@ -3018,15 +3128,27 @@ export function App() {
                 discord_message_template:
                     savedSettings.discord_message_template ?? "",
             });
-            setIsWebhookSettingsOpen(false);
+            return true;
         } catch (error) {
             setFormError(
                 error instanceof Error
                     ? error.message
                     : "Unable to save webhook settings",
             );
+            return false;
         } finally {
             setIsWebhookSettingsSaving(false);
+        }
+    };
+
+    const handleSaveWebhookSettings = async (
+        event: FormEvent<HTMLFormElement>,
+    ) => {
+        event.preventDefault();
+        const saved = await saveWebhookSettings();
+        if (saved) {
+            setIsWebhookSettingsOpen(false);
+            setIsSettingsMenuOpen(true);
         }
     };
 
@@ -3039,9 +3161,9 @@ export function App() {
             const result = await testSettings({
                 discord_webhook_url:
                     webhookSettingsDraft.discord_webhook_url.trim() || null,
-                discord_message_template:
-                    webhookSettingsDraft.discord_message_template.trim() ||
-                    null,
+                discord_message_template: normalizeWebhookMessageTemplate(
+                    webhookSettingsDraft.discord_message_template,
+                ),
             });
             setWebhookTestMessage(result.message);
         } catch (error) {
@@ -3517,13 +3639,13 @@ export function App() {
                                     <div className="task-form-actions">
                                         <button
                                             type="button"
-                                            className="ghost-button"
+                                            className="backup-action-button-primary"
                                             onClick={() => {
                                                 setIsWorkingHoursSettingsOpen(false);
                                                 setIsSettingsMenuOpen(true);
                                             }}
                                         >
-                                            Back
+                                            Done
                                         </button>
                                     </div>
                                 </form>
@@ -3688,6 +3810,9 @@ export function App() {
                                     <label>
                                         <span>Message format</span>
                                         <textarea
+                                            placeholder={
+                                                DEFAULT_WEBHOOK_MESSAGE_TEMPLATE
+                                            }
                                             value={
                                                 webhookSettingsDraft.discord_message_template
                                             }
@@ -3715,15 +3840,29 @@ export function App() {
                                     )}
                                     <div className="task-form-actions">
                                         <button
-                                            type="submit"
+                                            type="button"
                                             disabled={
                                                 isWebhookSettingsSaving ||
                                                 isWebhookSettingsTesting
                                             }
+                                            onClick={() =>
+                                                void (async () => {
+                                                    const saved =
+                                                        await saveWebhookSettings();
+                                                    if (saved) {
+                                                        setIsWebhookSettingsOpen(
+                                                            false,
+                                                        );
+                                                        setIsSettingsMenuOpen(
+                                                            true,
+                                                        );
+                                                    }
+                                                })()
+                                            }
                                         >
                                             {isWebhookSettingsSaving
                                                 ? "Saving..."
-                                                : "Save"}
+                                                : "Done"}
                                         </button>
                                         <button
                                             type="button"
@@ -3739,30 +3878,6 @@ export function App() {
                                             {isWebhookSettingsTesting
                                                 ? "Testing..."
                                                 : "Test"}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="ghost-button"
-                                            disabled={
-                                                isWebhookSettingsSaving ||
-                                                isWebhookSettingsTesting
-                                            }
-                                            onClick={() => {
-                                                setIsWorkingHoursSettingsOpen(false);
-                                                setWebhookSettingsDraft({
-                                                    discord_webhook_url:
-                                                        webhookSettings?.discord_webhook_url ??
-                                                        "",
-                                                    discord_message_template:
-                                                        webhookSettings?.discord_message_template ??
-                                                        "",
-                                                });
-                                                setWebhookTestMessage(null);
-                                                setIsWebhookSettingsOpen(false);
-                                                setIsSettingsMenuOpen(true);
-                                            }}
-                                        >
-                                            Back
                                         </button>
                                     </div>
                                 </form>
@@ -4265,44 +4380,58 @@ export function App() {
                                         <button
                                             type="submit"
                                             form="task-create-form"
-                                            className="floating-panel-action floating-panel-save"
+                                            className="floating-panel-action floating-panel-icon-button floating-panel-create"
                                             disabled={isSaving}
+                                            aria-label="Create"
+                                            title="Create"
                                         >
-                                            {isSaving ? "Saving..." : "Save"}
+                                            <span className="floating-panel-icon">
+                                                <IconSave />
+                                            </span>
                                         </button>
                                     ) : selectedTask && editState ? (
                                         <>
                                             <button
                                                 type="submit"
                                                 form="task-edit-form"
-                                                className="floating-panel-action floating-panel-save"
+                                                className="floating-panel-action floating-panel-icon-button floating-panel-done"
                                                 disabled={isEditSaving}
+                                                aria-label="Done"
+                                                title="Done"
                                             >
-                                                {isEditSaving
-                                                    ? "Saving..."
-                                                    : "Save"}
+                                                <span className="floating-panel-icon">
+                                                    <IconCheck />
+                                                </span>
                                             </button>
                                             <button
                                                 type="button"
-                                                className="floating-panel-action floating-panel-delete"
+                                                className="floating-panel-action floating-panel-icon-button floating-panel-delete"
                                                 disabled={isDeleting}
+                                                aria-label="Delete"
+                                                title="Delete"
                                                 onClick={() =>
                                                     void handleDeleteSelectedTask()
                                                 }
                                             >
-                                                {isDeleting
-                                                    ? "Deleting..."
-                                                    : "Delete"}
+                                                <span className="floating-panel-icon">
+                                                    <IconTrash />
+                                                </span>
                                             </button>
                                         </>
                                     ) : null}
-                                    <button
-                                        type="button"
-                                        className="floating-panel-action"
-                                        onClick={closeDetailPanel}
-                                    >
-                                        Close
-                                    </button>
+                                    {detailPanelMode === "create" && (
+                                        <button
+                                            type="button"
+                                            className="floating-panel-action floating-panel-icon-button floating-panel-close"
+                                            aria-label="Close"
+                                            title="Close"
+                                            onClick={closeDetailPanel}
+                                        >
+                                            <span className="floating-panel-icon">
+                                                <IconClose />
+                                            </span>
+                                        </button>
+                                    )}
                                 </div>
                             </div>
 
@@ -4310,12 +4439,12 @@ export function App() {
                                 <form
                                     id="task-create-form"
                                     ref={createFormRef}
-                                    className="task-form active-form"
+                                    className="task-form"
                                     onSubmit={(event) =>
                                         void handleSubmit(event)
                                     }
                                 >
-                                    <div className="task-form-row">
+                                    <div className="task-composer-title">
                                         <LabeledInput
                                             label="Title"
                                             value={formState.title}
@@ -4328,6 +4457,58 @@ export function App() {
                                             inputRef={titleInputRef}
                                             required
                                         />
+                                    </div>
+
+                                    <section className="task-composer-section">
+                                        <div className="task-composer-section-header">
+                                            <h3>Schedule</h3>
+                                        </div>
+                                        <div className="task-form-row task-form-schedule-row">
+                                            <LabeledDateTimeInput
+                                                label="Start"
+                                                value={formState.scheduled_start}
+                                                onChange={(value) =>
+                                                    setFormState({
+                                                        ...formState,
+                                                        scheduled_start: value,
+                                                    })
+                                                }
+                                            />
+                                            <LabeledDateTimeInput
+                                                label="End"
+                                                value={formState.scheduled_end}
+                                                onChange={(value) =>
+                                                    setFormState({
+                                                        ...formState,
+                                                        scheduled_end: value,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                        <RecurrenceComposer
+                                            state={formState}
+                                            onChange={(updates) =>
+                                                setFormState({
+                                                    ...formState,
+                                                    ...updates,
+                                                })
+                                            }
+                                        />
+                                        <ReminderComposer
+                                            state={formState}
+                                            onChange={(updates) =>
+                                                setFormState({
+                                                    ...formState,
+                                                    ...updates,
+                                                })
+                                            }
+                                        />
+                                    </section>
+
+                                    <section className="task-composer-section task-composer-section-compact">
+                                        <div className="task-composer-section-header">
+                                            <h3>Organization</h3>
+                                        </div>
                                         <LabeledSelect
                                             label="Category"
                                             value={formState.list_id}
@@ -4339,174 +4520,26 @@ export function App() {
                                             }
                                             options={taskLists}
                                         />
-                                    </div>
-                                    <div className="task-form-row">
-                                        <LabeledDateTimeInput
-                                            label="Start"
-                                            value={formState.scheduled_start}
-                                            onChange={(value) =>
-                                                setFormState({
-                                                    ...formState,
-                                                    scheduled_start: value,
-                                                })
-                                            }
-                                        />
-                                        <LabeledDateTimeInput
-                                            label="End"
-                                            value={formState.scheduled_end}
-                                            onChange={(value) =>
-                                                setFormState({
-                                                    ...formState,
-                                                    scheduled_end: value,
-                                                })
-                                            }
-                                        />
-                                    </div>
-                                    <div className="task-form-row">
-                                        <button
-                                            type="button"
-                                            className="task-form-no-time-button"
-                                            onClick={handleMoveToNoTime}
-                                        >
-                                            Clear time
-                                        </button>
-                                    </div>
-                                    <div className="task-form-row">
-                                        <div className="task-form-recurring-inline">
-                                            <div className="task-form-recurring-top">
-                                                <label>
-                                                    <span>Repeat</span>
-                                                    <select
-                                                        value={
-                                                            formState.recurrence_frequency
-                                                        }
-                                                        onChange={(event) =>
-                                                            setFormState({
-                                                                ...formState,
-                                                                recurrence_frequency:
-                                                                    event.target
-                                                                        .value as RecurrenceFrequency,
-                                                            })
-                                                        }
-                                                    >
-                                                        <option value="">
-                                                            None
-                                                        </option>
-                                                        <option value="DAILY">
-                                                            Daily
-                                                        </option>
-                                                        <option value="WEEKLY">
-                                                            Weekly
-                                                        </option>
-                                                        <option value="MONTHLY">
-                                                            Monthly
-                                                        </option>
-                                                        <option value="YEARLY">
-                                                            Yearly
-                                                        </option>
-                                                    </select>
-                                                </label>
-                                                {formState.recurrence_frequency && (
-                                                    <LabeledInput
-                                                        label="Every"
-                                                        type="number"
-                                                        min={1}
-                                                        step={1}
-                                                        value={
-                                                            formState.recurrence_interval
-                                                        }
-                                                        onChange={(value) =>
-                                                            setFormState({
-                                                                ...formState,
-                                                                recurrence_interval:
-                                                                    value,
-                                                            })
-                                                        }
-                                                    />
-                                                )}
-                                            </div>
-                                            {formState.recurrence_frequency && (
-                                                <div className="task-form-recurring-bottom">
-                                                    <LabeledInput
-                                                        label="Until"
-                                                        type="date"
-                                                        value={
-                                                            formState.recurrence_until
-                                                        }
-                                                        onChange={(value) =>
-                                                            setFormState({
-                                                                ...formState,
-                                                                recurrence_until:
-                                                                    value,
-                                                            })
-                                                        }
-                                                    />
-                                                </div>
-                                            )}
+                                    </section>
+
+                                    <section className="task-composer-section task-composer-section-compact">
+                                        <div className="task-composer-section-header">
+                                            <h3>Notes</h3>
                                         </div>
-                                    </div>
-                                    <div className="task-form-row task-form-row-split">
-                                        <label>
-                                            <span>Notification</span>
-                                            <select
-                                                value={
-                                                    formState.notification_unit
-                                                }
+                                        <label className="task-composer-notes">
+                                            <span>Notes</span>
+                                            <textarea
+                                                value={formState.notes}
                                                 onChange={(event) =>
                                                     setFormState({
                                                         ...formState,
-                                                        notification_unit:
-                                                            event.target
-                                                                .value as NotificationUnit,
+                                                        notes: event.target.value,
                                                     })
                                                 }
-                                            >
-                                                {notificationUnits.map(
-                                                    (unit) => (
-                                                        <option
-                                                            key={unit.id}
-                                                            value={unit.id}
-                                                        >
-                                                            {unit.label}
-                                                        </option>
-                                                    ),
-                                                )}
-                                            </select>
-                                        </label>
-                                        {formState.notification_unit ? (
-                                            <LabeledInput
-                                                label="Before"
-                                                type="number"
-                                                min={0}
-                                                step={1}
-                                                value={
-                                                    formState.notification_offset_value
-                                                }
-                                                onChange={(value) =>
-                                                    setFormState({
-                                                        ...formState,
-                                                        notification_offset_value:
-                                                            value,
-                                                    })
-                                                }
+                                                rows={2}
                                             />
-                                        ) : (
-                                            <div />
-                                        )}
-                                    </div>
-                                    <label>
-                                        <span>Notes</span>
-                                        <textarea
-                                            value={formState.notes}
-                                            onChange={(event) =>
-                                                setFormState({
-                                                    ...formState,
-                                                    notes: event.target.value,
-                                                })
-                                            }
-                                            rows={3}
-                                        />
-                                    </label>
+                                        </label>
+                                    </section>
                                 </form>
                             ) : selectedTask && editState ? (
                                 <form
@@ -4516,186 +4549,11 @@ export function App() {
                                         void handleEditSubmit(event)
                                     }
                                 >
-                                    <div className="task-form-row">
-                                        <LabeledInput
-                                            label="Title"
-                                            value={editState.title}
-                                            onChange={(value) =>
-                                                setEditState({
-                                                    ...editState,
-                                                    title: value,
-                                                })
-                                            }
-                                            required
-                                        />
-                                        <LabeledSelect
-                                            label="Category"
-                                            value={editState.list_id}
-                                            onChange={(value) =>
-                                                setEditState({
-                                                    ...editState,
-                                                    list_id: value,
-                                                })
-                                            }
-                                            options={taskLists}
-                                        />
-                                    </div>
-                                    <div className="task-form-row">
-                                        <LabeledDateTimeInput
-                                            label="Start"
-                                            value={editState.scheduled_start}
-                                            onChange={(value) =>
-                                                setEditState({
-                                                    ...editState,
-                                                    scheduled_start: value,
-                                                })
-                                            }
-                                        />
-                                        <LabeledDateTimeInput
-                                            label="End"
-                                            value={editState.scheduled_end}
-                                            onChange={(value) =>
-                                                setEditState({
-                                                    ...editState,
-                                                    scheduled_end: value,
-                                                })
-                                            }
-                                        />
-                                    </div>
-                                    <div className="task-form-row">
-                                        <button
-                                            type="button"
-                                            className="task-form-no-time-button"
-                                            onClick={handleMoveToNoTime}
-                                        >
-                                            Clear time
-                                        </button>
-                                    </div>
-                                    <div className="task-form-row">
-                                        <div className="task-form-recurring-inline">
-                                            <div className="task-form-recurring-top">
-                                                <label>
-                                                    <span>Repeat</span>
-                                                    <select
-                                                        value={
-                                                            editState.recurrence_frequency
-                                                        }
-                                                        onChange={(event) =>
-                                                            setEditState({
-                                                                ...editState,
-                                                                recurrence_frequency:
-                                                                    event.target
-                                                                        .value as RecurrenceFrequency,
-                                                            })
-                                                        }
-                                                    >
-                                                        <option value="">
-                                                            None
-                                                        </option>
-                                                        <option value="DAILY">
-                                                            Daily
-                                                        </option>
-                                                        <option value="WEEKLY">
-                                                            Weekly
-                                                        </option>
-                                                        <option value="MONTHLY">
-                                                            Monthly
-                                                        </option>
-                                                        <option value="YEARLY">
-                                                            Yearly
-                                                        </option>
-                                                    </select>
-                                                </label>
-                                                {editState.recurrence_frequency && (
-                                                    <LabeledInput
-                                                        label="Every"
-                                                        type="number"
-                                                        min={1}
-                                                        step={1}
-                                                        value={
-                                                            editState.recurrence_interval
-                                                        }
-                                                        onChange={(value) =>
-                                                            setEditState({
-                                                                ...editState,
-                                                                recurrence_interval:
-                                                                    value,
-                                                            })
-                                                        }
-                                                    />
-                                                )}
-                                            </div>
-                                            {editState.recurrence_frequency && (
-                                                <div className="task-form-recurring-bottom">
-                                                    <LabeledInput
-                                                        label="Until"
-                                                        type="date"
-                                                        value={
-                                                            editState.recurrence_until
-                                                        }
-                                                        onChange={(value) =>
-                                                            setEditState({
-                                                                ...editState,
-                                                                recurrence_until:
-                                                                    value,
-                                                            })
-                                                        }
-                                                    />
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="task-form-row task-form-row-split">
-                                        <label>
-                                            <span>Notification</span>
-                                            <select
-                                                value={
-                                                    editState.notification_unit
-                                                }
-                                                onChange={(event) =>
-                                                    setEditState({
-                                                        ...editState,
-                                                        notification_unit:
-                                                            event.target
-                                                                .value as NotificationUnit,
-                                                    })
-                                                }
-                                            >
-                                                {notificationUnits.map(
-                                                    (unit) => (
-                                                        <option
-                                                            key={unit.id}
-                                                            value={unit.id}
-                                                        >
-                                                            {unit.label}
-                                                        </option>
-                                                    ),
-                                                )}
-                                            </select>
-                                        </label>
-                                        {editState.notification_unit ? (
-                                            <LabeledInput
-                                                label="Before"
-                                                type="number"
-                                                min={0}
-                                                step={1}
-                                                value={
-                                                    editState.notification_offset_value
-                                                }
-                                                onChange={(value) =>
-                                                    setEditState({
-                                                        ...editState,
-                                                        notification_offset_value:
-                                                            value,
-                                                    })
-                                                }
-                                            />
-                                        ) : (
-                                            <div />
-                                        )}
-                                    </div>
-                                    <div className="task-form-row task-form-row-center">
-                                        <label className="task-form-inline-toggle">
+                                    <div className="task-composer-title-row">
+                                        <span className="task-composer-title-kicker">
+                                            TITLE
+                                        </span>
+                                        <label className="task-form-inline-toggle task-composer-completed">
                                             <span>Completed</span>
                                             <input
                                                 type="checkbox"
@@ -4712,19 +4570,110 @@ export function App() {
                                             />
                                         </label>
                                     </div>
-                                    <label>
-                                        <span>Notes</span>
-                                        <textarea
-                                            value={editState.notes}
+                                    <div className="task-composer-title task-composer-title-edit">
+                                        <input
+                                            ref={titleInputRef}
+                                            type="text"
+                                            value={editState.title}
                                             onChange={(event) =>
                                                 setEditState({
                                                     ...editState,
-                                                    notes: event.target.value,
+                                                    title: event.target.value,
                                                 })
                                             }
-                                            rows={5}
+                                            required
+                                            aria-label="Title"
                                         />
-                                    </label>
+                                    </div>
+
+                                    <section className="task-composer-section">
+                                        <div className="task-composer-section-header">
+                                            <h3>Schedule</h3>
+                                            <button
+                                                type="button"
+                                                className="task-form-no-time-button"
+                                                onClick={handleMoveToNoTime}
+                                            >
+                                                Remove schedule
+                                            </button>
+                                        </div>
+                                        <div className="task-form-row task-form-schedule-row">
+                                            <LabeledDateTimeInput
+                                                label="Start"
+                                                value={editState.scheduled_start}
+                                                onChange={(value) =>
+                                                    setEditState({
+                                                        ...editState,
+                                                        scheduled_start: value,
+                                                    })
+                                                }
+                                            />
+                                            <LabeledDateTimeInput
+                                                label="End"
+                                                value={editState.scheduled_end}
+                                                onChange={(value) =>
+                                                    setEditState({
+                                                        ...editState,
+                                                        scheduled_end: value,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                        <RecurrenceComposer
+                                            state={editState}
+                                            onChange={(updates) =>
+                                                setEditState({
+                                                    ...editState,
+                                                    ...updates,
+                                                })
+                                            }
+                                        />
+                                        <ReminderComposer
+                                            state={editState}
+                                            onChange={(updates) =>
+                                                setEditState({
+                                                    ...editState,
+                                                    ...updates,
+                                                })
+                                            }
+                                        />
+                                    </section>
+
+                                    <section className="task-composer-section task-composer-section-compact">
+                                        <div className="task-composer-section-header">
+                                            <h3>Organization</h3>
+                                        </div>
+                                        <LabeledSelect
+                                            label="Category"
+                                            value={editState.list_id}
+                                            onChange={(value) =>
+                                                setEditState({
+                                                    ...editState,
+                                                    list_id: value,
+                                                })
+                                            }
+                                            options={taskLists}
+                                        />
+                                    </section>
+
+                                    <section className="task-composer-section task-composer-section-compact">
+                                        <div className="task-composer-section-header">
+                                            <h3>Notes</h3>
+                                        </div>
+                                        <label className="task-composer-notes">
+                                            <span>Notes</span>
+                                            <textarea
+                                                value={editState.notes}
+                                                onChange={(event) =>
+                                                    setEditState({
+                                                        ...editState,
+                                                        notes: event.target.value,
+                                                    })
+                                                }
+                                                rows={2}
+                                            />
+                                        </label>
+                                    </section>
                                 </form>
                             ) : (
                                 <p className="muted">
@@ -5457,6 +5406,7 @@ export function App() {
                         scrollTime={`${workingHours.start}:00`}
                         slotMinTime={calendarSlotMinTime}
                         slotMaxTime={calendarSlotMaxTime}
+                        expandRows={isTimeGridView}
                         height="100%"
                     />
                 </motion.div>
@@ -6076,43 +6026,285 @@ function LabeledDateTimeInput({
     onChange,
 }: LabeledDateTimeInputProps) {
     const { datePart, timePart } = splitDateTimeInputValue(value);
+    const showDatePlaceholder = !datePart;
+    const showTimePlaceholder = !timePart;
 
     return (
         <label className="task-form-datetime">
             <span>{label}</span>
             <div className="task-form-datetime-row">
-                <input
-                    type="date"
-                    value={datePart}
-                    onChange={(event) =>
-                        onChange(
-                            combineDateTimeInputValue(
-                                event.target.value,
-                                timePart,
-                            ),
-                        )
-                    }
-                    aria-label={`${label} date`}
-                />
-                <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-2][0-9]:[0-5][0-9]"
-                    placeholder="HH:mm"
-                    maxLength={5}
-                    value={timePart}
-                    onChange={(event) =>
-                        onChange(
-                            combineDateTimeInputValue(
-                                datePart,
-                                sanitizeTimeInputValue(event.target.value),
-                            ),
-                        )
-                    }
-                    aria-label={`${label} time`}
-                />
+                <div
+                    className={`task-datetime-shell${
+                        showDatePlaceholder ? " task-datetime-shell-empty" : ""
+                    }`}
+                >
+                    <input
+                        type="date"
+                        value={datePart}
+                        onChange={(event) =>
+                            onChange(
+                                combineDateTimeInputValue(
+                                    event.target.value,
+                                    timePart,
+                                ),
+                            )
+                        }
+                        aria-label={`${label} date`}
+                    />
+                    <span className="task-datetime-placeholder">
+                        Select date
+                    </span>
+                </div>
+                <div
+                    className={`task-datetime-shell task-datetime-shell-time${
+                        showTimePlaceholder ? " task-datetime-shell-empty" : ""
+                    }`}
+                >
+                    <input
+                        type="time"
+                        value={timePart}
+                        onChange={(event) =>
+                            onChange(
+                                combineDateTimeInputValue(
+                                    datePart,
+                                    sanitizeTimeInputValue(event.target.value),
+                                ),
+                            )
+                        }
+                        aria-label={`${label} time`}
+                    />
+                    <span className="task-datetime-placeholder">
+                        Time
+                    </span>
+                </div>
             </div>
         </label>
+    );
+}
+
+type RecurrenceComposerState = Pick<
+    TaskFormState,
+    | "scheduled_start"
+    | "recurrence_frequency"
+    | "recurrence_interval"
+    | "recurrence_until"
+>;
+
+type RecurrenceComposerProps = {
+    state: RecurrenceComposerState;
+    onChange: (updates: Partial<RecurrenceComposerState>) => void;
+};
+
+function RecurrenceComposer({ state, onChange }: RecurrenceComposerProps) {
+    const endsMode = state.recurrence_until ? "ON_DATE" : "NEVER";
+
+    return (
+        <div className="task-composer-control-group task-recurrence-composer">
+            <div className="task-composer-control-label">Repeat</div>
+            <div className="task-recurrence-sentence">
+                {state.recurrence_frequency ? (
+                    <>
+                        <span className="task-composer-muted-word">Every</span>
+                        <input
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={state.recurrence_interval}
+                            onChange={(event) =>
+                                onChange({
+                                    recurrence_interval: event.target.value,
+                                })
+                            }
+                            aria-label="Every"
+                            className="task-recurrence-count"
+                        />
+                    </>
+                ) : (
+                    <span className="task-composer-muted-word">
+                        Does not repeat
+                    </span>
+                )}
+                <select
+                    value={state.recurrence_frequency}
+                    onChange={(event) =>
+                        onChange({
+                            recurrence_frequency:
+                                event.target.value as RecurrenceFrequency,
+                            recurrence_interval:
+                                event.target.value && !state.recurrence_interval
+                                    ? "1"
+                                    : state.recurrence_interval,
+                            recurrence_until: event.target.value
+                                ? state.recurrence_until
+                                : "",
+                        })
+                    }
+                    aria-label="Repeat"
+                    className="task-composer-soft-select"
+                >
+                    <option value="">None</option>
+                    <option value="DAILY">Daily</option>
+                    <option value="WEEKLY">Weekly</option>
+                    <option value="MONTHLY">Monthly</option>
+                    <option value="YEARLY">Yearly</option>
+                </select>
+            </div>
+
+            {state.recurrence_frequency ? (
+                <div className="task-recurrence-ends">
+                    <label>
+                        <span>Ends</span>
+                        <select
+                            value={endsMode}
+                            onChange={(event) =>
+                                onChange({
+                                    recurrence_until:
+                                        event.target.value === "NEVER"
+                                            ? ""
+                                            : state.recurrence_until ||
+                                              splitDateTimeInputValue(
+                                                  state.scheduled_start,
+                                              ).datePart,
+                                })
+                            }
+                            aria-label="Ends"
+                            className="task-composer-soft-select"
+                        >
+                            <option value="NEVER">Never</option>
+                            <option value="ON_DATE">On date</option>
+                        </select>
+                    </label>
+                    {endsMode === "ON_DATE" ? (
+                        <label>
+                            <span>Date</span>
+                            <input
+                                type="date"
+                                value={state.recurrence_until}
+                                onChange={(event) =>
+                                    onChange({
+                                        recurrence_until: event.target.value,
+                                    })
+                                }
+                                aria-label="Repeat end date"
+                            />
+                        </label>
+                    ) : null}
+                </div>
+            ) : null}
+        </div>
+    );
+}
+
+type ReminderComposerState = Pick<
+    TaskFormState,
+    "notification_unit" | "notification_offset_value"
+>;
+
+type ReminderComposerProps = {
+    state: ReminderComposerState;
+    onChange: (updates: Partial<ReminderComposerState>) => void;
+};
+
+function getReminderPresetValue(state: ReminderComposerState): string {
+    if (!state.notification_unit) {
+        return "";
+    }
+
+    const matchingPreset = reminderPresets.find(
+        (preset) =>
+            preset.unit === state.notification_unit &&
+            preset.value === state.notification_offset_value,
+    );
+
+    return matchingPreset?.id ?? reminderCustomValue;
+}
+
+function ReminderComposer({ state, onChange }: ReminderComposerProps) {
+    const presetValue = getReminderPresetValue(state);
+    const isCustomReminder = presetValue === reminderCustomValue;
+
+    return (
+        <div className="task-composer-control-group task-reminder-composer">
+            <label className="task-reminder-select-label">
+                <span>Reminder</span>
+                <select
+                    value={presetValue}
+                    onChange={(event) => {
+                        const selectedValue = event.target.value;
+                        if (selectedValue === reminderCustomValue) {
+                            onChange({
+                                notification_unit:
+                                    state.notification_unit || "MINUTES",
+                                notification_offset_value:
+                                    state.notification_unit
+                                        ? state.notification_offset_value
+                                        : "15",
+                            });
+                            return;
+                        }
+
+                        const preset = reminderPresets.find(
+                            (option) => option.id === selectedValue,
+                        );
+                        onChange({
+                            notification_unit: preset?.unit ?? "",
+                            notification_offset_value: preset?.value ?? "0",
+                        });
+                    }}
+                    aria-label="Reminder"
+                    className="task-composer-soft-select"
+                >
+                    {reminderPresets.map((preset) => (
+                        <option key={preset.id} value={preset.id}>
+                            {preset.label}
+                        </option>
+                    ))}
+                    <option value={reminderCustomValue}>Custom</option>
+                </select>
+            </label>
+            {isCustomReminder ? (
+                <div className="task-reminder-custom">
+                    <label>
+                        <span>Before</span>
+                        <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={state.notification_offset_value}
+                            onChange={(event) =>
+                                onChange({
+                                    notification_offset_value:
+                                        event.target.value,
+                                })
+                            }
+                            aria-label="Reminder amount"
+                        />
+                    </label>
+                    <label>
+                        <span>Unit</span>
+                        <select
+                            value={state.notification_unit || "MINUTES"}
+                            onChange={(event) =>
+                                onChange({
+                                    notification_unit:
+                                        event.target.value as NotificationUnit,
+                                })
+                            }
+                            aria-label="Reminder unit"
+                            className="task-composer-soft-select"
+                        >
+                            {notificationUnits
+                                .filter((unit) => unit.id)
+                                .map((unit) => (
+                                    <option key={unit.id} value={unit.id}>
+                                        {unit.label}
+                                    </option>
+                                ))}
+                        </select>
+                    </label>
+                </div>
+            ) : null}
+        </div>
     );
 }
 

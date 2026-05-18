@@ -108,6 +108,8 @@ Open the preview URL in Chrome or another PWA-capable browser. In DevTools, chec
 
 To verify Add to Home Screen, use the browser install button from the address bar on desktop Chrome, or open the browser menu on Android Chrome and choose **Add to Home screen** or **Install app**.
 
+Real installability still requires HTTPS on Android Chrome/Brave, except for `localhost`. If you open the app over plain HTTP, especially through VPN or headscale, Chromium may only offer **Create shortcut** instead of full install UI.
+
 ## Convenience Script
 
 Start the local stack:
