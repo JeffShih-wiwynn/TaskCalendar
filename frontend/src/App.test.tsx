@@ -1255,7 +1255,8 @@ describe("App", () => {
         render(<App />);
 
         const weekEvent = await screen.findByTestId("calendar-event-task-external");
-        expect(weekEvent.querySelector(".task-checkbox")).not.toBeNull();
+        expect(weekEvent.querySelector(".task-checkbox")).toBeNull();
+        expect(weekEvent).toHaveTextContent("Compact mobile title");
         expect(mocks.fullCalendarProps.dayMaxEventRows).toBe(false);
 
         await act(async () => {
@@ -1264,6 +1265,9 @@ describe("App", () => {
         await waitFor(() =>
             expect(screen.getByRole("button", { name: "Day" })).toBeInTheDocument(),
         );
+        const dayEvent = screen.getByTestId("calendar-event-task-external");
+        expect(dayEvent.querySelector(".task-checkbox")).not.toBeNull();
+        expect(dayEvent).toHaveTextContent("Compact mobile title");
 
         await act(async () => {
             fireEvent.click(screen.getByRole("button", { name: "Day" }));

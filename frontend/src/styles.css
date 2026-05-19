@@ -3763,6 +3763,11 @@ input[type="checkbox"].task-checkbox:checked {
     flex-basis: 12px;
   }
 
+  .calendar-shell--mobile-readonly.calendar-view-timeGridWeek
+    .calendar-task {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .calendar-view-timeGridWeek .calendar-task .task-title {
     min-width: 0;
   }

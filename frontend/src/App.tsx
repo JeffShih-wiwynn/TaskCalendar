@@ -2331,6 +2331,8 @@ export function App() {
                 tasksRef.current.find((item) => item.id === eventInfo.event.id);
             const isMobileMonthEvent =
                 eventInfo.view.type === "dayGridMonth" && isMobileLayout;
+            const isMobileWeekEvent =
+                eventInfo.view.type === "timeGridWeek" && isMobileLayout;
 
             if (!task) {
                 return (
@@ -2366,18 +2368,20 @@ export function App() {
 
             return (
                 <div className="calendar-task">
-                    <motion.input
-                        type="checkbox"
-                        className="task-checkbox"
-                        checked={task.completed}
-                        animate={{
-                            scale: task.completed ? [1, 1.08, 1] : 1,
-                        }}
-                        transition={completionTransition}
-                        onChange={() => void handleCheckboxChange(task)}
-                        onClick={(event) => event.stopPropagation()}
-                        aria-label={`Toggle ${task.title}`}
-                    />
+                    {!isMobileWeekEvent && (
+                        <motion.input
+                            type="checkbox"
+                            className="task-checkbox"
+                            checked={task.completed}
+                            animate={{
+                                scale: task.completed ? [1, 1.08, 1] : 1,
+                            }}
+                            transition={completionTransition}
+                            onChange={() => void handleCheckboxChange(task)}
+                            onClick={(event) => event.stopPropagation()}
+                            aria-label={`Toggle ${task.title}`}
+                        />
+                    )}
                     <motion.span
                         className={
                             task.completed
