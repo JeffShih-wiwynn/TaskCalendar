@@ -3132,26 +3132,38 @@ input[type="checkbox"].task-checkbox:checked {
   .mobile-month-task-preview-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     flex: 0 0 auto;
   }
 
+  .mobile-month-task-preview-action {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
   .mobile-month-task-preview-add {
-    width: auto;
-    min-height: 36px;
-    padding: 8px 12px;
+    border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+
+  .mobile-month-task-preview-add:hover:not(:disabled),
+  .mobile-month-task-preview-add:focus-visible {
+    border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
   }
 
   .mobile-month-task-preview-close {
-    min-height: 36px;
     border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 7px 10px;
     color: var(--muted);
-    background: var(--panel-bg);
-    font: inherit;
-    font-weight: 700;
-    cursor: pointer;
+    background: transparent;
+  }
+
+  .mobile-month-task-preview-close:hover:not(:disabled),
+  .mobile-month-task-preview-close:focus-visible {
+    border-color: var(--border);
+    color: var(--text);
+    background: color-mix(in srgb, var(--panel-bg) 86%, var(--border));
   }
 
   .mobile-calendar-action-sheet {

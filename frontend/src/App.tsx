@@ -581,11 +581,14 @@ export function App() {
     const [yearDraft, setYearDraft] = useState(
         String(new Date().getFullYear()),
     );
+    const editStateSyncTaskIdRef = useRef<string | null>(null);
     const calendarRef = useRef<FullCalendar | null>(null);
     const calendarTransitionTimeoutRef = useRef<number | null>(null);
     const calendarEventAnimationKindRef =
         useRef<CalendarTransitionKind>("neutral");
     const calendarEventAnimationTimeoutRef = useRef<number | null>(null);
+    const taskSyncIntervalRef = useRef<number | null>(null);
+    const taskSyncInFlightRef = useRef(false);
     const mobileEventCleanupRef = useRef<WeakMap<HTMLElement, () => void>>(
         new WeakMap(),
     );
@@ -921,8 +924,18 @@ export function App() {
     ]);
 
     useEffect(() => {
+        if (detailPanelMode !== "edit") {
+            editStateSyncTaskIdRef.current = null;
+            setEditState(null);
+            return;
+        }
+
         if (!selectedTask) {
             setEditState(null);
+            return;
+        }
+
+        if (editStateSyncTaskIdRef.current === selectedTask.id) {
             return;
         }
 
@@ -950,9 +963,10 @@ export function App() {
                     ? "DISCORD"
                     : "",
         });
-    }, [selectedTask]);
+        editStateSyncTaskIdRef.current = selectedTask.id;
+    }, [detailPanelMode, selectedTask]);
 
-    const refreshTasks = useCallback(async () => {
+    const refreshTasks = useCallback(async (options?: { silent?: boolean }) => {
         setTaskState((current) => ({
             status: current.tasks.length > 0 ? "refreshing" : "loading",
             tasks: current.tasks,
@@ -970,6 +984,9 @@ export function App() {
         } catch (error) {
             if (isAuthError(error)) {
                 handleAuthExpired();
+                return;
+            }
+            if (options?.silent) {
                 return;
             }
             setTaskState((current) => ({
@@ -1037,22 +1054,28 @@ export function App() {
         });
     }, []);
 
-    const refreshTaskLists = useCallback(async () => {
-        try {
-            const loadedTaskLists = await listTaskLists();
-            setTaskLists(loadedTaskLists);
-        } catch (error) {
-            if (isAuthError(error)) {
-                handleAuthExpired();
-                return;
+    const refreshTaskLists = useCallback(
+        async (options?: { silent?: boolean }) => {
+            try {
+                const loadedTaskLists = await listTaskLists();
+                setTaskLists(loadedTaskLists);
+            } catch (error) {
+                if (isAuthError(error)) {
+                    handleAuthExpired();
+                    return;
+                }
+                if (options?.silent) {
+                    return;
+                }
+                setFormError(
+                    error instanceof Error
+                        ? error.message
+                        : "Unable to load categories",
+                );
             }
-            setFormError(
-                error instanceof Error
-                    ? error.message
-                    : "Unable to load categories",
-            );
-        }
-    }, [handleAuthExpired]);
+        },
+        [handleAuthExpired],
+    );
 
     const handleConfirmBackupImport = useCallback(async (file: File | null) => {
         if (!file) {
@@ -1136,6 +1159,82 @@ export function App() {
         }
         void refreshWebhookSettings();
     }, [authToken, refreshWebhookSettings]);
+
+    useEffect(() => {
+        if (!authToken || typeof window === "undefined") {
+            return;
+        }
+
+        const pollIntervalMs = 30 * 1000;
+
+        const clearTaskSyncInterval = () => {
+            if (taskSyncIntervalRef.current !== null) {
+                window.clearInterval(taskSyncIntervalRef.current);
+                taskSyncIntervalRef.current = null;
+            }
+        };
+
+        const runTaskSyncRefresh = async () => {
+            if (taskSyncInFlightRef.current || !authToken) {
+                return;
+            }
+
+            taskSyncInFlightRef.current = true;
+            try {
+                await Promise.all([
+                    refreshTasks({ silent: true }),
+                    refreshTaskLists({ silent: true }),
+                ]);
+            } finally {
+                taskSyncInFlightRef.current = false;
+            }
+        };
+
+        const ensureTaskSyncInterval = () => {
+            clearTaskSyncInterval();
+
+            if (document.hidden) {
+                return;
+            }
+
+            taskSyncIntervalRef.current = window.setInterval(() => {
+                void runTaskSyncRefresh();
+            }, pollIntervalMs);
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                clearTaskSyncInterval();
+                return;
+            }
+
+            void runTaskSyncRefresh();
+            ensureTaskSyncInterval();
+        };
+
+        const handleWindowFocus = () => {
+            if (document.hidden) {
+                return;
+            }
+
+            void runTaskSyncRefresh();
+        };
+
+        void runTaskSyncRefresh();
+        ensureTaskSyncInterval();
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        window.addEventListener("focus", handleWindowFocus);
+
+        return () => {
+            clearTaskSyncInterval();
+            document.removeEventListener(
+                "visibilitychange",
+                handleVisibilityChange,
+            );
+            window.removeEventListener("focus", handleWindowFocus);
+        };
+    }, [authToken, refreshTaskLists, refreshTasks]);
 
     useEffect(() => {
         saveThemeMode(themeMode);
@@ -1865,10 +1964,6 @@ export function App() {
             const isMobileCalendar = isNarrowScreen();
             if (calendarView === "dayGridMonth" && isMobileCalendar) {
                 setMobileMonthPreviewDate(clickInfo.date);
-                return;
-            }
-
-            if (isMobileCalendar) {
                 return;
             }
 
@@ -5501,8 +5596,22 @@ export function App() {
                                 <div className="mobile-month-task-preview-actions">
                                     <button
                                         type="button"
-                                        className="sidebar-create-task-button mobile-month-task-preview-add"
+                                        className="floating-panel-action floating-panel-icon-button mobile-month-task-preview-action mobile-month-task-preview-close"
+                                        aria-label="Close selected day tasks"
+                                        title="Close"
+                                        onClick={() =>
+                                            setMobileMonthPreviewDate(null)
+                                        }
+                                    >
+                                        <span className="floating-panel-icon">
+                                            <IconClose />
+                                        </span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="floating-panel-action floating-panel-icon-button mobile-month-task-preview-action mobile-month-task-preview-add"
                                         aria-label="Add task for selected day"
+                                        title="Add"
                                         onClick={() => {
                                             const selectedDate =
                                                 mobileMonthPreviewDate;
@@ -5516,17 +5625,9 @@ export function App() {
                                             );
                                         }}
                                     >
-                                        Add
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="mobile-month-task-preview-close"
-                                        aria-label="Close selected day tasks"
-                                        onClick={() =>
-                                            setMobileMonthPreviewDate(null)
-                                        }
-                                    >
-                                        Close
+                                        <span className="floating-panel-icon">
+                                            <IconPlus />
+                                        </span>
                                     </button>
                                 </div>
                             )}
