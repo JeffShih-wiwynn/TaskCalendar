@@ -1255,7 +1255,8 @@ describe("App", () => {
         render(<App />);
 
         const weekEvent = await screen.findByTestId("calendar-event-task-external");
-        expect(weekEvent.querySelector(".task-checkbox")).not.toBeNull();
+        expect(weekEvent.querySelector(".task-checkbox")).toBeNull();
+        expect(weekEvent).toHaveTextContent("Compact mobile title");
         expect(mocks.fullCalendarProps.dayMaxEventRows).toBe(false);
 
         await act(async () => {
@@ -1264,6 +1265,9 @@ describe("App", () => {
         await waitFor(() =>
             expect(screen.getByRole("button", { name: "Day" })).toBeInTheDocument(),
         );
+        const dayEvent = screen.getByTestId("calendar-event-task-external");
+        expect(dayEvent.querySelector(".task-checkbox")).not.toBeNull();
+        expect(dayEvent).toHaveTextContent("Compact mobile title");
 
         await act(async () => {
             fireEvent.click(screen.getByRole("button", { name: "Day" }));
@@ -1668,6 +1672,135 @@ describe("App", () => {
         expect(screen.queryByLabelText("Edit task panel")).not.toBeInTheDocument();
     });
 
+    it("shows the recurring edit confirmation above the mobile edit sheet", async () => {
+        setMobileLayout(true);
+        mocks.tasks = [
+            makeTask({
+                id: "task-external",
+                title: "Mobile recurring edit",
+                scheduled_start: "2026-05-08T09:00:00.000Z",
+                scheduled_end: "2026-05-08T10:00:00.000Z",
+                recurrence_rule: "FREQ=DAILY;INTERVAL=1",
+                recurrence_series_id: "series-mobile-edit",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Mobile Calendar" }));
+        fireEvent.click(screen.getByTestId("calendar-event-task-external"));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Edit details" }),
+        );
+        await screen.findByLabelText("Edit task panel");
+
+        fireEvent.change(screen.getByLabelText("Title"), {
+            target: { value: "Mobile recurring renamed" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+        const dialog = await screen.findByRole("dialog", {
+            name: "Edit recurring task",
+        });
+        expect(dialog).toHaveClass("choice-dialog--mobile-sheet");
+        expect(dialog.closest(".dialog-backdrop")).toHaveClass(
+            "dialog-backdrop--mobile-sheet",
+        );
+        expect(mocks.updateTask).not.toHaveBeenCalled();
+
+        fireEvent.click(
+            screen.getByRole("button", { name: "Edit all recurring tasks" }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.updateTask).toHaveBeenCalledWith(
+                "task-external",
+                expect.objectContaining({
+                    title: "Mobile recurring renamed",
+                }),
+                { updateScope: "series" },
+            ),
+        );
+    });
+
+    it("shows the recurring delete confirmation from the mobile quick sheet", async () => {
+        setMobileLayout(true);
+        mocks.tasks = [
+            makeTask({
+                id: "task-external",
+                title: "Mobile recurring delete",
+                scheduled_start: "2026-05-08T09:00:00.000Z",
+                scheduled_end: "2026-05-08T10:00:00.000Z",
+                recurrence_rule: "FREQ=DAILY;INTERVAL=1",
+                recurrence_series_id: "series-mobile-delete",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Mobile Calendar" }));
+        fireEvent.click(screen.getByTestId("calendar-event-task-external"));
+        fireEvent.click(await screen.findByRole("button", { name: "Delete task" }));
+
+        const dialog = await screen.findByRole("dialog", {
+            name: "Delete recurring task",
+        });
+        expect(dialog).toHaveClass("choice-dialog--mobile-sheet");
+        expect(dialog.closest(".dialog-backdrop")).toHaveClass(
+            "dialog-backdrop--mobile-sheet",
+        );
+        expect(mocks.deleteTask).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole("button", { name: "Delete only this" }));
+
+        await waitFor(() =>
+            expect(mocks.deleteTask).toHaveBeenCalledWith("task-external", {
+                deleteScope: "single",
+            }),
+        );
+    });
+
+    it("shows the recurring edit confirmation for mobile quick time changes", async () => {
+        setMobileLayout(true);
+        mocks.tasks = [
+            makeTask({
+                id: "task-external",
+                title: "Mobile recurring move",
+                scheduled_start: "2026-05-08T09:00:00.000Z",
+                scheduled_end: "2026-05-08T10:00:00.000Z",
+                recurrence_rule: "FREQ=DAILY;INTERVAL=1",
+                recurrence_series_id: "series-mobile-move",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Mobile Calendar" }));
+        fireEvent.click(screen.getByTestId("calendar-event-task-external"));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Move later 15 minutes" }),
+        );
+
+        const dialog = await screen.findByRole("dialog", {
+            name: "Edit recurring task",
+        });
+        expect(dialog).toHaveClass("choice-dialog--mobile-sheet");
+        expect(mocks.updateTask).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole("button", { name: "Edit only this" }));
+
+        await waitFor(() =>
+            expect(mocks.updateTask).toHaveBeenCalledWith(
+                "task-external",
+                {
+                    scheduled_start: "2026-05-08T09:15:00.000Z",
+                    scheduled_end: "2026-05-08T10:15:00.000Z",
+                    all_day: false,
+                },
+            ),
+        );
+    });
+
     it("keeps the mobile quick action completion label as Complete when already completed", async () => {
         setMobileLayout(true);
         mocks.tasks = [
@@ -1970,7 +2103,17 @@ describe("App", () => {
 
         expect(
             await screen.findByRole("button", { name: "Create task" }),
-        ).toBeInTheDocument();
+        ).toHaveClass(
+            "sidebar-create-task-button",
+            "compact-action-button",
+            "compact-action-button--primary",
+        );
+        expect(screen.getByRole("button", { name: "Create task" })).toHaveTextContent("");
+        expect(
+            screen
+                .getByRole("button", { name: "Create task" })
+                .querySelector("svg"),
+        ).not.toBeNull();
 
         fireEvent.click(screen.getByRole("button", { name: "Create task" }));
 
@@ -2932,7 +3075,15 @@ describe("App", () => {
         expect(
             screen.queryByLabelText("Edit category name"),
         ).not.toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "Add" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Add category" })).toHaveClass(
+            "filter-add-button",
+            "compact-action-button",
+            "compact-action-button--primary",
+        );
+        expect(screen.getByRole("button", { name: "Add category" })).toHaveTextContent("");
+        expect(
+            screen.getByRole("button", { name: "Add category" }).querySelector("svg"),
+        ).not.toBeNull();
     });
 
     it("deletes a category from the inline edit form", async () => {
@@ -2942,7 +3093,31 @@ describe("App", () => {
             await screen.findByRole("button", { name: "Task category" }),
         );
         fireEvent.click(screen.getByRole("button", { name: "Edit Work" }));
-        fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+        expect(screen.getByRole("button", { name: "Save category" })).toHaveClass(
+            "compact-action-button",
+            "compact-action-button--primary",
+        );
+        expect(screen.getByRole("button", { name: "Save category" })).toHaveTextContent("");
+        expect(
+            screen.getByRole("button", { name: "Save category" }).querySelector("svg"),
+        ).not.toBeNull();
+        expect(screen.getByRole("button", { name: "Delete category" })).toHaveClass(
+            "compact-action-button",
+            "compact-action-button--danger",
+        );
+        expect(screen.getByRole("button", { name: "Delete category" })).toHaveTextContent("");
+        expect(
+            screen.getByRole("button", { name: "Delete category" }).querySelector("svg"),
+        ).not.toBeNull();
+        expect(screen.getByRole("button", { name: "Cancel" })).toHaveClass(
+            "compact-action-button",
+            "compact-action-button--secondary",
+        );
+        expect(screen.getByRole("button", { name: "Cancel" })).toHaveTextContent("");
+        expect(
+            screen.getByRole("button", { name: "Cancel" }).querySelector("svg"),
+        ).not.toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: "Delete category" }));
 
         await waitFor(() =>
             expect(mocks.deleteTaskList).toHaveBeenCalledWith("list-1"),

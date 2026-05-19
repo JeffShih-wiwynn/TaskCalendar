@@ -931,6 +931,61 @@ h2 {
   background: var(--danger);
 }
 
+.category-inline-actions .compact-action-button {
+  min-height: 40px;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: inherit;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+}
+
+.category-inline-actions .compact-action-button--primary {
+  border: 1px solid color-mix(in srgb, var(--accent) 82%, #000 18%);
+  color: #ffffff;
+  background: var(--accent);
+}
+
+.category-inline-actions .compact-action-button--primary:hover:not(:disabled),
+.category-inline-actions .compact-action-button--primary:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 88%, var(--border));
+  background: color-mix(in srgb, var(--accent) 88%, #ffffff 12%);
+  color: #ffffff;
+}
+
+.category-inline-actions .compact-action-button--secondary {
+  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel-bg) 74%, transparent);
+}
+
+.category-inline-actions .compact-action-button--secondary:hover:not(:disabled),
+.category-inline-actions .compact-action-button--secondary:focus-visible {
+  border-color: color-mix(in srgb, var(--border) 88%, var(--text) 12%);
+  background: color-mix(in srgb, var(--panel-bg) 84%, var(--border));
+  color: var(--text);
+}
+
+.category-inline-actions .compact-action-button--danger {
+  border: 1px solid color-mix(in srgb, #dc3f3f 78%, #000 22%);
+  color: #ffffff;
+  background: #dc3f3f;
+}
+
+.category-inline-actions .compact-action-button--danger:hover:not(:disabled),
+.category-inline-actions .compact-action-button--danger:focus-visible {
+  border-color: color-mix(in srgb, #dc3f3f 84%, #000 16%);
+  background: #cf3737;
+  color: #ffffff;
+}
+
+.category-inline-actions .compact-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+  box-shadow: none;
+}
+
 .task-list {
   position: relative;
   isolation: isolate;
@@ -1021,6 +1076,157 @@ h2 {
 
 .sidebar-create-task-button:hover {
   opacity: 0.92;
+}
+
+.compact-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+  transition:
+    transform var(--micro-duration-fast) var(--micro-ease),
+    box-shadow var(--micro-duration-medium) var(--micro-ease),
+    border-color var(--micro-duration-fast) ease,
+    background-color var(--micro-duration-fast) ease,
+    color var(--micro-duration-fast) ease,
+    opacity var(--micro-duration-fast) ease;
+}
+
+.compact-action-button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.compact-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+  box-shadow: none;
+}
+
+.compact-action-button--icon-only {
+  gap: 0;
+  padding-inline: 0;
+}
+
+.compact-action-button--primary {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.compact-action-button--primary:hover:not(:disabled),
+.compact-action-button--primary:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  color: var(--accent);
+}
+
+.compact-action-button--primary:focus-visible,
+.compact-action-button--secondary:focus-visible,
+.compact-action-button--danger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 62%, #ffffff 38%);
+  outline-offset: 2px;
+}
+
+.compact-action-button--secondary {
+  border-color: color-mix(in srgb, var(--border) 76%, transparent);
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel-bg) 78%, transparent);
+}
+
+.compact-action-button--secondary:hover:not(:disabled),
+.compact-action-button--secondary:focus-visible {
+  border-color: color-mix(in srgb, var(--border) 88%, var(--text) 12%);
+  background: color-mix(in srgb, var(--panel-bg) 88%, var(--border));
+  color: var(--text);
+}
+
+.compact-action-button--danger {
+  border-color: color-mix(in srgb, #dc3f3f 48%, var(--border));
+  color: #dc3f3f;
+  background: color-mix(in srgb, #dc3f3f 16%, transparent);
+}
+
+.compact-action-button--danger:hover:not(:disabled),
+.compact-action-button--danger:focus-visible {
+  border-color: color-mix(in srgb, #dc3f3f 64%, var(--border));
+  background: color-mix(in srgb, #dc3f3f 24%, transparent);
+  color: #dc3f3f;
+}
+
+.compact-action-button__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+
+.compact-action-button__icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.compact-action-button--icon-only .compact-action-button__icon {
+  width: 18px;
+  height: 18px;
+}
+
+.compact-action-button--icon-only .compact-action-button__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sidebar-create-task-button.compact-action-button {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.sidebar-create-task-button.compact-action-button:hover:not(:disabled),
+.sidebar-create-task-button.compact-action-button:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  color: var(--accent);
+  opacity: 1;
+}
+
+.filter-add-button.compact-action-button {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.filter-add-button.compact-action-button:hover:not(:disabled),
+.filter-add-button.compact-action-button:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  color: var(--accent);
+}
+
+.category-inline-actions .compact-action-button__icon,
+.filter-add-button.compact-action-button .compact-action-button__icon,
+.sidebar-create-task-button.compact-action-button .compact-action-button__icon {
+  width: 15px;
+  height: 15px;
+}
+
+.category-inline-actions .compact-action-button__icon svg,
+.filter-add-button.compact-action-button .compact-action-button__icon svg,
+.sidebar-create-task-button.compact-action-button .compact-action-button__icon svg {
+  width: 15px;
+  height: 15px;
 }
 
 .task-detail-panel {
@@ -3291,6 +3497,18 @@ input[type="checkbox"].task-checkbox:checked {
       max(12px, env(safe-area-inset-left));
   }
 
+  .dialog-backdrop--mobile-sheet {
+    z-index: 52;
+    place-items: end center;
+    background: rgb(24 32 38 / 38%);
+  }
+
+  .choice-dialog--mobile-sheet {
+    width: min(100%, 520px);
+    margin-bottom: calc(76px + env(safe-area-inset-bottom));
+    border-radius: 18px 18px 12px 12px;
+  }
+
   .mobile-calendar-action-header {
     display: flex;
     align-items: flex-start;
@@ -3749,6 +3967,11 @@ input[type="checkbox"].task-checkbox:checked {
 
   .calendar-view-timeGridWeek .calendar-task .task-checkbox {
     flex-basis: 12px;
+  }
+
+  .calendar-shell--mobile-readonly.calendar-view-timeGridWeek
+    .calendar-task {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .calendar-view-timeGridWeek .calendar-task .task-title {

@@ -2331,6 +2331,8 @@ export function App() {
                 tasksRef.current.find((item) => item.id === eventInfo.event.id);
             const isMobileMonthEvent =
                 eventInfo.view.type === "dayGridMonth" && isMobileLayout;
+            const isMobileWeekEvent =
+                eventInfo.view.type === "timeGridWeek" && isMobileLayout;
 
             if (!task) {
                 return (
@@ -2366,18 +2368,20 @@ export function App() {
 
             return (
                 <div className="calendar-task">
-                    <motion.input
-                        type="checkbox"
-                        className="task-checkbox"
-                        checked={task.completed}
-                        animate={{
-                            scale: task.completed ? [1, 1.08, 1] : 1,
-                        }}
-                        transition={completionTransition}
-                        onChange={() => void handleCheckboxChange(task)}
-                        onClick={(event) => event.stopPropagation()}
-                        aria-label={`Toggle ${task.title}`}
-                    />
+                    {!isMobileWeekEvent && (
+                        <motion.input
+                            type="checkbox"
+                            className="task-checkbox"
+                            checked={task.completed}
+                            animate={{
+                                scale: task.completed ? [1, 1.08, 1] : 1,
+                            }}
+                            transition={completionTransition}
+                            onChange={() => void handleCheckboxChange(task)}
+                            onClick={(event) => event.stopPropagation()}
+                            aria-label={`Toggle ${task.title}`}
+                        />
+                    )}
                     <motion.span
                         className={
                             task.completed
@@ -4490,31 +4494,44 @@ export function App() {
                                                             />
                                                         </div>
                                                         <div className="category-inline-actions">
-                                                            <button type="submit">
-                                                                Save
+                                                            <button
+                                                                type="submit"
+                                                                className="compact-action-button compact-action-button--primary compact-action-button--icon-only"
+                                                                aria-label="Save category"
+                                                                title="Save category"
+                                                            >
+                                                                <span className="compact-action-button__icon">
+                                                                    <IconCheck />
+                                                                </span>
                                                             </button>
                                                             <button
                                                                 type="button"
-                                                                className="danger-button"
+                                                                className="compact-action-button compact-action-button--danger compact-action-button--icon-only"
                                                                 disabled={
                                                                     isDeleting
                                                                 }
+                                                                aria-label="Delete category"
+                                                                title="Delete category"
                                                                 onClick={() =>
                                                                     void handleDeleteEditingTaskList()
                                                                 }
                                                             >
-                                                                {isDeleting
-                                                                    ? "Deleting..."
-                                                                    : "Delete"}
+                                                                <span className="compact-action-button__icon">
+                                                                    <IconTrash />
+                                                                </span>
                                                             </button>
                                                             <button
                                                                 type="button"
-                                                                className="secondary-button"
+                                                                className="compact-action-button compact-action-button--secondary compact-action-button--icon-only"
+                                                                aria-label="Cancel"
+                                                                title="Cancel"
                                                                 onClick={() =>
                                                                     resetCategoryEditor()
                                                                 }
                                                             >
-                                                                Cancel
+                                                                <span className="compact-action-button__icon">
+                                                                    <IconClose />
+                                                                </span>
                                                             </button>
                                                         </div>
                                                     </form>
@@ -4556,24 +4573,37 @@ export function App() {
                                                             />
                                                         </div>
                                                         <div className="category-inline-actions">
-                                                            <button type="submit">
-                                                                Add
+                                                            <button
+                                                                type="submit"
+                                                                className="compact-action-button compact-action-button--primary compact-action-button--icon-only"
+                                                                aria-label="Add category"
+                                                                title="Add category"
+                                                            >
+                                                                <span className="compact-action-button__icon">
+                                                                    <IconPlus />
+                                                                </span>
                                                             </button>
                                                             <button
                                                                 type="button"
-                                                                className="secondary-button"
+                                                                className="compact-action-button compact-action-button--secondary compact-action-button--icon-only"
+                                                                aria-label="Cancel"
+                                                                title="Cancel"
                                                                 onClick={() => {
                                                                     resetCategoryEditor();
                                                                 }}
                                                             >
-                                                                Cancel
+                                                                <span className="compact-action-button__icon">
+                                                                    <IconClose />
+                                                                </span>
                                                             </button>
                                                         </div>
                                                     </form>
                                                 ) : (
                                                     <button
                                                         type="button"
-                                                        className="filter-add-button"
+                                                        className="filter-add-button compact-action-button compact-action-button--primary compact-action-button--icon-only"
+                                                        aria-label="Add category"
+                                                        title="Add category"
                                                         onClick={() => {
                                                             setEditingTaskListId(
                                                                 null,
@@ -4588,7 +4618,9 @@ export function App() {
                                                             );
                                                         }}
                                                     >
-                                                        Add
+                                                        <span className="compact-action-button__icon">
+                                                            <IconPlus />
+                                                        </span>
                                                     </button>
                                                 )}
                                             </div>
@@ -4601,11 +4633,14 @@ export function App() {
                             {activeView === "unscheduled" && (
                                 <button
                                     type="button"
-                                    className="sidebar-create-task-button"
+                                    className="sidebar-create-task-button compact-action-button compact-action-button--primary compact-action-button--icon-only"
                                     aria-label="Create task"
+                                    title="Create task"
                                     onClick={openUnscheduledCreatePanel}
                                 >
-                                    Create
+                                    <span className="compact-action-button__icon">
+                                        <IconPlus />
+                                    </span>
                                 </button>
                             )}
                         </section>
@@ -6044,12 +6079,16 @@ export function App() {
 
             {pendingDeleteTask && (
                 <div
-                    className="dialog-backdrop"
+                    className={`dialog-backdrop ${
+                        isMobileLayout ? "dialog-backdrop--mobile-sheet" : ""
+                    }`}
                     role="presentation"
                     onClick={() => !isDeleting && setPendingTaskDelete(null)}
                 >
                     <div
-                        className="choice-dialog"
+                        className={`choice-dialog ${
+                            isMobileLayout ? "choice-dialog--mobile-sheet" : ""
+                        }`}
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="delete-recurring-task-title"
@@ -6109,7 +6148,9 @@ export function App() {
 
             {pendingTaskEdit && (
                 <div
-                    className="dialog-backdrop"
+                    className={`dialog-backdrop ${
+                        isMobileLayout ? "dialog-backdrop--mobile-sheet" : ""
+                    }`}
                     role="presentation"
                     onClick={() => {
                         if (isEditSaving) {
@@ -6122,7 +6163,9 @@ export function App() {
                     }}
                 >
                     <div
-                        className="choice-dialog"
+                        className={`choice-dialog ${
+                            isMobileLayout ? "choice-dialog--mobile-sheet" : ""
+                        }`}
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="edit-recurring-task-title"
