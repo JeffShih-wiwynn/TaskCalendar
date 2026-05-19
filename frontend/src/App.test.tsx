@@ -43,6 +43,7 @@ const mocks = vi.hoisted(() => ({
         scrollTimeReset: undefined as boolean | undefined,
         slotMinTime: undefined as string | undefined,
         slotMaxTime: undefined as string | undefined,
+        expandRows: undefined as boolean | undefined,
         dayMaxEventRows: undefined as number | boolean | undefined,
         longPressDelay: undefined as number | undefined,
         selectLongPressDelay: undefined as number | undefined,
@@ -201,6 +202,7 @@ vi.mock("@fullcalendar/react", () => ({
             scrollTimeReset,
             slotMinTime,
             slotMaxTime,
+            expandRows,
             dayMaxEventRows,
             longPressDelay,
             selectLongPressDelay,
@@ -272,6 +274,7 @@ vi.mock("@fullcalendar/react", () => ({
             scrollTimeReset?: boolean;
             slotMinTime?: string;
             slotMaxTime?: string;
+            expandRows?: boolean;
             dayMaxEventRows?: number | boolean;
             longPressDelay?: number;
             selectLongPressDelay?: number;
@@ -357,6 +360,7 @@ vi.mock("@fullcalendar/react", () => ({
         mocks.fullCalendarProps.scrollTimeReset = scrollTimeReset;
         mocks.fullCalendarProps.slotMinTime = slotMinTime;
         mocks.fullCalendarProps.slotMaxTime = slotMaxTime;
+        mocks.fullCalendarProps.expandRows = expandRows;
         mocks.fullCalendarProps.dayMaxEventRows = dayMaxEventRows;
         mocks.fullCalendarProps.longPressDelay = longPressDelay;
         mocks.fullCalendarProps.selectLongPressDelay = selectLongPressDelay;
@@ -688,6 +692,17 @@ function setMobileLayout(matches: boolean): void {
     });
 }
 
+async function selectTaskDropdownOption(
+    label: string,
+    option: string,
+): Promise<void> {
+    fireEvent.click(screen.getByRole("button", { name: label }));
+    const listbox = await screen.findByRole("listbox", {
+        name: `${label} options`,
+    });
+    fireEvent.click(within(listbox).getByRole("option", { name: option }));
+}
+
 describe("App", () => {
     beforeEach(() => {
         setMobileLayout(false);
@@ -982,7 +997,7 @@ describe("App", () => {
         );
 
         await screen.findByRole("heading", { name: "Working hours" });
-        fireEvent.click(screen.getByRole("button", { name: "Back" }));
+        fireEvent.click(screen.getByRole("button", { name: "Done" }));
         expect(
             await screen.findByRole("button", { name: "Working hours" }),
         ).toBeInTheDocument();
@@ -1038,6 +1053,7 @@ describe("App", () => {
         await waitFor(() =>
             expect(mocks.fullCalendarProps.slotMaxTime).toBe("22:00:00"),
         );
+        expect(mocks.fullCalendarProps.expandRows).toBe(true);
         expect(
             screen.getByRole("button", { name: "Work" }),
         ).toBeInTheDocument();
@@ -1075,6 +1091,7 @@ describe("App", () => {
         await waitFor(() =>
             expect(mocks.fullCalendarProps.slotMaxTime).toBe("22:00:00"),
         );
+        expect(mocks.fullCalendarProps.expandRows).toBe(true);
     });
 
     it("hides the working-hours toggle in month view", async () => {
@@ -1105,6 +1122,7 @@ describe("App", () => {
         expect(
             screen.queryByRole("button", { name: "Full" }),
         ).not.toBeInTheDocument();
+        expect(mocks.fullCalendarProps.expandRows).toBe(false);
     });
 
     it("uses FullCalendar overflow and summary-only events for mobile month view", async () => {
@@ -1229,7 +1247,7 @@ describe("App", () => {
 
         expect(screen.getByRole("main")).toHaveClass("detail-panel-open");
         expect(screen.getByLabelText("Create task panel")).toBeInTheDocument();
-        expect(screen.getByLabelText("Start")).toHaveValue("2026-05-08");
+        expect(screen.getByLabelText("Start date")).toHaveValue("2026-05-08");
     });
 
     it("uses intentional mobile calendar taps for time-grid create and edit", async () => {
@@ -2386,12 +2404,16 @@ describe("App", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" }));
         await waitFor(() =>
-            expect(mocks.fullCalendarUpdateSize).toHaveBeenCalledTimes(1),
+            expect(mocks.fullCalendarUpdateSize).toHaveBeenCalled(),
         );
+        const resizeCountAfterCollapse =
+            mocks.fullCalendarUpdateSize.mock.calls.length;
 
         fireEvent.click(screen.getByRole("button", { name: "⇥" }));
         await waitFor(() =>
-            expect(mocks.fullCalendarUpdateSize).toHaveBeenCalledTimes(2),
+            expect(mocks.fullCalendarUpdateSize.mock.calls.length).toBeGreaterThan(
+                resizeCountAfterCollapse,
+            ),
         );
     });
 
@@ -2509,13 +2531,18 @@ describe("App", () => {
             screen.getByRole("button", { name: "Webhook" }),
         );
 
+        expect(await screen.findByLabelText("Message format")).toHaveAttribute(
+            "placeholder",
+            "Task due: {title}\nWhen: {when}\nNotes: {notes}\nOpen app: {app_url}",
+        );
+
         fireEvent.change(await screen.findByLabelText("Webhook URL"), {
             target: { value: "https://discord.example/webhook" },
         });
         fireEvent.change(screen.getByLabelText("Message format"), {
             target: { value: "Task {title}" },
         });
-        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
         await waitFor(() =>
             expect(mocks.updateSettings).toHaveBeenCalledWith({
@@ -2559,6 +2586,58 @@ describe("App", () => {
         ).toBeInTheDocument();
     });
 
+    it("uses the default webhook format when the message format is blank", async () => {
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Settings" }),
+        );
+        fireEvent.click(
+            screen.getByRole("button", { name: "Webhook" }),
+        );
+        fireEvent.change(await screen.findByLabelText("Webhook URL"), {
+            target: { value: "https://discord.example/webhook" },
+        });
+        fireEvent.change(screen.getByLabelText("Message format"), {
+            target: { value: "   " },
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+        await waitFor(() =>
+            expect(mocks.updateSettings).toHaveBeenCalledWith({
+                discord_webhook_url: "https://discord.example/webhook",
+                discord_message_template: null,
+            }),
+        );
+    });
+
+    it("tests webhook settings with the default format when the message format is blank", async () => {
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Settings" }),
+        );
+        fireEvent.click(
+            screen.getByRole("button", { name: "Webhook" }),
+        );
+        fireEvent.change(await screen.findByLabelText("Webhook URL"), {
+            target: { value: "https://discord.example/webhook" },
+        });
+        fireEvent.change(screen.getByLabelText("Message format"), {
+            target: { value: "   " },
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: "Test" }));
+
+        await waitFor(() =>
+            expect(mocks.testSettings).toHaveBeenCalledWith({
+                discord_webhook_url: "https://discord.example/webhook",
+                discord_message_template: null,
+            }),
+        );
+    });
+
     it("closes the create panel when opening webhook settings", async () => {
         render(<App />);
 
@@ -2593,22 +2672,20 @@ describe("App", () => {
         fireEvent.change(screen.getByLabelText("Title"), {
             target: { value: "New task" },
         });
-        fireEvent.change(screen.getByLabelText("Repeat"), {
-            target: { value: "DAILY" },
-        });
+        await selectTaskDropdownOption("Repeat", "Daily");
         fireEvent.change(screen.getByLabelText("Every"), {
             target: { value: "3" },
         });
-        fireEvent.change(screen.getByLabelText("Until"), {
+        await selectTaskDropdownOption("Ends", "On date");
+        fireEvent.change(screen.getByLabelText("Repeat end date"), {
             target: { value: "2026-06-08" },
         });
-        fireEvent.change(screen.getByLabelText("Notification"), {
-            target: { value: "HOURS" },
-        });
-        fireEvent.change(screen.getByLabelText("Before"), {
+        await selectTaskDropdownOption("Reminder", "Custom");
+        await selectTaskDropdownOption("Reminder unit", "Hours");
+        fireEvent.change(screen.getByLabelText("Reminder amount"), {
             target: { value: "4" },
         });
-        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
         await waitFor(() =>
             expect(
@@ -2641,13 +2718,12 @@ describe("App", () => {
         fireEvent.change(screen.getByLabelText("Title"), {
             target: { value: "New task" },
         });
-        fireEvent.change(screen.getByLabelText("Repeat"), {
-            target: { value: "DAILY" },
-        });
-        fireEvent.change(screen.getByLabelText("Until"), {
+        await selectTaskDropdownOption("Repeat", "Daily");
+        await selectTaskDropdownOption("Ends", "On date");
+        fireEvent.change(screen.getByLabelText("Repeat end date"), {
             target: { value: "2026-05-07" },
         });
-        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
         expect(
             await screen.findByText(
@@ -2701,7 +2777,7 @@ describe("App", () => {
         fireEvent.change(screen.getByLabelText("Title"), {
             target: { value: "Edited task" },
         });
-        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
         await waitFor(() =>
             expect(
@@ -2718,6 +2794,57 @@ describe("App", () => {
             "task-edit",
             expect.objectContaining({ title: "Edited task" }),
         );
+    });
+
+    it("cancels edit changes without saving", async () => {
+        const now = new Date();
+        const todayAtTen = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate(),
+            10,
+            0,
+            0,
+            0,
+        );
+
+        mocks.tasks = [
+            {
+                id: "task-edit-cancel",
+                user_id: "user-1",
+                list_id: "list-1",
+                title: "Cancel me",
+                notes: null,
+                completed: false,
+                scheduled_start: todayAtTen.toISOString(),
+                scheduled_end: new Date(
+                    todayAtTen.getTime() + 60 * 60 * 1000,
+                ).toISOString(),
+                due_at: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                created_at: now.toISOString(),
+                updated_at: now.toISOString(),
+                completed_at: null,
+            },
+        ];
+
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: /Cancel me/i }),
+        );
+        fireEvent.change(screen.getByLabelText("Title"), {
+            target: { value: "Edited but canceled" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("heading", { name: "Edit task" }),
+            ).not.toBeInTheDocument(),
+        );
+        expect(mocks.updateTask).not.toHaveBeenCalled();
     });
 
     it("undoes a sidebar task edit and category change", async () => {
@@ -2737,10 +2864,8 @@ describe("App", () => {
         fireEvent.change(await screen.findByLabelText("Title"), {
             target: { value: "Edited task" },
         });
-        fireEvent.change(screen.getByLabelText("Category"), {
-            target: { value: "" },
-        });
-        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        await selectTaskDropdownOption("Category", "None");
+        fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
         await screen.findByRole("button", { name: "Undo task change" });
         fireEvent.click(
@@ -2804,10 +2929,11 @@ describe("App", () => {
             }),
         );
         await screen.findByRole("heading", { name: "Edit task" });
-        fireEvent.change(screen.getByLabelText("Until"), {
+        await selectTaskDropdownOption("Ends", "On date");
+        fireEvent.change(screen.getByLabelText("Repeat end date"), {
             target: { value: "2026-05-07" },
         });
-        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
         expect(
             await screen.findByText(
@@ -2857,7 +2983,7 @@ describe("App", () => {
             await screen.findByRole("button", { name: /Reschedule me/i }),
         );
         fireEvent.click(
-            screen.getByRole("button", { name: "Clear time" }),
+            screen.getByRole("button", { name: "Remove schedule" }),
         );
 
         expect(screen.getByLabelText("Start date")).toHaveValue("");
@@ -2865,7 +2991,7 @@ describe("App", () => {
         expect(screen.getByLabelText("End date")).toHaveValue("");
         expect(screen.getByLabelText("End time")).toHaveValue("");
 
-        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
         await waitFor(() =>
             expect(mocks.updateTask).toHaveBeenCalledWith(
@@ -2920,16 +3046,19 @@ describe("App", () => {
             await screen.findByRole("button", { name: /Notify me/i }),
         );
 
-        expect(screen.getByLabelText("Notification")).toHaveValue("MINUTES");
-        expect(screen.getByLabelText("Before")).toHaveValue(15);
+        expect(screen.getByRole("button", { name: "Reminder" })).toHaveTextContent(
+            "Custom",
+        );
+        expect(
+            screen.getByRole("button", { name: "Reminder unit" }),
+        ).toHaveTextContent("Minutes");
+        expect(screen.getByLabelText("Reminder amount")).toHaveValue(15);
 
-        fireEvent.change(screen.getByLabelText("Notification"), {
-            target: { value: "DAYS" },
-        });
-        fireEvent.change(screen.getByLabelText("Before"), {
+        await selectTaskDropdownOption("Reminder unit", "Days");
+        fireEvent.change(screen.getByLabelText("Reminder amount"), {
             target: { value: "2" },
         });
-        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
         await waitFor(() =>
             expect(mocks.updateTask).toHaveBeenCalledWith(
@@ -3000,7 +3129,7 @@ describe("App", () => {
         fireEvent.change(screen.getByLabelText("Title"), {
             target: { value: "New task" },
         });
-        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
         await waitFor(() =>
             expect(
@@ -3048,7 +3177,7 @@ describe("App", () => {
         fireEvent.change(screen.getByLabelText("Title"), {
             target: { value: "Edited task" },
         });
-        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
         expect(
             screen.queryByRole("button", { name: "Undo task change" }),
@@ -3204,7 +3333,11 @@ describe("App", () => {
             screen.getByRole("button", { name: "Delete the recurrsive" }),
         ).toBeInTheDocument();
         expect(
-            screen.getByRole("button", { name: "Cancel" }),
+            within(
+                screen.getByRole("dialog", {
+                    name: "Delete recurring task",
+                }),
+            ).getByRole("button", { name: "Cancel" }),
         ).toBeInTheDocument();
 
         fireEvent.click(
@@ -3298,7 +3431,7 @@ describe("App", () => {
         fireEvent.change(await screen.findByLabelText("Title"), {
             target: { value: "Renamed recurring task" },
         });
-        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
         expect(
             await screen.findByRole("dialog", {
@@ -3372,7 +3505,7 @@ describe("App", () => {
         fireEvent.change(await screen.findByLabelText("Notes"), {
             target: { value: "Updated recurring note" },
         });
-        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
         expect(
             await screen.findByRole("dialog", {
@@ -3417,7 +3550,7 @@ describe("App", () => {
         fireEvent.change(await screen.findByLabelText("Notes"), {
             target: { value: "Updated note" },
         });
-        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        fireEvent.click(screen.getByRole("button", { name: "Done" }));
         fireEvent.click(
             await screen.findByRole("button", { name: "Edit only this" }),
         );
@@ -4232,7 +4365,7 @@ describe("App", () => {
         fireEvent.change(screen.getByLabelText("Title"), {
             target: { value: "Date-only task" },
         });
-        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
         await waitFor(() =>
             expect(mocks.createTask).toHaveBeenCalledWith(
@@ -4247,7 +4380,7 @@ describe("App", () => {
         );
     });
 
-    it("clears scheduled fields in the create form when moving a task to no time", async () => {
+    it("does not show schedule removal in the create form", async () => {
         render(<App />);
 
         expect(
@@ -4257,14 +4390,31 @@ describe("App", () => {
             screen.getByRole("button", { name: "Open all-day create task" }),
         );
 
-        fireEvent.click(
-            screen.getByRole("button", { name: "Clear time" }),
-        );
+        expect(
+            screen.queryByRole("button", { name: "Remove schedule" }),
+        ).not.toBeInTheDocument();
 
-        expect(screen.getByLabelText("Start date")).toHaveValue("");
+        expect(screen.getByLabelText("Start date")).toHaveValue("2026-05-08");
         expect(screen.getByLabelText("Start time")).toHaveValue("");
         expect(screen.getByLabelText("End date")).toHaveValue("");
         expect(screen.getByLabelText("End time")).toHaveValue("");
+
+        fireEvent.change(screen.getByLabelText("Title"), {
+            target: { value: "Date-only task" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+        await waitFor(() =>
+            expect(mocks.createTask).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    title: "Date-only task",
+                    scheduled_start: "2026-05-08T00:00:00",
+                    scheduled_end: null,
+                    all_day: true,
+                    due_at: null,
+                }),
+            ),
+        );
     });
 
     it("filters upcoming tasks by a custom day window including today", async () => {

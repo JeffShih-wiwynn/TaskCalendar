@@ -27,9 +27,21 @@
   box-sizing: border-box;
 }
 
+html {
+  min-height: 100%;
+  background: var(--page-bg);
+}
+
 body {
   margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
   background: var(--page-bg);
+}
+
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .mobile-app-nav {
@@ -267,13 +279,14 @@ body {
 }
 
 .theme-toggle {
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  border-radius: 10px;
   padding: 7px 10px;
   color: var(--text);
-  background: var(--panel-bg);
+  background: color-mix(in srgb, var(--panel-bg) 74%, transparent);
   font: inherit;
   cursor: pointer;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
 }
 
 .theme-toggle,
@@ -314,21 +327,35 @@ body {
   transform: scale(0.97);
 }
 
+.settings-toggle,
+.sidebar-toggle,
+.calendar-year-button,
+.calendar-toolbar-button,
+.calendar-nav-button {
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  background: color-mix(in srgb, var(--panel-bg) 72%, transparent);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+}
+
 .settings-menu {
   position: relative;
 }
 
 .settings-toggle {
-  min-width: 40px;
-  padding: 7px 10px;
+  min-width: 42px;
+  min-height: 38px;
+  padding: 7px 11px;
   font-size: 1.1rem;
   line-height: 1;
+  overflow: hidden;
 }
 
 .sidebar-toggle {
-  min-width: 40px;
-  padding: 7px 10px;
+  min-width: 42px;
+  min-height: 38px;
+  padding: 7px 11px;
   line-height: 1;
+  overflow: hidden;
 }
 
 .settings-menu-panel {
@@ -641,6 +668,27 @@ h2 {
   box-shadow: 0 12px 28px rgb(24 32 38 / 14%);
   overflow: hidden;
   transform-origin: top center;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--subtle) 58%, var(--panel-bg))
+    color-mix(in srgb, var(--panel-bg) 88%, var(--border));
+}
+
+.filter-menu::-webkit-scrollbar {
+  width: 10px;
+}
+
+.filter-menu::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--panel-bg) 88%, var(--border));
+}
+
+.filter-menu::-webkit-scrollbar-thumb {
+  border: 2px solid color-mix(in srgb, var(--panel-bg) 88%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--subtle) 42%, var(--panel-bg));
+}
+
+.filter-menu::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--subtle) 58%, var(--panel-bg));
 }
 
 .category-row {
@@ -995,6 +1043,22 @@ h2 {
   gap: 8px;
 }
 
+.task-detail-header-actions--create {
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.task-detail-header-actions--edit {
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.task-detail-header-actions-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .task-row {
   display: flex;
   align-items: flex-start;
@@ -1320,17 +1384,22 @@ h2 {
 
 .task-form {
   display: grid;
-  gap: 14px;
+  gap: 12px;
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--panel-bg);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--panel-bg) 96%, var(--accent-soft)),
+      var(--panel-bg)
+    );
   box-shadow: 0 10px 28px var(--shadow);
 }
 
 .task-form.active-form {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgb(23 107 88 / 14%);
+  border-color: var(--border);
+  box-shadow: 0 10px 28px var(--shadow);
 }
 
 .webhook-settings-form {
@@ -1363,6 +1432,88 @@ h2 {
   min-width: 0;
 }
 
+.task-composer-title-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.task-composer-title-kicker {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.task-composer-title {
+  min-width: 0;
+}
+
+.task-composer-title label {
+  gap: 4px;
+}
+
+.task-composer-title span {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.task-composer-title input {
+  border-color: transparent;
+  border-radius: 10px;
+  padding: 9px 10px;
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1.2;
+  background: color-mix(in srgb, var(--panel-bg) 58%, transparent);
+}
+
+.task-composer-title-edit input {
+  width: 100%;
+}
+
+.task-composer-title input:focus {
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--field-border));
+  outline: none;
+  background-color: color-mix(in srgb, var(--panel-bg) 84%, var(--accent-soft));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.task-composer-section {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel-bg) 82%, transparent);
+}
+
+.task-composer-section-compact {
+  gap: 10px;
+}
+
+.task-composer-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.task-composer-section-header h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.task-form-schedule-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .task-form-recurring-inline {
   display: grid;
   gap: 10px;
@@ -1380,15 +1531,254 @@ h2 {
   max-width: 280px;
 }
 
+.task-composer-control-group {
+  display: grid;
+  gap: 8px;
+}
+
+.task-composer-control-label,
+.task-form .task-composer-control-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.task-recurrence-sentence,
+.task-reminder-select-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.task-reminder-select-label {
+  display: grid;
+  gap: 8px;
+}
+
+.task-composer-muted-word {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.task-recurrence-count {
+  width: 64px;
+  flex: 0 0 64px;
+  text-align: center;
+}
+
+.task-recurrence-ends,
+.task-reminder-custom {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr);
+  align-items: end;
+  padding-top: 2px;
+}
+
 .task-form label {
   display: grid;
   gap: 6px;
+}
+
+.task-form-field {
+  display: grid;
+  gap: 6px;
+}
+
+.task-form-custom-dropdown {
+  min-width: 0;
+}
+
+.task-form-custom-dropdown .filter-trigger,
+.task-form-custom-dropdown .filter-trigger[aria-expanded="true"] {
+  border: 1px solid var(--border) !important;
+  background-color: var(--panel-bg) !important;
+  color: var(--text);
+}
+
+.task-form-custom-dropdown .filter-trigger:hover,
+.task-form-custom-dropdown .filter-trigger:focus-visible {
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border)) !important;
+  background-color: color-mix(in srgb, var(--panel-bg) 92%, var(--accent) 8%) !important;
+}
+
+.task-recurrence-sentence .task-form-custom-dropdown {
+  flex: 1 1 150px;
+}
+
+.task-form-dropdown-trigger {
+  min-height: 40px;
+  border-color: var(--border);
+  color: var(--text);
+  background: var(--panel-bg);
+  transition:
+    border-color var(--micro-duration-medium) var(--micro-ease),
+    background-color var(--micro-duration-medium) var(--micro-ease),
+    color var(--micro-duration-medium) var(--micro-ease),
+    box-shadow var(--micro-duration-medium) var(--micro-ease);
+}
+
+.task-form-dropdown-trigger:hover {
+  border-color: color-mix(in srgb, var(--accent) 16%, var(--border));
+  background: color-mix(in srgb, var(--panel-bg) 92%, var(--accent) 8%);
+}
+
+.task-form-dropdown-trigger:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.task-form-dropdown-menu {
+  z-index: 30;
+  max-height: var(--task-form-dropdown-menu-max-height, 260px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background-color: var(--panel-bg) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 14px 30px rgb(24 32 38 / 16%);
+}
+
+.task-form-dropdown-menu-up {
+  top: auto;
+  bottom: calc(100% + 6px);
+  transform-origin: bottom center;
+}
+
+.task-form-dropdown-menu-down {
+  top: calc(100% + 6px);
+  bottom: auto;
+  transform-origin: top center;
+}
+
+.task-form-dropdown-menu .filter-option {
+  min-height: 36px;
+  padding: 7px 10px;
+  background-color: var(--panel-bg);
+}
+
+.task-form-dropdown-menu .filter-option:hover,
+.task-form-dropdown-menu .filter-option:focus-visible {
+  background-color: color-mix(in srgb, var(--panel-bg) 90%, var(--accent) 10%) !important;
+}
+
+.task-form-dropdown-menu .filter-option.active,
+.task-form-dropdown-menu .filter-option[aria-selected="true"] {
+  background-color: color-mix(in srgb, var(--panel-bg) 92%, var(--accent) 8%) !important;
+  color: color-mix(in srgb, var(--accent) 76%, var(--text));
+}
+
+.task-form-dropdown-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  border: 1px solid color-mix(in srgb, var(--field-border) 72%, transparent);
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--panel-bg) 58%, transparent);
+}
+
+.task-form-dropdown-dot-muted {
+  background:
+    linear-gradient(135deg, transparent 42%, var(--subtle) 42%, var(--subtle) 58%, transparent 58%);
+  opacity: 0.72;
 }
 
 .task-form-datetime-row {
   display: grid;
   gap: 10px;
   grid-template-columns: minmax(0, 1fr) minmax(110px, 0.6fr);
+}
+
+.task-datetime-shell {
+  position: relative;
+  min-width: 0;
+}
+
+.task-datetime-shell input {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+
+.task-datetime-shell-empty .task-datetime-placeholder {
+  opacity: 1;
+}
+
+.task-datetime-placeholder {
+  position: absolute;
+  inset-inline-start: 12px;
+  inset-block-start: 50%;
+  transform: translateY(-50%);
+  color: var(--subtle);
+  font: inherit;
+  font-size: 0.92rem;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 0;
+}
+
+.task-datetime-shell-empty input[type="date"] {
+  color: transparent;
+}
+
+.task-datetime-shell-empty input[type="date"]::-webkit-datetime-edit,
+.task-datetime-shell-empty input[type="date"]::-webkit-datetime-edit-text,
+.task-datetime-shell-empty input[type="date"]::-webkit-datetime-edit-month-field,
+.task-datetime-shell-empty input[type="date"]::-webkit-datetime-edit-day-field,
+.task-datetime-shell-empty input[type="date"]::-webkit-datetime-edit-year-field {
+  color: transparent;
+}
+
+.task-datetime-shell-empty input[type="time"] {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: transparent;
+}
+
+.task-datetime-shell-empty input[type="time"]::-webkit-datetime-edit,
+.task-datetime-shell-empty input[type="time"]::-webkit-datetime-edit-fields-wrapper,
+.task-datetime-shell-empty input[type="time"]::-webkit-datetime-edit-text,
+.task-datetime-shell-empty input[type="time"]::-webkit-datetime-edit-hour-field,
+.task-datetime-shell-empty input[type="time"]::-webkit-datetime-edit-minute-field,
+.task-datetime-shell-empty input[type="time"]::-webkit-datetime-edit-ampm-field {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.task-datetime-shell:not(.task-datetime-shell-empty) input[type="date"],
+.task-datetime-shell:not(.task-datetime-shell-empty) input[type="date"]::-webkit-datetime-edit,
+.task-datetime-shell:not(.task-datetime-shell-empty) input[type="date"]::-webkit-datetime-edit-text,
+.task-datetime-shell:not(.task-datetime-shell-empty) input[type="date"]::-webkit-datetime-edit-month-field,
+.task-datetime-shell:not(.task-datetime-shell-empty) input[type="date"]::-webkit-datetime-edit-day-field,
+.task-datetime-shell:not(.task-datetime-shell-empty) input[type="date"]::-webkit-datetime-edit-year-field,
+.task-datetime-shell input[type="time"],
+.task-datetime-shell input[type="time"]::-webkit-datetime-edit,
+.task-datetime-shell input[type="time"]::-webkit-datetime-edit-fields-wrapper,
+.task-datetime-shell input[type="time"]::-webkit-datetime-edit-text,
+.task-datetime-shell input[type="time"]::-webkit-datetime-edit-hour-field,
+.task-datetime-shell input[type="time"]::-webkit-datetime-edit-minute-field,
+.task-datetime-shell input[type="time"]::-webkit-datetime-edit-ampm-field,
+.task-datetime-shell input[type="date"]:focus,
+.task-datetime-shell input[type="date"]:focus::-webkit-datetime-edit,
+.task-datetime-shell input[type="date"]:focus::-webkit-datetime-edit-text,
+.task-datetime-shell input[type="date"]:focus::-webkit-datetime-edit-month-field,
+.task-datetime-shell input[type="date"]:focus::-webkit-datetime-edit-day-field,
+.task-datetime-shell input[type="date"]:focus::-webkit-datetime-edit-year-field {
+  color: var(--text);
+}
+
+.task-datetime-shell input[type="time"]:focus,
+.task-datetime-shell input[type="time"]:focus::-webkit-datetime-edit,
+.task-datetime-shell input[type="time"]:focus::-webkit-datetime-edit-fields-wrapper,
+.task-datetime-shell input[type="time"]:focus::-webkit-datetime-edit-text,
+.task-datetime-shell input[type="time"]:focus::-webkit-datetime-edit-hour-field,
+.task-datetime-shell input[type="time"]:focus::-webkit-datetime-edit-minute-field,
+.task-datetime-shell input[type="time"]:focus::-webkit-datetime-edit-ampm-field {
+  color: var(--text);
+  -webkit-text-fill-color: var(--text);
 }
 
 .task-form span {
@@ -1402,12 +1792,36 @@ h2 {
 .task-form textarea {
   width: 100%;
   min-width: 0;
-  border: 1px solid var(--field-border);
-  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--field-border) 82%, transparent);
+  border-radius: 8px;
   padding: 10px 11px;
   color: var(--text);
   font: inherit;
-  background: var(--panel-bg);
+  background-color: color-mix(in srgb, var(--panel-bg) 78%, transparent);
+}
+
+.task-form select {
+  appearance: none;
+  padding-right: 34px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 17px) 52%,
+    calc(100% - 12px) 52%;
+  background-size:
+    5px 5px,
+    5px 5px;
+  background-repeat: no-repeat;
+}
+
+.task-form input:focus,
+.task-form select:focus,
+.task-form textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--field-border));
+  outline: none;
+  background-color: color-mix(in srgb, var(--panel-bg) 88%, var(--accent-soft));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 input[type="checkbox"].task-checkbox {
@@ -1435,7 +1849,27 @@ input[type="checkbox"].task-checkbox:checked {
 }
 
 .task-form textarea {
+  min-height: 68px;
   resize: vertical;
+}
+
+.task-composer-notes > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.task-composer-notes {
+  position: relative;
+}
+
+.task-composer-notes textarea {
+  min-height: 64px;
+  color: color-mix(in srgb, var(--text) 92%, var(--muted));
+  background-color: color-mix(in srgb, var(--panel-bg) 62%, transparent);
 }
 
 .task-form label.task-form-inline-toggle {
@@ -1459,6 +1893,14 @@ input[type="checkbox"].task-checkbox:checked {
   --checkbox-size: 16px;
   --checkbox-radius: 4px;
   --checkbox-mark-size: 68%;
+}
+
+.task-form label.task-composer-completed {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .task-form-actions {
@@ -1533,17 +1975,26 @@ input[type="checkbox"].task-checkbox:checked {
 .task-form .task-form-no-time-button {
   width: fit-content;
   align-self: start;
-  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--field-border) 82%, transparent);
   border-radius: 8px;
-  padding: 7px 12px;
-  color: color-mix(in srgb, var(--danger) 85%, white);
-  background: transparent;
+  padding: 7px 10px;
+  color: var(--muted);
+  background-color: transparent;
   box-shadow: none;
 }
 
 .task-form .task-form-no-time-button:hover:not(:disabled) {
-  color: #ffffff;
-  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--field-border));
+  color: color-mix(in srgb, var(--danger) 96%, white);
+  background-color: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.task-form .task-form-no-time-button:focus-visible {
+  border-color: color-mix(in srgb, var(--danger) 34%, var(--field-border));
+  color: color-mix(in srgb, var(--danger) 84%, var(--text));
+  background-color: transparent;
+  outline: 2px solid color-mix(in srgb, var(--danger) 18%, transparent);
+  outline-offset: 2px;
 }
 
 .form-error {
@@ -1615,6 +2066,8 @@ input[type="checkbox"].task-checkbox:checked {
 .calendar-view-timeGridDay .fc-view-harness,
 .calendar-view-timeGridWeek .fc-view,
 .calendar-view-timeGridDay .fc-view,
+.calendar-view-timeGridWeek .fc-timegrid,
+.calendar-view-timeGridDay .fc-timegrid,
 .calendar-view-timeGridWeek .fc-scrollgrid,
 .calendar-view-timeGridDay .fc-scrollgrid,
 .calendar-view-timeGridWeek .fc-scroller-harness,
@@ -1624,6 +2077,11 @@ input[type="checkbox"].task-checkbox:checked {
 .calendar-view-timeGridWeek .fc-timegrid-body,
 .calendar-view-timeGridDay .fc-timegrid-body {
   min-height: 0;
+}
+
+.calendar-view-timeGridWeek .fc-timegrid,
+.calendar-view-timeGridDay .fc-timegrid {
+  height: 100%;
 }
 
 .calendar-toolbar {
@@ -1661,31 +2119,30 @@ input[type="checkbox"].task-checkbox:checked {
 .calendar-year-button,
 .calendar-toolbar-button,
 .calendar-nav-button {
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 10px;
   color: var(--text);
-  background: var(--panel-bg);
   font: inherit;
   cursor: pointer;
 }
 
 .calendar-year-button,
 .calendar-toolbar-button {
-  padding: 8px 10px;
+  min-height: 38px;
+  padding: 7px 11px;
 }
 
 .calendar-nav-button {
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   padding: 0;
   font-size: 1.1rem;
   line-height: 1;
 }
 
 .calendar-toolbar-button.active {
-  border-color: #b7d8cb;
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
   color: var(--accent);
-  background: var(--accent-soft);
+  background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
 }
 
 .calendar-hours-toggle {
@@ -1695,38 +2152,122 @@ input[type="checkbox"].task-checkbox:checked {
 .calendar-year-button:hover,
 .calendar-toolbar-button:hover,
 .calendar-nav-button:hover {
-  border-color: #115444;
-  color: #ffffff;
-  background: #115444;
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 64%, transparent);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 8%);
 }
 
 .calendar-toolbar-button.active:hover {
-  border-color: #b7d8cb;
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
   color: var(--accent);
-  background: var(--accent-soft);
+  background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
+}
+
+.settings-toggle:hover:not(:disabled),
+.sidebar-toggle:hover:not(:disabled),
+.calendar-year-button:hover:not(:disabled),
+.calendar-toolbar-button:hover:not(:disabled),
+.calendar-nav-button:hover:not(:disabled) {
+  transform: none;
+}
+
+.settings-toggle:hover:not(:disabled),
+.settings-toggle:focus-visible,
+.settings-toggle:active:not(:disabled),
+.sidebar-toggle:hover:not(:disabled),
+.sidebar-toggle:focus-visible,
+.sidebar-toggle:active:not(:disabled) {
+  border-color: color-mix(in srgb, #18a058 34%, var(--border));
+  color: #0e6f44;
+  background: color-mix(in srgb, #18a058 18%, transparent);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+}
+
+.calendar-year-button:focus-visible,
+.calendar-toolbar-button:focus-visible,
+.calendar-nav-button:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 70%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .floating-panel-action {
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 12px;
   padding: 7px 12px;
   color: var(--text);
-  background: var(--panel-bg);
+  background: transparent;
   font: inherit;
   font-weight: 700;
   cursor: pointer;
 }
 
+.floating-panel-icon-button {
+  min-width: 42px;
+  min-height: 42px;
+  padding: 8px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.floating-panel-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.floating-panel-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 .floating-panel-save {
-  border-color: var(--accent);
-  color: #ffffff;
-  background: var(--accent);
+  color: var(--text);
+}
+
+.floating-panel-create,
+.floating-panel-done {
+  color: var(--text);
 }
 
 .floating-panel-delete {
-  border-color: var(--danger);
-  color: #ffffff;
-  background: var(--danger);
+  color: var(--text);
+}
+
+.floating-panel-close,
+.floating-panel-cancel {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel-bg) 92%, transparent);
+  border-color: var(--border);
+}
+
+.floating-panel-close:hover:not(:disabled),
+.floating-panel-close:focus-visible,
+.floating-panel-cancel:hover:not(:disabled),
+.floating-panel-cancel:focus-visible {
+  border-color: var(--border);
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel-bg) 86%, var(--border));
+}
+
+.floating-panel-create:hover:not(:disabled),
+.floating-panel-done:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel-bg));
+}
+
+.floating-panel-delete:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--border));
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, var(--panel-bg));
 }
 
 .floating-panel-action:disabled {
@@ -1874,13 +2415,13 @@ input[type="checkbox"].task-checkbox:checked {
     height: 52px;
     border-radius: 16px;
   }
-}
 
-.app-shell.mobile-screen-calendar.detail-panel-open .undo-snackbar,
-.app-shell.mobile-screen-calendar.mobile-quick-action-open .undo-snackbar {
-  right: 16px;
-  top: calc(16px + env(safe-area-inset-top));
-  bottom: auto;
+  .app-shell.mobile-screen-calendar.detail-panel-open .undo-snackbar,
+  .app-shell.mobile-screen-calendar.mobile-quick-action-open .undo-snackbar {
+    right: max(16px, env(safe-area-inset-right));
+    top: calc(16px + env(safe-area-inset-top));
+    bottom: auto;
+  }
 }
 
 .undo-snackbar:hover:not(:disabled) {
@@ -2016,8 +2557,12 @@ input[type="checkbox"].task-checkbox:checked {
   .calendar-nav-button:hover:not(:disabled),
   .context-menu button:hover:not(:disabled),
   .choice-dialog-actions button:hover:not(:disabled) {
-    transform: translateY(-1px);
     box-shadow: 0 8px 18px var(--shadow);
+  }
+
+  .settings-toggle:hover:not(:disabled),
+  .sidebar-toggle:hover:not(:disabled) {
+    box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
   }
 }
 
@@ -2303,8 +2848,12 @@ input[type="checkbox"].task-checkbox:checked {
     flex-direction: column;
     grid-template-columns: 1fr;
     gap: 12px;
-    padding: max(12px, env(safe-area-inset-top)) 12px
-      calc(76px + env(safe-area-inset-bottom)) 12px;
+    padding:
+      max(12px, env(safe-area-inset-top))
+      max(12px, env(safe-area-inset-right))
+      calc(84px + env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
+    overscroll-behavior-y: contain;
   }
 
   .mobile-app-nav {
@@ -2408,8 +2957,15 @@ input[type="checkbox"].task-checkbox:checked {
 
   .task-form-row-split,
   .task-form-row-wide-narrow,
+  .task-composer-title-row,
+  .task-recurrence-ends,
+  .task-reminder-custom,
   .task-form-actions {
     grid-template-columns: 1fr;
+  }
+
+  .task-composer-completed {
+    justify-self: start;
   }
 
   .task-form,
@@ -2435,7 +2991,7 @@ input[type="checkbox"].task-checkbox:checked {
   .app-shell.mobile-screen-upcoming .task-list,
   .app-shell.mobile-screen-unscheduled .task-list {
     overflow: visible;
-    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
   }
 
   .app-shell.mobile-screen-unscheduled .task-order-button-desktop-top,
@@ -2494,6 +3050,7 @@ input[type="checkbox"].task-checkbox:checked {
     box-shadow: 0 24px 60px rgb(24 32 38 / 22%);
     pointer-events: auto;
     overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   .mobile-task-sheet .task-detail-header {
@@ -2507,6 +3064,10 @@ input[type="checkbox"].task-checkbox:checked {
 
   .mobile-task-sheet .task-detail-header-actions {
     gap: 6px;
+  }
+
+  .mobile-task-sheet .task-detail-header-actions--create {
+    gap: 8px;
   }
 
   .floating-panel-action {
@@ -2544,6 +3105,7 @@ input[type="checkbox"].task-checkbox:checked {
     border-radius: 16px 16px 12px 12px;
     background: var(--page-bg);
     box-shadow: 0 20px 54px rgb(24 32 38 / 20%);
+    overscroll-behavior: contain;
   }
 
   .mobile-month-task-preview-header {
@@ -2595,6 +3157,15 @@ input[type="checkbox"].task-checkbox:checked {
     background: var(--page-bg);
     box-shadow: 0 22px 56px rgb(24 32 38 / 22%);
     overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .dialog-backdrop {
+    padding:
+      max(16px, env(safe-area-inset-top))
+      max(12px, env(safe-area-inset-right))
+      calc(16px + env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
   }
 
   .mobile-calendar-action-header {
@@ -3100,13 +3671,13 @@ input[type="checkbox"].task-checkbox:checked {
 
   .calendar-toolbar .calendar-toolbar-button,
   .calendar-toolbar .calendar-year-button {
-    padding: 6px 6px;
+    padding: 6px 8px;
     font-size: 0.84rem;
   }
 
   .calendar-toolbar .calendar-nav-button {
-    width: 36px;
-    height: 36px;
+    width: 38px;
+    height: 38px;
   }
 
   .calendar-task {
@@ -3127,6 +3698,27 @@ input[type="checkbox"].task-checkbox:checked {
 
   .task-form {
     padding: 12px;
+  }
+
+  .task-composer-title-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .task-composer-title input {
+    font-size: 1.18rem;
+  }
+
+  .task-datetime-placeholder {
+    font-size: 0.84rem;
+  }
+
+  .task-composer-section {
+    padding: 10px;
+  }
+
+  .task-composer-section-header {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .task-form-recurring-top,
@@ -3237,8 +3829,11 @@ input[type="checkbox"].task-checkbox:checked {
 
 @media (max-width: 480px) {
   .app-shell {
-    padding: max(8px, env(safe-area-inset-top)) 8px
-      calc(76px + env(safe-area-inset-bottom)) 8px;
+    padding:
+      max(8px, env(safe-area-inset-top))
+      max(8px, env(safe-area-inset-right))
+      calc(84px + env(safe-area-inset-bottom))
+      max(8px, env(safe-area-inset-left));
   }
 
   .app-shell.mobile-screen-calendar {

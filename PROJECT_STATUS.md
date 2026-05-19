@@ -57,6 +57,8 @@ This file summarizes the current repository state for future contributors and AI
 - Sidebar backup export/import actions now support user-scoped restore with explicit confirmation before import
 - `APP_TIMEZONE` now controls application datetime serialization, recurrence boundaries, notification scheduling, and backup datetime handling
 - Vite PWA support now generates a manifest and service worker for production static assets without intentional API response caching
+- Task detail panel footer actions now share compact icon-button styling across Create and Edit, with a neutral cancel control and tighter spacing
+- Task-form recurrence, reminder, and category dropdowns now use the shared in-app dropdown pattern with viewport-aware placement and category color dots
 
 ## Work Currently In Progress
 

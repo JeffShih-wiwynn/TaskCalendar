@@ -32,19 +32,21 @@ The current app is web-first:
 - Recurring-task deletion choices for only the selected occurrence or the selected occurrence plus following occurrences in the same series.
 - Recurring-task edit choices for only the selected occurrence or the whole recurring series when editing shared series fields such as title, category, schedule, and notifications. Clearing recurrence while editing the whole series keeps the edited occurrence as a standalone task and deletes the other materialized occurrences in that series.
 - Sidebar webhook settings button that expands inline inputs for the Discord webhook URL and custom notification message format.
-- Webhook settings test button for sending a one-off Discord test message from the current draft values before saving.
+- Webhook settings uses `Done` to save the current draft and `Test` to send a one-off Discord test message before saving.
 - Sidebar backup menu that exports the current user's calendar data and imports `.json` backups after explicit confirmation.
 - Category/task-list creation, color updates, and deletion.
 - Sidebar filters for Today, Upcoming, Completed, and All tasks.
 - Custom upcoming-day window, including today.
 - Optional completed-task visibility toggle on the calendar while viewing completed tasks.
 - Optional scheduled start/end, so unscheduled tasks are valid.
+- Create/Edit task composer actions use compact icon buttons with a neutral cancel/close control and shared footer spacing.
+- Recurrence, reminder, and category dropdowns use shared in-app dropdown menus with viewport-aware placement and category color dots.
 - Backend health endpoint.
 - Backend username/password registration and login endpoints with JWT access tokens.
 - Reusable backend current-user dependency for authenticated endpoints.
 - Backend REST endpoints for tasks and task lists.
 - Alembic-managed PostgreSQL schema migrations.
-- Phase 1 PWA support with a manifest, app icons, standalone display mode, and generated static asset service worker.
+- Phase 1 PWA support with a manifest, app icons, standalone display mode, and generated static asset service worker with app-shell fetch handling.
 - Basic responsive layout for phone-width browsers, stacking the sidebar and calendar instead of forcing the desktop side-by-side layout.
 
 ## Intended Future Features

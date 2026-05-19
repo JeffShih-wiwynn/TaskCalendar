@@ -6,7 +6,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      strategies: 'injectManifest',
       registerType: 'autoUpdate',
+      srcDir: 'src',
+      filename: 'sw.ts',
       includeAssets: [
         'pwa-icon.svg',
         'pwa-maskable-icon.svg',
