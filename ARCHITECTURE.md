@@ -27,6 +27,7 @@ This document explains how the project is structured today and why it is organiz
 - Keep the API reusable for future clients.
 - Preserve the desktop drag-and-drop calendar UX.
 - Keep mobile usability as a separate concern instead of forcing desktop patterns onto small screens.
+- On narrow screens, keep calendar events tap/click-only so task editing stays reliable without exposing drag or resize affordances.
 - Preserve local non-Docker development.
 
 ## Task And Calendar Model
@@ -104,4 +105,3 @@ These are roadmap items, not current implementation goals.
 ## Roadmap Relationship
 
 `docs/roadmap.md` tracks feature progression and future phases. This document explains why the project is structured the way it is today and what constraints future changes should respect.
-

@@ -76,7 +76,8 @@ This document summarizes what is already in the repository snapshot and where th
   - Vite PWA support is configured with a generated manifest, app icons, standalone display mode, and static asset service worker.
   - The service worker precaches built frontend assets only and avoids intentional caching for API, auth, backup, and health routes.
   - Narrow-screen CSS stacks the sidebar and calendar, hides the desktop sidebar resizer, improves touch target sizing, and prevents task forms from overflowing horizontally.
-  - Mobile calendar interactions now use a quick action sheet for tap-to-edit and 15-minute time adjustments, while empty-space long press still creates a task.
+  - Mobile calendar interactions now use a quick action sheet for tap-to-edit while empty-space long press still creates a task.
+  - Mobile calendar events are intentionally non-draggable and non-resizable; desktop drag, resize, and event click remain available.
   - The current task composer uses compact icon footer actions, shared neutral cancel controls, and custom in-app dropdowns for recurrence, reminders, and categories.
 
 ## Current Notes
@@ -96,6 +97,7 @@ This document summarizes what is already in the repository snapshot and where th
 - Completed tasks keep their category color in the calendar and render with lower opacity instead of a fixed pale fill.
 - The task UI now has smoother shared motion timings, a clearer drag-to-calendar handle, and subtle calendar event enter animations for view and date transitions.
 - No-time and calendar drag targets now use softer drop-zone highlighting and centered helper labeling instead of hard outlines.
+- Calendar event clicks on desktop are restored after the mobile readonly drag guard, and narrow-screen calendar events stay tap-only instead of showing drag or resize affordances.
 - Backup export and import are now available from the sidebar settings menu, with import restricted to authenticated user data and guarded by an explicit confirmation step.
 - Undo is implemented as a floating icon-only control, stays single-step, and clears on newer task mutations so stale undo actions do not linger.
 - `due_at` still exists in the backend/data model, but the current edit form hides it.

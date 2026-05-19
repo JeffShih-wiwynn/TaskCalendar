@@ -21,10 +21,10 @@ The current app is web-first:
 - No-time task drag handles rebind after sidebar and detail-panel re-renders, and the month-view drag mirror stays aligned with the cursor.
 - Month view day-grid layout should render aligned immediately on view switch without requiring a click to recalculate the grid.
 - Clickable month-view year control for jumping by year.
-- Draggable and resizable scheduled task events.
+- Draggable and resizable scheduled task events on desktop; mobile calendar events are tap/click-only and do not expose drag or resize affordances.
 - Week and day views default to the configured working-hours range and include a compact `Work` / `Full` viewport toggle for switching between working-hours and full-day time grids.
 - Task creation from selected calendar time ranges, including all-day slots.
-- Mobile calendar interactions use a quick action sheet for tap-to-edit and 15-minute adjustments.
+- Mobile calendar interactions use a quick action sheet for tap-to-edit; drag and resize are disabled on narrow screens.
 - Task editing for title, notes, category, scheduled start/end, and completion.
 - Recurring task creation with RRULE-style daily, weekly, monthly, and yearly intervals.
 - Task completion and uncompletion.
