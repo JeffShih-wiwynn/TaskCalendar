@@ -1668,6 +1668,135 @@ describe("App", () => {
         expect(screen.queryByLabelText("Edit task panel")).not.toBeInTheDocument();
     });
 
+    it("shows the recurring edit confirmation above the mobile edit sheet", async () => {
+        setMobileLayout(true);
+        mocks.tasks = [
+            makeTask({
+                id: "task-external",
+                title: "Mobile recurring edit",
+                scheduled_start: "2026-05-08T09:00:00.000Z",
+                scheduled_end: "2026-05-08T10:00:00.000Z",
+                recurrence_rule: "FREQ=DAILY;INTERVAL=1",
+                recurrence_series_id: "series-mobile-edit",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Mobile Calendar" }));
+        fireEvent.click(screen.getByTestId("calendar-event-task-external"));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Edit details" }),
+        );
+        await screen.findByLabelText("Edit task panel");
+
+        fireEvent.change(screen.getByLabelText("Title"), {
+            target: { value: "Mobile recurring renamed" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+        const dialog = await screen.findByRole("dialog", {
+            name: "Edit recurring task",
+        });
+        expect(dialog).toHaveClass("choice-dialog--mobile-sheet");
+        expect(dialog.closest(".dialog-backdrop")).toHaveClass(
+            "dialog-backdrop--mobile-sheet",
+        );
+        expect(mocks.updateTask).not.toHaveBeenCalled();
+
+        fireEvent.click(
+            screen.getByRole("button", { name: "Edit all recurring tasks" }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.updateTask).toHaveBeenCalledWith(
+                "task-external",
+                expect.objectContaining({
+                    title: "Mobile recurring renamed",
+                }),
+                { updateScope: "series" },
+            ),
+        );
+    });
+
+    it("shows the recurring delete confirmation from the mobile quick sheet", async () => {
+        setMobileLayout(true);
+        mocks.tasks = [
+            makeTask({
+                id: "task-external",
+                title: "Mobile recurring delete",
+                scheduled_start: "2026-05-08T09:00:00.000Z",
+                scheduled_end: "2026-05-08T10:00:00.000Z",
+                recurrence_rule: "FREQ=DAILY;INTERVAL=1",
+                recurrence_series_id: "series-mobile-delete",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Mobile Calendar" }));
+        fireEvent.click(screen.getByTestId("calendar-event-task-external"));
+        fireEvent.click(await screen.findByRole("button", { name: "Delete task" }));
+
+        const dialog = await screen.findByRole("dialog", {
+            name: "Delete recurring task",
+        });
+        expect(dialog).toHaveClass("choice-dialog--mobile-sheet");
+        expect(dialog.closest(".dialog-backdrop")).toHaveClass(
+            "dialog-backdrop--mobile-sheet",
+        );
+        expect(mocks.deleteTask).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole("button", { name: "Delete only this" }));
+
+        await waitFor(() =>
+            expect(mocks.deleteTask).toHaveBeenCalledWith("task-external", {
+                deleteScope: "single",
+            }),
+        );
+    });
+
+    it("shows the recurring edit confirmation for mobile quick time changes", async () => {
+        setMobileLayout(true);
+        mocks.tasks = [
+            makeTask({
+                id: "task-external",
+                title: "Mobile recurring move",
+                scheduled_start: "2026-05-08T09:00:00.000Z",
+                scheduled_end: "2026-05-08T10:00:00.000Z",
+                recurrence_rule: "FREQ=DAILY;INTERVAL=1",
+                recurrence_series_id: "series-mobile-move",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Mobile Calendar" }));
+        fireEvent.click(screen.getByTestId("calendar-event-task-external"));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Move later 15 minutes" }),
+        );
+
+        const dialog = await screen.findByRole("dialog", {
+            name: "Edit recurring task",
+        });
+        expect(dialog).toHaveClass("choice-dialog--mobile-sheet");
+        expect(mocks.updateTask).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole("button", { name: "Edit only this" }));
+
+        await waitFor(() =>
+            expect(mocks.updateTask).toHaveBeenCalledWith(
+                "task-external",
+                {
+                    scheduled_start: "2026-05-08T09:15:00.000Z",
+                    scheduled_end: "2026-05-08T10:15:00.000Z",
+                    all_day: false,
+                },
+            ),
+        );
+    });
+
     it("keeps the mobile quick action completion label as Complete when already completed", async () => {
         setMobileLayout(true);
         mocks.tasks = [

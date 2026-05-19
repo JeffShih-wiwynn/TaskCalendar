@@ -6044,12 +6044,16 @@ export function App() {
 
             {pendingDeleteTask && (
                 <div
-                    className="dialog-backdrop"
+                    className={`dialog-backdrop ${
+                        isMobileLayout ? "dialog-backdrop--mobile-sheet" : ""
+                    }`}
                     role="presentation"
                     onClick={() => !isDeleting && setPendingTaskDelete(null)}
                 >
                     <div
-                        className="choice-dialog"
+                        className={`choice-dialog ${
+                            isMobileLayout ? "choice-dialog--mobile-sheet" : ""
+                        }`}
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="delete-recurring-task-title"
@@ -6109,7 +6113,9 @@ export function App() {
 
             {pendingTaskEdit && (
                 <div
-                    className="dialog-backdrop"
+                    className={`dialog-backdrop ${
+                        isMobileLayout ? "dialog-backdrop--mobile-sheet" : ""
+                    }`}
                     role="presentation"
                     onClick={() => {
                         if (isEditSaving) {
@@ -6122,7 +6128,9 @@ export function App() {
                     }}
                 >
                     <div
-                        className="choice-dialog"
+                        className={`choice-dialog ${
+                            isMobileLayout ? "choice-dialog--mobile-sheet" : ""
+                        }`}
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="edit-recurring-task-title"

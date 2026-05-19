@@ -3291,6 +3291,18 @@ input[type="checkbox"].task-checkbox:checked {
       max(12px, env(safe-area-inset-left));
   }
 
+  .dialog-backdrop--mobile-sheet {
+    z-index: 52;
+    place-items: end center;
+    background: rgb(24 32 38 / 38%);
+  }
+
+  .choice-dialog--mobile-sheet {
+    width: min(100%, 520px);
+    margin-bottom: calc(76px + env(safe-area-inset-bottom));
+    border-radius: 18px 18px 12px 12px;
+  }
+
   .mobile-calendar-action-header {
     display: flex;
     align-items: flex-start;
