@@ -25,6 +25,7 @@ The current app is web-first:
 - Week and day views default to the configured working-hours range and include a compact `Work` / `Full` viewport toggle for switching between working-hours and full-day time grids.
 - Task creation from selected calendar time ranges, including all-day slots.
 - Mobile calendar interactions use a quick action sheet for tap-to-edit; drag and resize are disabled on narrow screens.
+- Mobile month-view day previews use compact icon buttons for `Close` and `Add`, with the same flat button treatment as the rest of the app.
 - Task editing for title, notes, category, scheduled start/end, and completion.
 - Recurring task creation with RRULE-style daily, weekly, monthly, and yearly intervals.
 - Task completion and uncompletion.

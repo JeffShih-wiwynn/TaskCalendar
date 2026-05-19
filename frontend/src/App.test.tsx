@@ -139,6 +139,7 @@ const mocks = vi.hoisted(() => ({
     ],
     tasks: [] as Array<Record<string, unknown>>,
     listTasks: vi.fn(),
+    listTaskLists: vi.fn(async () => mocks.taskLists),
     createTask: vi.fn(async () => ({ id: "task-new" })),
     deleteTask: vi.fn(async () => undefined),
     completeTask: vi.fn(
@@ -579,7 +580,7 @@ vi.mock("./api/tasks", () => ({
 }));
 
 vi.mock("./api/taskLists", () => ({
-    listTaskLists: () => Promise.resolve(mocks.taskLists),
+    listTaskLists: mocks.listTaskLists,
     createTaskList: vi.fn(),
     updateTaskList: mocks.updateTaskList,
     deleteTaskList: mocks.deleteTaskList,
@@ -819,6 +820,7 @@ describe("App", () => {
             },
         ];
         mocks.listTasks.mockClear();
+        mocks.listTaskLists.mockClear();
         mocks.listTasks.mockImplementation(() =>
             Promise.resolve([...mocks.tasks].sort(sortTasksForApiMock)),
         );
@@ -1458,10 +1460,24 @@ describe("App", () => {
         const previewRegion = screen.getByRole("region", {
             name: "Selected day tasks",
         });
+        const addButton = within(previewRegion).getByRole("button", {
+            name: "Add task for selected day",
+        });
+        const closeButton = within(previewRegion).getByRole("button", {
+            name: "Close selected day tasks",
+        });
+        expect(addButton).toHaveClass(
+            "floating-panel-action",
+            "floating-panel-icon-button",
+            "mobile-month-task-preview-add",
+        );
+        expect(closeButton).toHaveClass(
+            "floating-panel-action",
+            "floating-panel-icon-button",
+            "mobile-month-task-preview-close",
+        );
         fireEvent.click(
-            await within(previewRegion).findByRole("button", {
-                name: "Add task for selected day",
-            }),
+            addButton,
         );
 
         expect(screen.getByRole("main")).toHaveClass("detail-panel-open");
@@ -1494,8 +1510,15 @@ describe("App", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "Open create task" }));
         expect(
-            screen.queryByLabelText("Create task panel"),
-        ).not.toBeInTheDocument();
+            await screen.findByLabelText("Create task panel"),
+        ).toBeInTheDocument();
+        expect(screen.getByLabelText("Start date")).toHaveValue("2026-05-08");
+        expect(screen.getByLabelText("Start time")).toHaveValue("17:00");
+        expect(screen.getByLabelText("End time")).toHaveValue("18:00");
+        fireEvent.click(screen.getByRole("button", { name: "Close" }));
+        await waitFor(() =>
+            expect(screen.queryByLabelText("Create task panel")).not.toBeInTheDocument(),
+        );
 
         fireEvent.click(screen.getByTestId("calendar-event-task-external"));
 
@@ -1577,6 +1600,73 @@ describe("App", () => {
         expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
     });
 
+    it("refreshes authenticated data on focus without resetting an open edit form", async () => {
+        mocks.tasks = [
+            makeTask({
+                id: "task-external",
+                title: "Original title",
+                notes: "Original notes",
+                scheduled_start: "2026-05-08T09:00:00.000Z",
+                scheduled_end: "2026-05-08T10:00:00.000Z",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByTestId("calendar-event-task-external"));
+        await waitFor(() =>
+            expect(screen.getByLabelText("Edit task panel")).toBeInTheDocument(),
+        );
+
+        fireEvent.change(screen.getByLabelText("Title"), {
+            target: { value: "Draft title" },
+        });
+        expect(screen.getByLabelText("Title")).toHaveValue("Draft title");
+
+        const initialTaskCalls = mocks.listTasks.mock.calls.length;
+        const initialTaskListCalls = mocks.listTaskLists.mock.calls.length;
+
+        mocks.tasks = [
+            makeTask({
+                id: "task-external",
+                title: "Remote title",
+                notes: "Remote notes",
+                scheduled_start: "2026-05-08T09:00:00.000Z",
+                scheduled_end: "2026-05-08T10:00:00.000Z",
+            }),
+        ];
+
+        fireEvent.focus(window);
+
+        await waitFor(() =>
+            expect(mocks.listTasks.mock.calls.length).toBe(
+                initialTaskCalls + 1,
+            ),
+        );
+        await waitFor(() =>
+            expect(mocks.listTaskLists.mock.calls.length).toBe(
+                initialTaskListCalls + 1,
+            ),
+        );
+        expect(screen.getByLabelText("Title")).toHaveValue("Draft title");
+    });
+
+    it("stops authenticated polling after logout", async () => {
+        render(<App />);
+
+        const initialTaskCalls = mocks.listTasks.mock.calls.length;
+        const initialTaskListCalls = mocks.listTaskLists.mock.calls.length;
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(await screen.findByRole("button", { name: "Logout" }));
+        fireEvent.focus(window);
+
+        expect(mocks.listTasks.mock.calls.length).toBe(initialTaskCalls);
+        expect(mocks.listTaskLists.mock.calls.length).toBe(
+            initialTaskListCalls,
+        );
+    });
+
     it("shows backup summary before downloading", async () => {
         render(<App />);
 
@@ -1629,7 +1719,7 @@ describe("App", () => {
         expect(
             await screen.findByText("Imported 1 tasks and 1 categories."),
         ).toBeInTheDocument();
-        expect(mocks.listTasks).toHaveBeenCalledTimes(2);
+        expect(mocks.listTasks).toHaveBeenCalledTimes(3);
     });
 
     it("shows a readable backup import error and keeps settings usable", async () => {
@@ -4465,9 +4555,9 @@ describe("App", () => {
         await waitFor(() =>
             expect(mocks.fullCalendarProps.events).toHaveLength(1),
         );
-        await waitFor(() =>
-            expect(mocks.listTasks).toHaveBeenCalledTimes(2),
-        );
+            await waitFor(() =>
+                expect(mocks.listTasks).toHaveBeenCalledTimes(3),
+            );
         expect(mocks.fullCalendarRefetchEvents).not.toHaveBeenCalled();
         expect(
             mocks.fullCalendarProps.events[0],
