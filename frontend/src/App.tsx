@@ -38,6 +38,7 @@ import {
     type FormEvent,
     type MouseEvent as ReactMouseEvent,
     type PointerEvent as ReactPointerEvent,
+    type ReactNode,
 } from "react";
 
 import {
@@ -168,6 +169,21 @@ function IconPlus() {
                 fill="none"
                 stroke="currentColor"
                 strokeLinecap="round"
+                strokeWidth="2"
+            />
+        </svg>
+    );
+}
+
+function IconChevronDown() {
+    return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+                d="m6 9 6 6 6-6"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
                 strokeWidth="2"
             />
         </svg>
@@ -327,6 +343,7 @@ type TaskUndoState = {
 };
 
 type DetailPanelMode = "create" | "edit" | null;
+type TaskFormAccordionSectionId = "schedule" | "organization" | "notes";
 type TaskRowDragEvent =
     | ReactMouseEvent<HTMLElement>
     | ReactPointerEvent<HTMLElement>;
@@ -352,6 +369,60 @@ const initialFormState: TaskFormState = {
     notification_channel: "",
 };
 
+function TaskFormAccordionSection({
+    id,
+    title,
+    actions,
+    isExpanded,
+    onToggle,
+    children,
+}: {
+    id: TaskFormAccordionSectionId;
+    title: string;
+    actions?: ReactNode;
+    isExpanded: boolean;
+    onToggle: (section: TaskFormAccordionSectionId) => void;
+    children: ReactNode;
+}) {
+    const panelId = `task-form-accordion-panel-${id}`;
+    const buttonId = `task-form-accordion-button-${id}`;
+
+    return (
+        <section
+            className={`task-composer-section task-form-accordion-section${
+                isExpanded ? " task-form-accordion-section-open" : ""
+            }`}
+        >
+            <div className="task-composer-section-header task-form-accordion-header">
+                <button
+                    id={buttonId}
+                    type="button"
+                    className="task-form-accordion-trigger"
+                    aria-expanded={isExpanded}
+                    aria-controls={panelId}
+                    onClick={() => onToggle(id)}
+                >
+                    <span className="task-form-accordion-chevron">
+                        <IconChevronDown />
+                    </span>
+                    <span>{title}</span>
+                </button>
+                {actions}
+            </div>
+            {isExpanded && (
+                <div
+                    id={panelId}
+                    role="region"
+                    aria-labelledby={buttonId}
+                    className="task-form-accordion-panel"
+                >
+                    {children}
+                </div>
+            )}
+        </section>
+    );
+}
+
 const notificationUnits: Array<{ id: NotificationUnit; label: string }> = [
     { id: "", label: "None" },
     { id: "MINUTES", label: "Minutes" },
@@ -360,7 +431,12 @@ const notificationUnits: Array<{ id: NotificationUnit; label: string }> = [
 ];
 
 const reminderPresets = [
-    { id: "", label: "None", unit: "" as NotificationUnit, value: "0" },
+    {
+        id: "",
+        label: "Does not remind",
+        unit: "" as NotificationUnit,
+        value: "0",
+    },
     {
         id: "0:MINUTES",
         label: "At time of event",
@@ -402,7 +478,7 @@ const reminderPresets = [
 const reminderCustomValue = "CUSTOM";
 
 const recurrenceFrequencyOptions: TaskComposerDropdownOption[] = [
-    { value: "", label: "None" },
+    { value: "", label: "Does not repeat" },
     { value: "DAILY", label: "Daily" },
     { value: "WEEKLY", label: "Weekly" },
     { value: "MONTHLY", label: "Monthly" },
@@ -521,6 +597,10 @@ export function App() {
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
     const [formState, setFormState] = useState<TaskFormState>(initialFormState);
     const [editState, setEditState] = useState<EditFormState | null>(null);
+    const [createAccordionSection, setCreateAccordionSection] =
+        useState<TaskFormAccordionSectionId | null>("schedule");
+    const [editAccordionSection, setEditAccordionSection] =
+        useState<TaskFormAccordionSectionId | null>("schedule");
     const [formError, setFormError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [isEditSaving, setIsEditSaving] = useState(false);
@@ -750,6 +830,22 @@ export function App() {
         },
         [],
     );
+    const toggleCreateAccordionSection = useCallback(
+        (section: TaskFormAccordionSectionId) => {
+            setCreateAccordionSection((current) =>
+                current === section ? null : section,
+            );
+        },
+        [],
+    );
+    const toggleEditAccordionSection = useCallback(
+        (section: TaskFormAccordionSectionId) => {
+            setEditAccordionSection((current) =>
+                current === section ? null : section,
+            );
+        },
+        [],
+    );
 
     const resetAppData = useCallback(() => {
         locallyUpdatedTasksRef.current.clear();
@@ -963,6 +1059,7 @@ export function App() {
                     ? "DISCORD"
                     : "",
         });
+        setEditAccordionSection(getInitialEditAccordionSection(selectedTask));
         editStateSyncTaskIdRef.current = selectedTask.id;
     }, [detailPanelMode, selectedTask]);
 
@@ -1859,6 +1956,7 @@ export function App() {
             }
             setDetailPanelMode("create");
             setSelectedTaskId(null);
+            setCreateAccordionSection("schedule");
             setFormState({
                 ...initialFormState,
                 list_id: selectedListIdForForms,
@@ -1890,6 +1988,7 @@ export function App() {
             }
             setDetailPanelMode("create");
             setSelectedTaskId(null);
+            setCreateAccordionSection("schedule");
             setFormState({
                 ...initialFormState,
                 list_id: selectedListIdForForms,
@@ -1916,6 +2015,7 @@ export function App() {
         setMobileQuickActionTaskId(null);
         setDetailPanelMode("create");
         setSelectedTaskId(null);
+        setCreateAccordionSection("schedule");
         setFormState({
             ...initialFormState,
             list_id: selectedListIdForForms,
@@ -1942,6 +2042,8 @@ export function App() {
         }
         setDetailPanelMode("edit");
         setSelectedTaskId(taskId);
+        const task = tasksRef.current.find((candidate) => candidate.id === taskId);
+        setEditAccordionSection(getInitialEditAccordionSection(task));
     }, []);
 
     const handleDateSelect = useCallback(
@@ -2913,11 +3015,31 @@ export function App() {
     };
 
     const handleMoveToNoTime = useCallback(() => {
+        const clearedScheduleFields: Pick<
+            TaskFormState,
+            | "scheduled_start"
+            | "scheduled_end"
+            | "recurrence_frequency"
+            | "recurrence_interval"
+            | "recurrence_until"
+            | "notification_unit"
+            | "notification_offset_value"
+            | "notification_channel"
+        > = {
+            scheduled_start: "",
+            scheduled_end: "",
+            recurrence_frequency: "",
+            recurrence_interval: "1",
+            recurrence_until: "",
+            notification_unit: "",
+            notification_offset_value: "0",
+            notification_channel: "",
+        };
+
         if (detailPanelMode === "create") {
             setFormState((current) => ({
                 ...current,
-                scheduled_start: "",
-                scheduled_end: "",
+                ...clearedScheduleFields,
             }));
             return;
         }
@@ -2927,8 +3049,7 @@ export function App() {
                 current
                     ? {
                           ...current,
-                          scheduled_start: "",
-                          scheduled_end: "",
+                          ...clearedScheduleFields,
                       }
                     : current,
             );
@@ -4614,13 +4735,30 @@ export function App() {
                                         />
                                     </div>
 
-                                    <section className="task-composer-section">
-                                        <div className="task-composer-section-header">
-                                            <h3>Schedule</h3>
-                                        </div>
+                                    <TaskFormAccordionSection
+                                        id="schedule"
+                                        title="Schedule"
+                                        isExpanded={
+                                            createAccordionSection === "schedule"
+                                        }
+                                        onToggle={toggleCreateAccordionSection}
+                                    >
+                                        {hasScheduleClearableData(formState) ? (
+                                            <div className="task-schedule-clear-row">
+                                                <button
+                                                    type="button"
+                                                    className="secondary-button task-form-clear-button schedule-clear-button"
+                                                    onClick={handleMoveToNoTime}
+                                                    title="Clear schedule"
+                                                >
+                                                    Clear schedule
+                                                </button>
+                                            </div>
+                                        ) : null}
                                         <div className="task-form-row task-form-schedule-row">
                                             <LabeledDateTimeInput
                                                 label="Start"
+                                                visibleLabel={null}
                                                 value={formState.scheduled_start}
                                                 onChange={(value) =>
                                                     setFormState({
@@ -4631,6 +4769,7 @@ export function App() {
                                             />
                                             <LabeledDateTimeInput
                                                 label="End"
+                                                visibleLabel="To"
                                                 value={formState.scheduled_end}
                                                 onChange={(value) =>
                                                     setFormState({
@@ -4658,14 +4797,20 @@ export function App() {
                                                 })
                                             }
                                         />
-                                    </section>
+                                    </TaskFormAccordionSection>
 
-                                    <section className="task-composer-section task-composer-section-compact">
-                                        <div className="task-composer-section-header">
-                                            <h3>Organization</h3>
-                                        </div>
+                                    <TaskFormAccordionSection
+                                        id="organization"
+                                        title="Categories"
+                                        isExpanded={
+                                            createAccordionSection ===
+                                            "organization"
+                                        }
+                                        onToggle={toggleCreateAccordionSection}
+                                    >
                                         <LabeledSelect
                                             label="Category"
+                                            visibleLabel={null}
                                             value={formState.list_id}
                                             onChange={(value) =>
                                                 setFormState({
@@ -4675,12 +4820,16 @@ export function App() {
                                             }
                                             options={taskLists}
                                         />
-                                    </section>
+                                    </TaskFormAccordionSection>
 
-                                    <section className="task-composer-section task-composer-section-compact">
-                                        <div className="task-composer-section-header">
-                                            <h3>Notes</h3>
-                                        </div>
+                                    <TaskFormAccordionSection
+                                        id="notes"
+                                        title="Notes"
+                                        isExpanded={
+                                            createAccordionSection === "notes"
+                                        }
+                                        onToggle={toggleCreateAccordionSection}
+                                    >
                                         <label className="task-composer-notes">
                                             <span>Notes</span>
                                             <textarea
@@ -4694,7 +4843,7 @@ export function App() {
                                                 rows={2}
                                             />
                                         </label>
-                                    </section>
+                                    </TaskFormAccordionSection>
                                 </form>
                             ) : selectedTask && editState ? (
                                 <form
@@ -4741,20 +4890,30 @@ export function App() {
                                         />
                                     </div>
 
-                                    <section className="task-composer-section">
-                                        <div className="task-composer-section-header">
-                                            <h3>Schedule</h3>
-                                            <button
-                                                type="button"
-                                                className="task-form-no-time-button"
-                                                onClick={handleMoveToNoTime}
-                                            >
-                                                Remove schedule
-                                            </button>
-                                        </div>
+                                    <TaskFormAccordionSection
+                                        id="schedule"
+                                        title="Schedule"
+                                        isExpanded={
+                                            editAccordionSection === "schedule"
+                                        }
+                                        onToggle={toggleEditAccordionSection}
+                                    >
+                                        {hasScheduleClearableData(editState) ? (
+                                            <div className="task-schedule-clear-row">
+                                                <button
+                                                    type="button"
+                                                    className="secondary-button task-form-clear-button schedule-clear-button"
+                                                    onClick={handleMoveToNoTime}
+                                                    title="Clear schedule"
+                                                >
+                                                    Clear schedule
+                                                </button>
+                                            </div>
+                                        ) : null}
                                         <div className="task-form-row task-form-schedule-row">
                                             <LabeledDateTimeInput
                                                 label="Start"
+                                                visibleLabel={null}
                                                 value={editState.scheduled_start}
                                                 onChange={(value) =>
                                                     setEditState({
@@ -4765,6 +4924,7 @@ export function App() {
                                             />
                                             <LabeledDateTimeInput
                                                 label="End"
+                                                visibleLabel="To"
                                                 value={editState.scheduled_end}
                                                 onChange={(value) =>
                                                     setEditState({
@@ -4792,14 +4952,20 @@ export function App() {
                                                 })
                                             }
                                         />
-                                    </section>
+                                    </TaskFormAccordionSection>
 
-                                    <section className="task-composer-section task-composer-section-compact">
-                                        <div className="task-composer-section-header">
-                                            <h3>Organization</h3>
-                                        </div>
+                                    <TaskFormAccordionSection
+                                        id="organization"
+                                        title="Categories"
+                                        isExpanded={
+                                            editAccordionSection ===
+                                            "organization"
+                                        }
+                                        onToggle={toggleEditAccordionSection}
+                                    >
                                         <LabeledSelect
                                             label="Category"
+                                            visibleLabel={null}
                                             value={editState.list_id}
                                             onChange={(value) =>
                                                 setEditState({
@@ -4809,12 +4975,16 @@ export function App() {
                                             }
                                             options={taskLists}
                                         />
-                                    </section>
+                                    </TaskFormAccordionSection>
 
-                                    <section className="task-composer-section task-composer-section-compact">
-                                        <div className="task-composer-section-header">
-                                            <h3>Notes</h3>
-                                        </div>
+                                    <TaskFormAccordionSection
+                                        id="notes"
+                                        title="Notes"
+                                        isExpanded={
+                                            editAccordionSection === "notes"
+                                        }
+                                        onToggle={toggleEditAccordionSection}
+                                    >
                                         <label className="task-composer-notes">
                                             <span>Notes</span>
                                             <textarea
@@ -4828,7 +4998,7 @@ export function App() {
                                                 rows={2}
                                             />
                                         </label>
-                                    </section>
+                                    </TaskFormAccordionSection>
                                 </form>
                             ) : (
                                 <p className="muted">
@@ -5714,10 +5884,14 @@ export function App() {
                             </span>
                             <button
                                 type="button"
-                                className="mobile-month-task-preview-close"
+                                className="floating-panel-action floating-panel-icon-button mobile-calendar-action-close"
+                                aria-label="Close"
+                                title="Close"
                                 onClick={() => setMobileQuickActionTaskId(null)}
                             >
-                                Close
+                                <span className="floating-panel-icon">
+                                    <IconClose />
+                                </span>
                             </button>
                         </div>
                         <label className="mobile-calendar-complete-row">
@@ -6191,12 +6365,14 @@ type LabeledDateTimeInputProps = {
     label: string;
     value: string;
     onChange: (value: string) => void;
+    visibleLabel?: string | null;
 };
 
 function LabeledDateTimeInput({
     label,
     value,
     onChange,
+    visibleLabel = label,
 }: LabeledDateTimeInputProps) {
     const { datePart, timePart } = splitDateTimeInputValue(value);
     const showDatePlaceholder = !datePart;
@@ -6204,7 +6380,7 @@ function LabeledDateTimeInput({
 
     return (
         <label className="task-form-datetime">
-            <span>{label}</span>
+            {visibleLabel ? <span>{visibleLabel}</span> : null}
             <div className="task-form-datetime-row">
                 <div
                     className={`task-datetime-shell${
@@ -6469,11 +6645,12 @@ function RecurrenceComposer({ state, onChange }: RecurrenceComposerProps) {
 
     return (
         <div className="task-composer-control-group task-recurrence-composer">
-            <div className="task-composer-control-label">Repeat</div>
-            <div className="task-recurrence-sentence">
+            {state.recurrence_frequency ? (
+                <div className="task-schedule-field-label">Every</div>
+            ) : null}
+            <div className="task-recurrence-controls">
                 {state.recurrence_frequency ? (
                     <>
-                        <span className="task-composer-muted-word">Every</span>
                         <input
                             type="number"
                             min={1}
@@ -6488,11 +6665,7 @@ function RecurrenceComposer({ state, onChange }: RecurrenceComposerProps) {
                             className="task-recurrence-count"
                         />
                     </>
-                ) : (
-                    <span className="task-composer-muted-word">
-                        Does not repeat
-                    </span>
-                )}
+                ) : null}
                 <TaskComposerDropdown
                     label="Repeat"
                     value={state.recurrence_frequency}
@@ -6513,11 +6686,11 @@ function RecurrenceComposer({ state, onChange }: RecurrenceComposerProps) {
             </div>
 
             {state.recurrence_frequency ? (
-                <div className="task-recurrence-ends">
-                    <div className="task-form-field">
-                        <span>Ends</span>
+                <div className="task-schedule-field-group task-recurrence-until">
+                    <div className="task-schedule-field-label">Until</div>
+                    <div className="task-recurrence-until-controls">
                         <TaskComposerDropdown
-                            label="Ends"
+                            label="Until"
                             value={endsMode}
                             options={recurrenceEndsOptions}
                             onChange={(value) =>
@@ -6529,25 +6702,25 @@ function RecurrenceComposer({ state, onChange }: RecurrenceComposerProps) {
                                               splitDateTimeInputValue(
                                                   state.scheduled_start,
                                               ).datePart,
-                                        })
+                                })
                             }
                         />
+                        {endsMode === "ON_DATE" ? (
+                            <label className="task-date-only-input">
+                                <input
+                                    type="date"
+                                    value={state.recurrence_until}
+                                    onChange={(event) =>
+                                        onChange({
+                                            recurrence_until:
+                                                event.target.value,
+                                        })
+                                    }
+                                    aria-label="Repeat end date"
+                                />
+                            </label>
+                        ) : null}
                     </div>
-                    {endsMode === "ON_DATE" ? (
-                        <label>
-                            <span>Date</span>
-                            <input
-                                type="date"
-                                value={state.recurrence_until}
-                                onChange={(event) =>
-                                    onChange({
-                                        recurrence_until: event.target.value,
-                                    })
-                                }
-                                aria-label="Repeat end date"
-                            />
-                        </label>
-                    ) : null}
                 </div>
             ) : null}
         </div>
@@ -6584,8 +6757,10 @@ function ReminderComposer({ state, onChange }: ReminderComposerProps) {
 
     return (
         <div className="task-composer-control-group task-reminder-composer">
-            <div className="task-form-field task-reminder-select-label">
-                <span>Reminder</span>
+            {presetValue ? (
+                <div className="task-schedule-field-label">Remind</div>
+            ) : null}
+            <div className="task-reminder-select-label">
                 <TaskComposerDropdown
                     label="Reminder"
                     value={presetValue}
@@ -6655,6 +6830,7 @@ type LabeledSelectProps = {
     value: string;
     onChange: (value: string) => void;
     options: TaskList[];
+    visibleLabel?: string | null;
 };
 
 function LabeledSelect({
@@ -6662,6 +6838,7 @@ function LabeledSelect({
     value,
     onChange,
     options,
+    visibleLabel = label,
 }: LabeledSelectProps) {
     const categoryOptions: TaskComposerDropdownOption[] = [
         { value: "", label: "None", mutedDot: true },
@@ -6674,7 +6851,7 @@ function LabeledSelect({
 
     return (
         <div className="task-form-field">
-            <span>{label}</span>
+            {visibleLabel ? <span>{visibleLabel}</span> : null}
             <TaskComposerDropdown
                 label={label}
                 value={value}
@@ -6749,6 +6926,60 @@ function buildTaskUpdates(
     }
 
     return updates;
+}
+
+function getInitialEditAccordionSection(
+    task?: ScheduledTask | null,
+): TaskFormAccordionSectionId {
+    if (!task) {
+        return "schedule";
+    }
+
+    if (
+        task.scheduled_start ||
+        task.scheduled_end ||
+        task.recurrence_rule ||
+        task.notification_enabled
+    ) {
+        return "schedule";
+    }
+
+    if (task.list_id) {
+        return "organization";
+    }
+
+    if (task.notes?.trim()) {
+        return "notes";
+    }
+
+    return "schedule";
+}
+
+function hasScheduleClearableData(
+    state:
+        | TaskFormState
+        | EditFormState
+        | Pick<
+              TaskFormState,
+              | "scheduled_start"
+              | "scheduled_end"
+              | "recurrence_frequency"
+              | "recurrence_interval"
+              | "recurrence_until"
+              | "notification_unit"
+              | "notification_offset_value"
+              | "notification_channel"
+          >,
+): boolean {
+    return Boolean(
+        state.scheduled_start ||
+            state.scheduled_end ||
+            state.recurrence_frequency ||
+            state.recurrence_until ||
+            state.notification_unit ||
+            state.notification_offset_value !== "0" ||
+            state.notification_channel,
+    );
 }
 
 function buildTaskUpdateInputFromSnapshot(

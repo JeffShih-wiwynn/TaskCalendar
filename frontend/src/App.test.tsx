@@ -801,6 +801,17 @@ async function selectTaskDropdownOption(
     fireEvent.click(within(listbox).getByRole("option", { name: option }));
 }
 
+function expandTaskFormSection(name: "Schedule" | "Categories" | "Notes") {
+    const sectionButton = screen.getByRole("button", { name });
+    if (sectionButton.getAttribute("aria-expanded") !== "true") {
+        fireEvent.click(sectionButton);
+    }
+}
+
+function getNotesTextbox() {
+    return screen.getByRole("textbox", { name: "Notes" });
+}
+
 describe("App", () => {
     beforeEach(() => {
         mockMediaQueryList = null;
@@ -1485,6 +1496,111 @@ describe("App", () => {
         expect(screen.getByLabelText("Start date")).toHaveValue("2026-05-08");
     });
 
+    it("uses a single-open accordion in the create form without resetting values", async () => {
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Open create task" }),
+        );
+
+        const scheduleButton = screen.getByRole("button", { name: "Schedule" });
+        const categoriesButton = screen.getByRole("button", {
+            name: "Categories",
+        });
+        const notesButton = screen.getByRole("button", { name: "Notes" });
+
+        expect(scheduleButton).toHaveAttribute("aria-expanded", "true");
+        expect(categoriesButton).toHaveAttribute("aria-expanded", "false");
+        expect(notesButton).toHaveAttribute("aria-expanded", "false");
+        const clearButton = screen.getByRole("button", {
+            name: "Clear schedule",
+        });
+        expect(clearButton).toBeInTheDocument();
+        expect(clearButton).toHaveClass("secondary-button");
+        expect(clearButton).toHaveClass("schedule-clear-button");
+        expect(clearButton).not.toHaveClass("floating-panel-action");
+        expect(clearButton.closest(".task-form-accordion-header")).toBeNull();
+        expect(screen.getByLabelText("Title")).toBeInTheDocument();
+        expect(screen.getByLabelText("Start date")).toHaveValue("2026-05-08");
+        expect(screen.queryByText("Start")).not.toBeInTheDocument();
+        expect(screen.getByText("To")).toBeInTheDocument();
+        expect(screen.queryByText("Repeat")).not.toBeInTheDocument();
+        expect(screen.queryByText("Reminder")).not.toBeInTheDocument();
+        expect(screen.queryByText("Remind")).not.toBeInTheDocument();
+        expect(screen.queryByText("Until")).not.toBeInTheDocument();
+        expect(screen.queryByText("Date")).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Repeat" })).toHaveTextContent(
+            "Does not repeat",
+        );
+        expect(
+            screen.getByRole("button", { name: "Reminder" }),
+        ).toHaveTextContent("Does not remind");
+
+        fireEvent.click(scheduleButton);
+        expect(scheduleButton).toHaveAttribute("aria-expanded", "false");
+        expect(screen.queryByLabelText("Start date")).not.toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Clear schedule" }),
+        ).not.toBeInTheDocument();
+        expect(screen.getByLabelText("Title")).toBeInTheDocument();
+
+        fireEvent.click(scheduleButton);
+        expect(
+            screen.getByRole("button", { name: "Clear schedule" }),
+        ).toBeInTheDocument();
+
+        fireEvent.click(notesButton);
+        fireEvent.change(getNotesTextbox(), {
+            target: { value: "Accordion note" },
+        });
+        expect(notesButton).toHaveAttribute("aria-expanded", "true");
+        expect(scheduleButton).toHaveAttribute("aria-expanded", "false");
+
+        fireEvent.click(categoriesButton);
+        expect(notesButton).toHaveAttribute("aria-expanded", "false");
+        expect(categoriesButton).toHaveAttribute("aria-expanded", "true");
+        expect(
+            screen.queryByRole("textbox", { name: "Notes" }),
+        ).not.toBeInTheDocument();
+
+        fireEvent.click(notesButton);
+        expect(getNotesTextbox()).toHaveValue("Accordion note");
+    });
+
+    it("opens the first edit accordion section with existing data", async () => {
+        mocks.tasks = [
+            makeTask({
+                id: "task-organization-default",
+                title: "Categorized task",
+                list_id: "list-1",
+                notes: "Existing note",
+                scheduled_start: null,
+                scheduled_end: null,
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Mobile Inbox" }));
+        const taskTitle = await screen.findByText("Categorized task");
+        fireEvent.click(taskTitle.closest('[role="button"]') as HTMLElement);
+
+        expect(screen.getByRole("button", { name: "Schedule" })).toHaveAttribute(
+            "aria-expanded",
+            "false",
+        );
+        expect(
+            screen.getByRole("button", { name: "Categories" }),
+        ).toHaveAttribute("aria-expanded", "true");
+        expect(screen.getByRole("button", { name: "Notes" })).toHaveAttribute(
+            "aria-expanded",
+            "false",
+        );
+        expect(screen.getByRole("button", { name: "Category" })).toHaveTextContent(
+            "Work",
+        );
+    });
+
     it("uses intentional mobile calendar taps for time-grid create and edit", async () => {
         setMobileLayout(true);
         mocks.tasks = [
@@ -1530,6 +1646,11 @@ describe("App", () => {
         expect(
             screen.getByRole("region", { name: "Calendar task actions" }),
         ).toBeInTheDocument();
+        const quickSheetCloseButton = screen.getByRole("button", {
+            name: "Close",
+        });
+        expect(quickSheetCloseButton).toHaveClass("floating-panel-icon-button");
+        expect(quickSheetCloseButton).toHaveClass("mobile-calendar-action-close");
         expect(screen.getByText(/:00-.*:00/)).toBeInTheDocument();
         expect(screen.getByText("Complete")).toBeInTheDocument();
         expect(screen.queryByText("Uncomplete")).not.toBeInTheDocument();
@@ -1858,6 +1979,9 @@ describe("App", () => {
                 name: "Create task",
             }),
         ).toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Clear schedule" }),
+        ).not.toBeInTheDocument();
         expect(screen.getByLabelText("Title")).toHaveValue("");
     });
 
@@ -2985,11 +3109,14 @@ describe("App", () => {
         fireEvent.change(screen.getByLabelText("Every"), {
             target: { value: "3" },
         });
-        await selectTaskDropdownOption("Ends", "On date");
+        expect(screen.getByText("Every")).toBeInTheDocument();
+        await selectTaskDropdownOption("Until", "On date");
+        expect(screen.getByText("Until")).toBeInTheDocument();
         fireEvent.change(screen.getByLabelText("Repeat end date"), {
             target: { value: "2026-06-08" },
         });
         await selectTaskDropdownOption("Reminder", "Custom");
+        expect(screen.getByText("Remind")).toBeInTheDocument();
         await selectTaskDropdownOption("Reminder unit", "Hours");
         fireEvent.change(screen.getByLabelText("Reminder amount"), {
             target: { value: "4" },
@@ -3028,7 +3155,7 @@ describe("App", () => {
             target: { value: "New task" },
         });
         await selectTaskDropdownOption("Repeat", "Daily");
-        await selectTaskDropdownOption("Ends", "On date");
+        await selectTaskDropdownOption("Until", "On date");
         fireEvent.change(screen.getByLabelText("Repeat end date"), {
             target: { value: "2026-05-07" },
         });
@@ -3173,6 +3300,7 @@ describe("App", () => {
         fireEvent.change(await screen.findByLabelText("Title"), {
             target: { value: "Edited task" },
         });
+        expandTaskFormSection("Categories");
         await selectTaskDropdownOption("Category", "None");
         fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
@@ -3238,7 +3366,7 @@ describe("App", () => {
             }),
         );
         await screen.findByRole("heading", { name: "Edit task" });
-        await selectTaskDropdownOption("Ends", "On date");
+        await selectTaskDropdownOption("Until", "On date");
         fireEvent.change(screen.getByLabelText("Repeat end date"), {
             target: { value: "2026-05-07" },
         });
@@ -3291,8 +3419,11 @@ describe("App", () => {
         fireEvent.click(
             await screen.findByRole("button", { name: /Reschedule me/i }),
         );
+        expect(
+            screen.getByRole("button", { name: "Clear schedule" }),
+        ).toBeInTheDocument();
         fireEvent.click(
-            screen.getByRole("button", { name: "Remove schedule" }),
+            screen.getByRole("button", { name: "Clear schedule" }),
         );
 
         expect(screen.getByLabelText("Start date")).toHaveValue("");
@@ -3355,9 +3486,10 @@ describe("App", () => {
             await screen.findByRole("button", { name: /Notify me/i }),
         );
 
-        expect(screen.getByRole("button", { name: "Reminder" })).toHaveTextContent(
-            "Custom",
-        );
+        expect(screen.getByText("Remind")).toBeInTheDocument();
+        expect(
+            screen.getByRole("button", { name: "Reminder" }),
+        ).toHaveTextContent("Custom");
         expect(
             screen.getByRole("button", { name: "Reminder unit" }),
         ).toHaveTextContent("Minutes");
@@ -3811,7 +3943,8 @@ describe("App", () => {
                 name: /^Toggle Recurring note task Recurring note task/i,
             }),
         );
-        fireEvent.change(await screen.findByLabelText("Notes"), {
+        expandTaskFormSection("Notes");
+        fireEvent.change(getNotesTextbox(), {
             target: { value: "Updated recurring note" },
         });
         fireEvent.click(screen.getByRole("button", { name: "Done" }));
@@ -3856,7 +3989,8 @@ describe("App", () => {
                 name: /^Toggle Recurring note undo Recurring note undo/i,
             }),
         );
-        fireEvent.change(await screen.findByLabelText("Notes"), {
+        expandTaskFormSection("Notes");
+        fireEvent.change(getNotesTextbox(), {
             target: { value: "Updated note" },
         });
         fireEvent.click(screen.getByRole("button", { name: "Done" }));
@@ -4689,7 +4823,7 @@ describe("App", () => {
         );
     });
 
-    it("does not show schedule removal in the create form", async () => {
+    it("shows clear in the create form when schedule data exists", async () => {
         render(<App />);
 
         expect(
@@ -4700,8 +4834,8 @@ describe("App", () => {
         );
 
         expect(
-            screen.queryByRole("button", { name: "Remove schedule" }),
-        ).not.toBeInTheDocument();
+            screen.getByRole("button", { name: "Clear schedule" }),
+        ).toBeInTheDocument();
 
         expect(screen.getByLabelText("Start date")).toHaveValue("2026-05-08");
         expect(screen.getByLabelText("Start time")).toHaveValue("");

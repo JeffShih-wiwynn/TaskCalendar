@@ -1474,7 +1474,7 @@ h2 {
 
 .task-composer-section {
   display: grid;
-  gap: 12px;
+  gap: 0;
   padding: 12px;
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
   border-radius: 10px;
@@ -1498,6 +1498,62 @@ h2 {
   font-size: 0.82rem;
   font-weight: 800;
   letter-spacing: 0;
+}
+
+.task-form-accordion-section-open {
+  gap: 12px;
+}
+
+.task-form-accordion-header {
+  align-items: center;
+}
+
+.task-form-accordion-trigger {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 8px 6px 4px;
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.task-form-accordion-trigger:hover,
+.task-form-accordion-trigger:focus-visible {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 62%, transparent);
+  outline: none;
+}
+
+.task-form-accordion-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+  color: var(--muted);
+  transition: transform var(--micro-duration-fast) var(--micro-ease);
+}
+
+.task-form-accordion-chevron svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.task-form-accordion-trigger[aria-expanded="true"] .task-form-accordion-chevron {
+  transform: rotate(180deg);
+}
+
+.task-form-accordion-panel {
+  display: grid;
+  gap: 12px;
 }
 
 .task-form-schedule-row {
@@ -1527,13 +1583,15 @@ h2 {
 }
 
 .task-composer-control-label,
-.task-form .task-composer-control-label {
+.task-form .task-composer-control-label,
+.task-schedule-field-label {
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 800;
 }
 
 .task-recurrence-sentence,
+.task-recurrence-controls,
 .task-reminder-select-label {
   display: flex;
   align-items: center;
@@ -1541,7 +1599,8 @@ h2 {
   min-width: 0;
 }
 
-.task-reminder-select-label {
+.task-reminder-select-label,
+.task-recurrence-until-controls {
   display: grid;
   gap: 8px;
 }
@@ -1559,13 +1618,24 @@ h2 {
   text-align: center;
 }
 
-.task-recurrence-ends,
+.task-recurrence-until-controls,
 .task-reminder-custom {
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr);
   align-items: end;
   padding-top: 2px;
+}
+
+.task-recurrence-until-controls {
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr);
+}
+
+.task-reminder-custom {
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr);
+}
+
+.task-date-only-input {
+  min-width: 0;
 }
 
 .task-form label {
@@ -1595,7 +1665,8 @@ h2 {
   background-color: color-mix(in srgb, var(--panel-bg) 92%, var(--accent) 8%) !important;
 }
 
-.task-recurrence-sentence .task-form-custom-dropdown {
+.task-recurrence-sentence .task-form-custom-dropdown,
+.task-recurrence-controls .task-form-custom-dropdown {
   flex: 1 1 150px;
 }
 
@@ -1929,8 +2000,34 @@ input[type="checkbox"].task-checkbox:checked {
   opacity: 0.65;
 }
 
+.task-form .task-form-accordion-trigger {
+  width: auto;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 8px 6px 4px;
+  color: var(--text);
+  background: transparent;
+  box-shadow: none;
+  text-align: left;
+}
+
+.task-form .task-form-accordion-trigger:hover:not(:disabled),
+.task-form .task-form-accordion-trigger:focus-visible {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 62%, transparent);
+  box-shadow: none;
+  outline: none;
+}
+
 .task-form .secondary-button {
   width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: var(--text);
+  background: var(--panel-bg);
+  font: inherit;
+  font-weight: 700;
   text-align: center;
 }
 
@@ -1974,31 +2071,6 @@ input[type="checkbox"].task-checkbox:checked {
 .task-form .ghost-button:hover {
   color: var(--text);
   background: var(--accent-soft);
-}
-
-.task-form .task-form-no-time-button {
-  width: fit-content;
-  align-self: start;
-  border: 1px solid color-mix(in srgb, var(--field-border) 82%, transparent);
-  border-radius: 8px;
-  padding: 7px 10px;
-  color: var(--muted);
-  background-color: transparent;
-  box-shadow: none;
-}
-
-.task-form .task-form-no-time-button:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--danger) 42%, var(--field-border));
-  color: color-mix(in srgb, var(--danger) 96%, white);
-  background-color: color-mix(in srgb, var(--danger) 14%, transparent);
-}
-
-.task-form .task-form-no-time-button:focus-visible {
-  border-color: color-mix(in srgb, var(--danger) 34%, var(--field-border));
-  color: color-mix(in srgb, var(--danger) 84%, var(--text));
-  background-color: transparent;
-  outline: 2px solid color-mix(in srgb, var(--danger) 18%, transparent);
-  outline-offset: 2px;
 }
 
 .form-error {
@@ -2277,6 +2349,32 @@ input[type="checkbox"].task-checkbox:checked {
 .floating-panel-action:disabled {
   cursor: not-allowed;
   opacity: 0.65;
+}
+
+.task-form-clear-button {
+  width: fit-content;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.task-schedule-clear-row {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.task-form .schedule-clear-button {
+  align-self: flex-start;
+  color: var(--muted);
+  background: transparent;
+  box-shadow: none;
+}
+
+.task-form .schedule-clear-button:hover:not(:disabled),
+.task-form .schedule-clear-button:focus-visible {
+  border-color: var(--border);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  box-shadow: none;
 }
 
 .context-menu {
@@ -2962,7 +3060,7 @@ input[type="checkbox"].task-checkbox:checked {
   .task-form-row-split,
   .task-form-row-wide-narrow,
   .task-composer-title-row,
-  .task-recurrence-ends,
+  .task-recurrence-until-controls,
   .task-reminder-custom,
   .task-form-actions {
     grid-template-columns: 1fr;
@@ -3216,6 +3314,20 @@ input[type="checkbox"].task-checkbox:checked {
     font-size: 0.96rem;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .mobile-calendar-action-close {
+    flex: 0 0 auto;
+    border-color: var(--border);
+    color: var(--muted);
+    background: transparent;
+  }
+
+  .mobile-calendar-action-close:hover:not(:disabled),
+  .mobile-calendar-action-close:focus-visible {
+    border-color: var(--border);
+    color: var(--text);
+    background: color-mix(in srgb, var(--panel-bg) 86%, var(--border));
   }
 
   .mobile-calendar-complete-row {

@@ -78,7 +78,7 @@ This document summarizes what is already in the repository snapshot and where th
   - Narrow-screen CSS stacks the sidebar and calendar, hides the desktop sidebar resizer, improves touch target sizing, and prevents task forms from overflowing horizontally.
   - Mobile calendar interactions now use a quick action sheet for tap-to-edit while empty-space long press still creates a task.
   - Mobile calendar events are intentionally non-draggable and non-resizable; desktop drag, resize, and event click remain available.
-  - The current task composer uses compact icon footer actions, shared neutral cancel controls, and custom in-app dropdowns for recurrence, reminders, and categories.
+  - The current task composer uses compact icon footer actions, shared neutral cancel controls, one-open accordion sections for Schedule/Categories/Notes, a separate `Clear schedule` row, and custom in-app dropdowns for recurrence, reminders, and categories.
 
 ## Current Notes
 
