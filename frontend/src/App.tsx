@@ -4494,31 +4494,44 @@ export function App() {
                                                             />
                                                         </div>
                                                         <div className="category-inline-actions">
-                                                            <button type="submit">
-                                                                Save
+                                                            <button
+                                                                type="submit"
+                                                                className="compact-action-button compact-action-button--primary compact-action-button--icon-only"
+                                                                aria-label="Save category"
+                                                                title="Save category"
+                                                            >
+                                                                <span className="compact-action-button__icon">
+                                                                    <IconCheck />
+                                                                </span>
                                                             </button>
                                                             <button
                                                                 type="button"
-                                                                className="danger-button"
+                                                                className="compact-action-button compact-action-button--danger compact-action-button--icon-only"
                                                                 disabled={
                                                                     isDeleting
                                                                 }
+                                                                aria-label="Delete category"
+                                                                title="Delete category"
                                                                 onClick={() =>
                                                                     void handleDeleteEditingTaskList()
                                                                 }
                                                             >
-                                                                {isDeleting
-                                                                    ? "Deleting..."
-                                                                    : "Delete"}
+                                                                <span className="compact-action-button__icon">
+                                                                    <IconTrash />
+                                                                </span>
                                                             </button>
                                                             <button
                                                                 type="button"
-                                                                className="secondary-button"
+                                                                className="compact-action-button compact-action-button--secondary compact-action-button--icon-only"
+                                                                aria-label="Cancel"
+                                                                title="Cancel"
                                                                 onClick={() =>
                                                                     resetCategoryEditor()
                                                                 }
                                                             >
-                                                                Cancel
+                                                                <span className="compact-action-button__icon">
+                                                                    <IconClose />
+                                                                </span>
                                                             </button>
                                                         </div>
                                                     </form>
@@ -4560,24 +4573,37 @@ export function App() {
                                                             />
                                                         </div>
                                                         <div className="category-inline-actions">
-                                                            <button type="submit">
-                                                                Add
+                                                            <button
+                                                                type="submit"
+                                                                className="compact-action-button compact-action-button--primary compact-action-button--icon-only"
+                                                                aria-label="Add category"
+                                                                title="Add category"
+                                                            >
+                                                                <span className="compact-action-button__icon">
+                                                                    <IconPlus />
+                                                                </span>
                                                             </button>
                                                             <button
                                                                 type="button"
-                                                                className="secondary-button"
+                                                                className="compact-action-button compact-action-button--secondary compact-action-button--icon-only"
+                                                                aria-label="Cancel"
+                                                                title="Cancel"
                                                                 onClick={() => {
                                                                     resetCategoryEditor();
                                                                 }}
                                                             >
-                                                                Cancel
+                                                                <span className="compact-action-button__icon">
+                                                                    <IconClose />
+                                                                </span>
                                                             </button>
                                                         </div>
                                                     </form>
                                                 ) : (
                                                     <button
                                                         type="button"
-                                                        className="filter-add-button"
+                                                        className="filter-add-button compact-action-button compact-action-button--primary compact-action-button--icon-only"
+                                                        aria-label="Add category"
+                                                        title="Add category"
                                                         onClick={() => {
                                                             setEditingTaskListId(
                                                                 null,
@@ -4592,7 +4618,9 @@ export function App() {
                                                             );
                                                         }}
                                                     >
-                                                        Add
+                                                        <span className="compact-action-button__icon">
+                                                            <IconPlus />
+                                                        </span>
                                                     </button>
                                                 )}
                                             </div>
@@ -4605,11 +4633,14 @@ export function App() {
                             {activeView === "unscheduled" && (
                                 <button
                                     type="button"
-                                    className="sidebar-create-task-button"
+                                    className="sidebar-create-task-button compact-action-button compact-action-button--primary compact-action-button--icon-only"
                                     aria-label="Create task"
+                                    title="Create task"
                                     onClick={openUnscheduledCreatePanel}
                                 >
-                                    Create
+                                    <span className="compact-action-button__icon">
+                                        <IconPlus />
+                                    </span>
                                 </button>
                             )}
                         </section>

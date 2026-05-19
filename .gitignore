@@ -24,3 +24,6 @@ coverage/
 
 # Test
 ./nohup.out
+
+# docs
+docs/TODO.md

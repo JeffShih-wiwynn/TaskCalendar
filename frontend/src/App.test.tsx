@@ -2103,7 +2103,17 @@ describe("App", () => {
 
         expect(
             await screen.findByRole("button", { name: "Create task" }),
-        ).toBeInTheDocument();
+        ).toHaveClass(
+            "sidebar-create-task-button",
+            "compact-action-button",
+            "compact-action-button--primary",
+        );
+        expect(screen.getByRole("button", { name: "Create task" })).toHaveTextContent("");
+        expect(
+            screen
+                .getByRole("button", { name: "Create task" })
+                .querySelector("svg"),
+        ).not.toBeNull();
 
         fireEvent.click(screen.getByRole("button", { name: "Create task" }));
 
@@ -3065,7 +3075,15 @@ describe("App", () => {
         expect(
             screen.queryByLabelText("Edit category name"),
         ).not.toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "Add" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Add category" })).toHaveClass(
+            "filter-add-button",
+            "compact-action-button",
+            "compact-action-button--primary",
+        );
+        expect(screen.getByRole("button", { name: "Add category" })).toHaveTextContent("");
+        expect(
+            screen.getByRole("button", { name: "Add category" }).querySelector("svg"),
+        ).not.toBeNull();
     });
 
     it("deletes a category from the inline edit form", async () => {
@@ -3075,7 +3093,31 @@ describe("App", () => {
             await screen.findByRole("button", { name: "Task category" }),
         );
         fireEvent.click(screen.getByRole("button", { name: "Edit Work" }));
-        fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+        expect(screen.getByRole("button", { name: "Save category" })).toHaveClass(
+            "compact-action-button",
+            "compact-action-button--primary",
+        );
+        expect(screen.getByRole("button", { name: "Save category" })).toHaveTextContent("");
+        expect(
+            screen.getByRole("button", { name: "Save category" }).querySelector("svg"),
+        ).not.toBeNull();
+        expect(screen.getByRole("button", { name: "Delete category" })).toHaveClass(
+            "compact-action-button",
+            "compact-action-button--danger",
+        );
+        expect(screen.getByRole("button", { name: "Delete category" })).toHaveTextContent("");
+        expect(
+            screen.getByRole("button", { name: "Delete category" }).querySelector("svg"),
+        ).not.toBeNull();
+        expect(screen.getByRole("button", { name: "Cancel" })).toHaveClass(
+            "compact-action-button",
+            "compact-action-button--secondary",
+        );
+        expect(screen.getByRole("button", { name: "Cancel" })).toHaveTextContent("");
+        expect(
+            screen.getByRole("button", { name: "Cancel" }).querySelector("svg"),
+        ).not.toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: "Delete category" }));
 
         await waitFor(() =>
             expect(mocks.deleteTaskList).toHaveBeenCalledWith("list-1"),
