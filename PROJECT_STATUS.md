@@ -58,6 +58,8 @@ This file summarizes the current repository state for future contributors and AI
 - `APP_TIMEZONE` now controls application datetime serialization, recurrence boundaries, notification scheduling, and backup datetime handling
 - Vite PWA support now generates a manifest and service worker for production static assets without intentional API response caching
 - Task detail panel footer actions now share compact icon-button styling across Create and Edit, with a neutral cancel control and tighter spacing
+- Task form Schedule, Categories, and Notes fields now use a one-open accordion on desktop and mobile while keeping title/basic info visible
+- Schedule now keeps `Clear schedule` in its own row and uses the cleaner `To`, `Every`, `Until`, and `Remind` labels
 - Task-form recurrence, reminder, and category dropdowns now use the shared in-app dropdown pattern with viewport-aware placement and category color dots
 - Desktop calendar events now click reliably again, and mobile calendar events intentionally stay tap-only with drag and resize disabled
 - Mobile month-view day previews now use matching flat icon buttons for `Close` and `Add`, with the `Add` button retaining the semi-transparent green accent treatment

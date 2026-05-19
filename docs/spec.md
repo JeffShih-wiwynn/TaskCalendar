@@ -41,7 +41,8 @@ The current app is web-first:
 - Optional completed-task visibility toggle on the calendar while viewing completed tasks.
 - Optional scheduled start/end, so unscheduled tasks are valid.
 - Create/Edit task composer actions use compact icon buttons with a neutral cancel/close control and shared footer spacing.
-- Recurrence, reminder, and category dropdowns use shared in-app dropdown menus with viewport-aware placement and category color dots.
+- Create/Edit task composer details are grouped into one-open accordion sections for Schedule, Categories, and Notes while title/basic info stays visible.
+- The Schedule section uses dedicated rows for `Clear schedule`, `To`, `Every`, `Until`, and `Remind`, while recurrence and reminder dropdowns use shared in-app menus with viewport-aware placement and category color dots.
 - Backend health endpoint.
 - Backend username/password registration and login endpoints with JWT access tokens.
 - Reusable backend current-user dependency for authenticated endpoints.
