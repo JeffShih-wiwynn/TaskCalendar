@@ -32,11 +32,42 @@ const mocks = vi.hoisted(() => ({
         dateClick: undefined as
             | ((arg: { date: Date; allDay: boolean }) => void)
             | undefined,
+        drop: undefined as
+            | ((arg: {
+                  date: Date;
+                  allDay: boolean;
+                  draggedEl: HTMLElement;
+                  jsEvent: MouseEvent;
+                  view: unknown;
+              }) => void)
+            | undefined,
+        eventDrop: undefined as
+            | ((arg: {
+                  event: {
+                      id: string;
+                      start: Date;
+                      end: Date | null;
+                      allDay: boolean;
+                  };
+                  revert: () => void;
+              }) => void)
+            | undefined,
         eventClick: undefined as
             | ((arg: {
                   el: HTMLElement;
                   event: { id: string; start: Date | null };
                   view: { type: string };
+              }) => void)
+              | undefined,
+        eventResize: undefined as
+            | ((arg: {
+                  event: {
+                      id: string;
+                      start: Date;
+                      end: Date | null;
+                      allDay: boolean;
+                  };
+                  revert: () => void;
               }) => void)
             | undefined,
         scrollTime: undefined as string | undefined,
@@ -48,6 +79,7 @@ const mocks = vi.hoisted(() => ({
         longPressDelay: undefined as number | undefined,
         selectLongPressDelay: undefined as number | undefined,
         eventLongPressDelay: undefined as number | undefined,
+        eventDragMinDistance: undefined as number | undefined,
         editable: undefined as boolean | undefined,
         eventStartEditable: undefined as boolean | undefined,
         eventDurationEditable: undefined as boolean | undefined,
@@ -207,6 +239,7 @@ vi.mock("@fullcalendar/react", () => ({
             longPressDelay,
             selectLongPressDelay,
             eventLongPressDelay,
+            eventDragMinDistance,
             editable,
             eventStartEditable,
             eventDurationEditable,
@@ -279,6 +312,7 @@ vi.mock("@fullcalendar/react", () => ({
             longPressDelay?: number;
             selectLongPressDelay?: number;
             eventLongPressDelay?: number;
+            eventDragMinDistance?: number;
             editable?: boolean;
             eventStartEditable?: boolean;
             eventDurationEditable?: boolean;
@@ -355,7 +389,10 @@ vi.mock("@fullcalendar/react", () => ({
 
         mocks.fullCalendarProps.events = events ?? [];
         mocks.fullCalendarProps.dateClick = dateClick;
+        mocks.fullCalendarProps.drop = drop;
+        mocks.fullCalendarProps.eventDrop = eventDrop;
         mocks.fullCalendarProps.eventClick = eventClick;
+        mocks.fullCalendarProps.eventResize = eventResize;
         mocks.fullCalendarProps.scrollTime = scrollTime;
         mocks.fullCalendarProps.scrollTimeReset = scrollTimeReset;
         mocks.fullCalendarProps.slotMinTime = slotMinTime;
@@ -365,6 +402,7 @@ vi.mock("@fullcalendar/react", () => ({
         mocks.fullCalendarProps.longPressDelay = longPressDelay;
         mocks.fullCalendarProps.selectLongPressDelay = selectLongPressDelay;
         mocks.fullCalendarProps.eventLongPressDelay = eventLongPressDelay;
+        mocks.fullCalendarProps.eventDragMinDistance = eventDragMinDistance;
         mocks.fullCalendarProps.editable = editable;
         mocks.fullCalendarProps.eventStartEditable = eventStartEditable;
         mocks.fullCalendarProps.eventDurationEditable = eventDurationEditable;
@@ -675,21 +713,80 @@ function makeTask(overrides: Record<string, unknown> = {}): Record<string, unkno
     };
 }
 
+type MockMediaQueryList = {
+    matches: boolean;
+    media: string;
+    onchange: null;
+    addEventListener: (
+        type: string,
+        listener: (event: MediaQueryListEvent) => void,
+    ) => void;
+    removeEventListener: (
+        type: string,
+        listener: (event: MediaQueryListEvent) => void,
+    ) => void;
+    addListener: (listener: (event: MediaQueryListEvent) => void) => void;
+    removeListener: (listener: (event: MediaQueryListEvent) => void) => void;
+    dispatchEvent: (event: Event) => boolean;
+};
+
+let mockMediaQueryList: MockMediaQueryList | null = null;
+const mockMediaQueryListeners = new Set<(event: MediaQueryListEvent) => void>();
+
 function setMobileLayout(matches: boolean): void {
+    if (!mockMediaQueryList) {
+        mockMediaQueryList = {
+            matches,
+            media: "(max-width: 860px)",
+            onchange: null,
+            addEventListener: (_type, listener) => {
+                mockMediaQueryListeners.add(listener);
+            },
+            removeEventListener: (_type, listener) => {
+                mockMediaQueryListeners.delete(listener);
+            },
+            addListener: (listener) => {
+                mockMediaQueryListeners.add(listener);
+            },
+            removeListener: (listener) => {
+                mockMediaQueryListeners.delete(listener);
+            },
+            dispatchEvent: (event) => {
+                mockMediaQueryListeners.forEach((listener) =>
+                    listener(event as MediaQueryListEvent),
+                );
+                return true;
+            },
+        };
+    }
+
+    mockMediaQueryList.matches = matches;
     Object.defineProperty(window, "matchMedia", {
         configurable: true,
         writable: true,
-        value: vi.fn((query: string) => ({
-            matches,
-            media: query,
-            onchange: null,
-            addEventListener: vi.fn(),
-            removeEventListener: vi.fn(),
-            addListener: vi.fn(),
-            removeListener: vi.fn(),
-            dispatchEvent: vi.fn(),
-        })),
+        value: vi.fn((query: string) => {
+            if (mockMediaQueryList) {
+                mockMediaQueryList.media = query;
+            }
+            return mockMediaQueryList as MockMediaQueryList;
+        }),
     });
+}
+
+function dispatchMobileLayoutChange(matches: boolean): void {
+    if (!mockMediaQueryList) {
+        setMobileLayout(matches);
+        return;
+    }
+
+    const mediaQueryList = mockMediaQueryList;
+    mediaQueryList.matches = matches;
+    mockMediaQueryListeners.forEach((listener) =>
+        listener({
+            matches,
+            media: mediaQueryList.media,
+        } as MediaQueryListEvent),
+    );
 }
 
 async function selectTaskDropdownOption(
@@ -705,6 +802,8 @@ async function selectTaskDropdownOption(
 
 describe("App", () => {
     beforeEach(() => {
+        mockMediaQueryList = null;
+        mockMediaQueryListeners.clear();
         setMobileLayout(false);
         window.localStorage.clear();
         window.localStorage.setItem("calendar-auth-token", "test-token");
@@ -812,11 +911,15 @@ describe("App", () => {
         mocks.fullCalendarRefetchEvents.mockClear();
         mocks.fullCalendarProps.events = [];
         mocks.fullCalendarProps.dateClick = undefined;
+        mocks.fullCalendarProps.drop = undefined;
+        mocks.fullCalendarProps.eventDrop = undefined;
         mocks.fullCalendarProps.eventClick = undefined;
+        mocks.fullCalendarProps.eventResize = undefined;
         mocks.fullCalendarProps.dayMaxEventRows = undefined;
         mocks.fullCalendarProps.longPressDelay = undefined;
         mocks.fullCalendarProps.selectLongPressDelay = undefined;
         mocks.fullCalendarProps.eventLongPressDelay = undefined;
+        mocks.fullCalendarProps.eventDragMinDistance = undefined;
         mocks.fullCalendarProps.editable = undefined;
         mocks.fullCalendarProps.eventStartEditable = undefined;
         mocks.fullCalendarProps.eventDurationEditable = undefined;
@@ -1208,6 +1311,122 @@ describe("App", () => {
         expect(screen.getByLabelText("Title")).toHaveValue("Preview edit task");
     });
 
+    it("remounts the calendar when mobile interaction mode changes", async () => {
+        render(<App />);
+
+        await screen.findByRole("button", { name: "Task view" });
+        expect(mocks.fullCalendarMount).toHaveBeenCalledTimes(1);
+        expect(mocks.fullCalendarProps.editable).toBe(true);
+        expect(mocks.fullCalendarProps.eventStartEditable).toBe(true);
+        expect(mocks.fullCalendarProps.eventDurationEditable).toBe(true);
+        expect(mocks.fullCalendarProps.eventDragMinDistance).toBe(8);
+
+        dispatchMobileLayoutChange(true);
+
+        await waitFor(() =>
+            expect(mocks.fullCalendarMount).toHaveBeenCalledTimes(2),
+        );
+        expect(mocks.fullCalendarProps.editable).toBe(false);
+        expect(mocks.fullCalendarProps.eventStartEditable).toBe(false);
+        expect(mocks.fullCalendarProps.eventDurationEditable).toBe(false);
+        expect(mocks.fullCalendarProps.eventDragMinDistance).toBe(9999);
+        expect(mocks.fullCalendarProps.longPressDelay).toBe(60 * 60 * 1000);
+        expect(mocks.fullCalendarProps.selectLongPressDelay).toBe(60 * 60 * 1000);
+        expect(mocks.fullCalendarProps.eventLongPressDelay).toBe(60 * 60 * 1000);
+
+        dispatchMobileLayoutChange(false);
+
+        await waitFor(() =>
+            expect(mocks.fullCalendarMount).toHaveBeenCalledTimes(3),
+        );
+        expect(mocks.fullCalendarProps.editable).toBe(true);
+        expect(mocks.fullCalendarProps.eventStartEditable).toBe(true);
+        expect(mocks.fullCalendarProps.eventDurationEditable).toBe(true);
+        expect(mocks.fullCalendarProps.eventDragMinDistance).toBe(8);
+    });
+
+    it("reverts mobile calendar drag, resize, and external drop without persisting", async () => {
+        setMobileLayout(true);
+        mocks.tasks = [
+            makeTask({
+                id: "task-mobile-drag",
+                title: "Mobile drag task",
+                scheduled_start: "2026-05-08T09:00:00.000Z",
+                scheduled_end: "2026-05-08T10:00:00.000Z",
+            }),
+            {
+                id: "task-mobile-external",
+                user_id: "user-1",
+                list_id: null,
+                title: "Mobile external task",
+                notes: null,
+                completed: false,
+                scheduled_start: null,
+                scheduled_end: null,
+                all_day: false,
+                due_at: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                unscheduled_order: 0,
+                recurrence_rule: null,
+                recurrence_series_id: null,
+                notification_enabled: false,
+                notification_offset_minutes: 0,
+                notification_channel: null,
+                notification_sent_at: null,
+                created_at: "2026-05-08T00:00:00.000Z",
+                updated_at: "2026-05-08T00:00:00.000Z",
+                completed_at: null,
+            },
+        ];
+
+        render(<App />);
+
+        await screen.findByRole("button", { name: "Mobile Calendar" });
+        expect(document.querySelector(".calendar-shell--mobile-readonly")).not.toBeNull();
+        expect(mocks.fullCalendarProps.editable).toBe(false);
+        expect(mocks.fullCalendarProps.eventStartEditable).toBe(false);
+        expect(mocks.fullCalendarProps.eventDurationEditable).toBe(false);
+        expect(mocks.fullCalendarProps.longPressDelay).toBe(60 * 60 * 1000);
+        expect(mocks.fullCalendarProps.selectLongPressDelay).toBe(60 * 60 * 1000);
+        expect(mocks.fullCalendarProps.eventLongPressDelay).toBe(60 * 60 * 1000);
+        expect(mocks.fullCalendarProps.eventDrop).toBeDefined();
+        expect(mocks.fullCalendarProps.eventResize).toBeDefined();
+        expect(mocks.fullCalendarProps.drop).toBeDefined();
+
+        mocks.fullCalendarProps.eventDrop?.({
+            event: {
+                id: "task-mobile-drag",
+                start: new Date("2026-05-08T11:00:00.000Z"),
+                end: new Date("2026-05-08T12:00:00.000Z"),
+                allDay: false,
+            },
+            revert: mocks.dragRevert,
+        });
+        mocks.fullCalendarProps.eventResize?.({
+            event: {
+                id: "task-mobile-drag",
+                start: new Date("2026-05-08T09:00:00.000Z"),
+                end: new Date("2026-05-08T11:30:00.000Z"),
+                allDay: false,
+            },
+            revert: mocks.dragRevert,
+        });
+
+        const draggedEl = document.createElement("button");
+        draggedEl.dataset.taskId = "task-mobile-external";
+        mocks.fullCalendarProps.drop?.({
+            date: new Date("2026-05-08T13:00:00.000Z"),
+            allDay: false,
+            draggedEl,
+            jsEvent: new MouseEvent("drop"),
+            view: {},
+        });
+
+        expect(mocks.dragRevert).toHaveBeenCalledTimes(2);
+        expect(mocks.updateTask).not.toHaveBeenCalled();
+    });
+
     it("opens the create panel from the mobile month selected-day list", async () => {
         setMobileLayout(true);
         mocks.tasks = [
@@ -1265,10 +1484,10 @@ describe("App", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Mobile Calendar" }));
         await waitFor(() =>
-            expect(mocks.fullCalendarProps.longPressDelay).toBe(550),
+            expect(mocks.fullCalendarProps.longPressDelay).toBe(60 * 60 * 1000),
         );
-        expect(mocks.fullCalendarProps.selectLongPressDelay).toBe(550);
-        expect(mocks.fullCalendarProps.eventLongPressDelay).toBe(550);
+        expect(mocks.fullCalendarProps.selectLongPressDelay).toBe(60 * 60 * 1000);
+        expect(mocks.fullCalendarProps.eventLongPressDelay).toBe(60 * 60 * 1000);
         expect(mocks.fullCalendarProps.editable).toBe(false);
         expect(mocks.fullCalendarProps.eventStartEditable).toBe(false);
         expect(mocks.fullCalendarProps.eventDurationEditable).toBe(false);

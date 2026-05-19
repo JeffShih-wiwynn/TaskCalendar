@@ -107,6 +107,7 @@ const minSidebarWidth = 240;
 const minCalendarWidth = 320;
 const mobileLayoutQuery = "(max-width: 860px)";
 const mobileCalendarLongPressDelayMs = 550;
+const mobileCalendarReadonlyLongPressDelayMs = 60 * 60 * 1000;
 const defaultWorkingHours: WorkingHoursSettings = {
     start: "08:00",
     end: "22:00",
@@ -702,6 +703,7 @@ export function App() {
     }, [areAllCategoriesVisible, categoryVisibility, showCompletedTasks, tasks]);
     const isTimeGridView =
         calendarView === "timeGridWeek" || calendarView === "timeGridDay";
+    const calendarInteractionMode = isMobileLayout ? "mobile" : "desktop";
 
     const events = useMemo<EventInput[]>(() => {
         return mapTasksToCalendarEvents(calendarTasks, categoryColorById);
@@ -1242,7 +1244,7 @@ export function App() {
 
     useEffect(() => {
         const taskListElement = taskListRef.current;
-        if (!taskListElement || detailPanelMode) {
+        if (!taskListElement || detailPanelMode || isMobileLayout) {
             return;
         }
 
@@ -1268,7 +1270,7 @@ export function App() {
         return () => {
             draggable.destroy();
         };
-    }, [activeView, detailPanelMode, isDetailPanelClosing]);
+    }, [activeView, detailPanelMode, isDetailPanelClosing, isMobileLayout]);
 
     useEffect(() => {
         if (!isTimeGridView) {
@@ -1659,6 +1661,11 @@ export function App() {
 
     const handleEventDrop = useCallback(
         async (dropInfo: EventDropArg) => {
+            if (isMobileLayout) {
+                dropInfo.revert();
+                return;
+            }
+
             const task = tasks.find((item) => item.id === dropInfo.event.id);
             const updates = getCalendarEventScheduleUpdate(dropInfo.event, task);
             clearUndoState();
@@ -1690,11 +1697,16 @@ export function App() {
                 );
             }
         },
-        [clearUndoState, reloadTasks, showTaskUndo, tasks],
+        [clearUndoState, isMobileLayout, reloadTasks, showTaskUndo, tasks],
     );
 
     const handleEventResize = useCallback(
         async (resizeInfo: EventResizeDoneArg) => {
+            if (isMobileLayout) {
+                resizeInfo.revert();
+                return;
+            }
+
             const task = tasks.find((item) => item.id === resizeInfo.event.id);
             const updates = getCalendarEventScheduleUpdate(resizeInfo.event);
             clearUndoState();
@@ -1731,7 +1743,7 @@ export function App() {
                 );
             }
         },
-        [clearUndoState, reloadTasks, showTaskUndo, tasks],
+        [clearUndoState, isMobileLayout, reloadTasks, showTaskUndo, tasks],
     );
 
     const openCreatePanel = useCallback(
@@ -2540,6 +2552,11 @@ export function App() {
 
     const handleExternalTaskDrop = useCallback(
         async (dropInfo: DropArg) => {
+            if (isMobileLayout) {
+                endScheduleDragHighlight();
+                return;
+            }
+
             const taskId = dropInfo.draggedEl.getAttribute("data-task-id");
             const task = tasksRef.current.find((item) => item.id === taskId);
             if (!task) {
@@ -2576,6 +2593,7 @@ export function App() {
         },
         [
             endScheduleDragHighlight,
+            isMobileLayout,
             refreshTasks,
             replaceTaskInState,
             showTaskUndo,
@@ -4403,13 +4421,7 @@ export function App() {
                                         ? "Create task"
                                         : "Edit task"}
                                 </h2>
-                                <div
-                                    className={`task-detail-header-actions ${
-                                        detailPanelMode === "create"
-                                            ? "task-detail-header-actions--create"
-                                            : "task-detail-header-actions--edit"
-                                    }`}
-                                >
+                                <div className="task-detail-header-actions">
                                     {detailPanelMode === "create" ? (
                                         <>
                                             <button
@@ -5073,7 +5085,9 @@ export function App() {
                                                                 event,
                                                             ) => {
                                                                 event.stopPropagation();
-                                                                startScheduleDragHighlight();
+                                                                if (!isMobileLayout) {
+                                                                    startScheduleDragHighlight();
+                                                                }
                                                             }}
                                                             onMouseDown={(
                                                                 event,
@@ -5376,11 +5390,12 @@ export function App() {
                 </div>
 
                 <motion.div
-                    className={`calendar-transition-shell calendar-view-${calendarView}`}
+                    className={`calendar-transition-shell calendar-shell ${isMobileLayout ? "calendar-shell--mobile-readonly" : ""} calendar-view-${calendarView}`}
                     animate={calendarTransitionControls}
                     initial={false}
                 >
                     <FullCalendar
+                        key={`calendar-interactions-${calendarInteractionMode}`}
                         ref={calendarRef}
                         plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
                         initialView={calendarView}
@@ -5436,20 +5451,29 @@ export function App() {
                         editable={!isMobileLayout}
                         eventStartEditable={!isMobileLayout}
                         eventDurationEditable={!isMobileLayout}
-                        droppable
+                        eventDragMinDistance={
+                            isMobileLayout ? 9999 : 8
+                        }
+                        droppable={!isMobileLayout}
                         selectable
                         longPressDelay={
-                            isMobileLayout ? mobileCalendarLongPressDelayMs : undefined
+                            isMobileLayout
+                                ? mobileCalendarReadonlyLongPressDelayMs
+                                : undefined
                         }
                         selectLongPressDelay={
-                            isMobileLayout ? mobileCalendarLongPressDelayMs : undefined
+                            isMobileLayout
+                                ? mobileCalendarReadonlyLongPressDelayMs
+                                : undefined
                         }
                         eventLongPressDelay={
-                            isMobileLayout ? mobileCalendarLongPressDelayMs : undefined
+                            isMobileLayout
+                                ? mobileCalendarReadonlyLongPressDelayMs
+                                : undefined
                         }
                         stickyFooterScrollbar={false}
                         scrollTimeReset={false}
-                        eventResizableFromStart
+                        eventResizableFromStart={!isMobileLayout}
                         nowIndicator
                         scrollTime={`${workingHours.start}:00`}
                         slotMinTime={calendarSlotMinTime}
@@ -6142,7 +6166,6 @@ type TaskComposerDropdownProps = {
     value: string;
     options: TaskComposerDropdownOption[];
     onChange: (value: string) => void;
-    hasValue?: boolean;
 };
 
 function TaskComposerDropdown({
@@ -6150,7 +6173,6 @@ function TaskComposerDropdown({
     value,
     options,
     onChange,
-    hasValue = Boolean(value),
 }: TaskComposerDropdownProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [menuPlacement, setMenuPlacement] = useState<"down" | "up">("down");
@@ -6374,7 +6396,6 @@ function RecurrenceComposer({ state, onChange }: RecurrenceComposerProps) {
                     label="Repeat"
                     value={state.recurrence_frequency}
                     options={recurrenceFrequencyOptions}
-                    hasValue={Boolean(state.recurrence_frequency)}
                     onChange={(value) =>
                         onChange({
                             recurrence_frequency: value as RecurrenceFrequency,
@@ -6398,7 +6419,6 @@ function RecurrenceComposer({ state, onChange }: RecurrenceComposerProps) {
                             label="Ends"
                             value={endsMode}
                             options={recurrenceEndsOptions}
-                            hasValue={Boolean(state.recurrence_until)}
                             onChange={(value) =>
                                 onChange({
                                     recurrence_until:
@@ -6469,7 +6489,6 @@ function ReminderComposer({ state, onChange }: ReminderComposerProps) {
                     label="Reminder"
                     value={presetValue}
                     options={reminderOptions}
-                    hasValue={Boolean(state.notification_unit)}
                     onChange={(selectedValue) => {
                         if (selectedValue === reminderCustomValue) {
                             onChange({
@@ -6517,7 +6536,6 @@ function ReminderComposer({ state, onChange }: ReminderComposerProps) {
                             label="Reminder unit"
                             value={state.notification_unit || "MINUTES"}
                             options={reminderUnitOptions}
-                            hasValue={Boolean(state.notification_unit)}
                             onChange={(value) =>
                                 onChange({
                                     notification_unit: value as NotificationUnit,
@@ -6561,7 +6579,6 @@ function LabeledSelect({
                 value={value}
                 options={categoryOptions}
                 onChange={onChange}
-                hasValue={Boolean(value)}
             />
         </div>
     );

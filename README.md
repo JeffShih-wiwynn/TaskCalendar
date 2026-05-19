@@ -79,7 +79,7 @@ Current frontend behavior includes:
 - a `Duplicate` action in the task right-click menu
 - distinct drag target cues for no-time reorder and drag-to-calendar scheduling
 - no-time task drag previews stay aligned in month view while dragging into the calendar
-- draggable, resizable, and all-day scheduled tasks
+- draggable, resizable, and all-day scheduled tasks on desktop; mobile calendar events stay tap/click-only for editing
 - a compact `Work` / `Full` toggle for week/day time-grid views, switching between working-hours and full-day ranges
 - a clickable year control in month view
 - month view now keeps its date grid aligned on the initial render without needing a click to recalculate layout

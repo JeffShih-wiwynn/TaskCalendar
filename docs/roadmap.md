@@ -91,6 +91,7 @@ Goal: make the web app pleasant to use on Android browsers before building nativ
 - [x] Do not rely only on drag-and-drop on mobile.
 - [x] Add a bottom sheet or other mobile-friendly task editor.
 - [x] Tapping a task on mobile should open an editor.
+- [x] Disable mobile calendar drag and resize affordances so narrow-screen events stay tap-only.
 - [x] The mobile editor should support title, completed state, `scheduled_start`, `scheduled_end`, and notes.
 - [x] Keep `eventDrop` and `eventResize` working where supported.
 - [x] Make time editing reliable even when touch dragging is awkward.

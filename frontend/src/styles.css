@@ -1043,18 +1043,8 @@ h2 {
   gap: 8px;
 }
 
-.task-detail-header-actions--create {
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.task-detail-header-actions--edit {
-  justify-content: flex-end;
-  gap: 10px;
-}
-
 .task-detail-header-actions-group {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
 }
@@ -1656,8 +1646,22 @@ h2 {
 
 .task-form-dropdown-menu .filter-option {
   min-height: 36px;
+  border-radius: 0;
   padding: 7px 10px;
   background-color: var(--panel-bg);
+  color: var(--text);
+}
+
+.task-form-dropdown-menu .filter-option:first-child {
+  border-radius: 5px 5px 0 0;
+}
+
+.task-form-dropdown-menu .filter-option:last-child {
+  border-radius: 0 0 5px 5px;
+}
+
+.task-form-dropdown-menu .filter-option:only-child {
+  border-radius: 5px;
 }
 
 .task-form-dropdown-menu .filter-option:hover,
@@ -2915,7 +2919,7 @@ input[type="checkbox"].task-checkbox:checked {
   .app-shell.mobile-screen-calendar.detail-panel-open .task-sidebar {
     position: fixed;
     inset: 0;
-    z-index: 23;
+    z-index: 40;
     display: block;
     width: auto;
     padding: 0;
@@ -3039,10 +3043,12 @@ input[type="checkbox"].task-checkbox:checked {
     right: max(8px, env(safe-area-inset-right));
     bottom: calc(76px + env(safe-area-inset-bottom));
     left: max(8px, env(safe-area-inset-left));
-    z-index: 24;
+    z-index: 41;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
     min-width: 0;
     max-height: min(76dvh, 680px);
-    overflow-y: auto;
+    overflow: hidden;
     padding: 14px 12px calc(14px + env(safe-area-inset-bottom));
     border: 1px solid var(--border);
     border-radius: 18px 18px 12px 12px;
@@ -3051,22 +3057,29 @@ input[type="checkbox"].task-checkbox:checked {
     pointer-events: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
+    isolation: isolate;
   }
 
   .mobile-task-sheet .task-detail-header {
-    position: sticky;
-    top: -14px;
-    z-index: 1;
+    position: relative;
+    z-index: 2;
     align-items: flex-start;
-    padding: 0 0 12px;
+    margin: -14px -12px 0;
+    padding: 14px 12px 12px;
     background: var(--page-bg);
+    box-shadow: 0 1px 0 var(--border);
+  }
+
+  .mobile-task-sheet > .task-form,
+  .mobile-task-sheet > .muted {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-top: 12px;
+    -webkit-overflow-scrolling: touch;
   }
 
   .mobile-task-sheet .task-detail-header-actions {
-    gap: 6px;
-  }
-
-  .mobile-task-sheet .task-detail-header-actions--create {
     gap: 8px;
   }
 
@@ -3494,6 +3507,48 @@ input[type="checkbox"].task-checkbox:checked {
     --checkbox-radius: 3px;
     --checkbox-mark-size: 68%;
     margin-top: 0;
+  }
+
+  .calendar-shell--mobile-readonly .fc-event.fc-event-draggable,
+  .calendar-shell--mobile-readonly .fc-event[href] {
+    cursor: default;
+    touch-action: pan-y;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  .calendar-shell--mobile-readonly .fc-timegrid-event,
+  .calendar-shell--mobile-readonly .fc-daygrid-event {
+    touch-action: pan-y;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  .calendar-shell--mobile-readonly .fc-event-mirror,
+  .calendar-shell--mobile-readonly .fc-event-dragging,
+  .calendar-shell--mobile-readonly .fc-event-resizing {
+    opacity: 1;
+    box-shadow: none;
+  }
+
+  .calendar-shell--mobile-readonly .fc-event .fc-event-resizer,
+  .calendar-shell--mobile-readonly .fc-event-selected .fc-event-resizer,
+  .calendar-shell--mobile-readonly .fc-event:hover .fc-event-resizer {
+    display: none !important;
+  }
+
+  .calendar-shell--mobile-readonly .fc-event-selected:before,
+  .calendar-shell--mobile-readonly .fc-event-selected:after,
+  .calendar-shell--mobile-readonly .fc-event:focus:before,
+  .calendar-shell--mobile-readonly .fc-event:focus:after {
+    content: none;
+    display: none;
+  }
+
+  .calendar-shell--mobile-readonly .fc-event-selected,
+  .calendar-shell--mobile-readonly .fc-event:focus {
+    box-shadow: none;
   }
 
   .calendar-view-timeGridWeek .calendar-task-title,
