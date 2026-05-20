@@ -144,6 +144,14 @@ If `start` fails because a port is already in use, run `./scripts/dev.sh stop` a
 
 ## Validation
 
+Whole-project sanity check:
+
+```sh
+./scripts/sanity.sh
+```
+
+This runs backend lint/tests and the frontend lint, typecheck, tests, and production build.
+
 Backend:
 
 ```sh

@@ -26,6 +26,7 @@ This file summarizes the current repository state for future contributors and AI
 - Frontend login/logout flow with local JWT storage
 - Backend task and category ownership scoping
 - Backend JSON export/import endpoints for the authenticated user's backup data
+- Whole-project sanity checks covering backend app/auth/tasks/categories/backup flow, frontend auth/navigation/backup flow, and the standard validation commands
 - Alembic migrations and migration smoke tests
 - Drag/drop and resize support for scheduled tasks
 - Overdue and completed task views
@@ -55,6 +56,7 @@ This file summarizes the current repository state for future contributors and AI
 - Toolbar view controls were condensed from separate Month/Week/Day buttons into a single cycle button
 - JSON export payload now returns only the authenticated user's tasks and task lists
 - Sidebar backup export/import actions now support user-scoped restore with explicit confirmation before import
+- `./scripts/sanity.sh` now runs the lightweight pre-commit sanity suite across backend and frontend checks
 - `APP_TIMEZONE` now controls application datetime serialization, recurrence boundaries, notification scheduling, and backup datetime handling
 - Vite PWA support now generates a manifest and service worker for production static assets without intentional API response caching
 - Task detail panel footer actions now share compact icon-button styling across Create and Edit, with a neutral cancel control and tighter spacing

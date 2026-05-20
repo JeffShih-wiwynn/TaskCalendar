@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { exportBackup, importBackup } from "./backup";
+import { exportBackup, fetchBackupExport, importBackup } from "./backup";
 
 describe("exportBackup", () => {
     beforeEach(() => {
@@ -54,6 +54,39 @@ describe("exportBackup", () => {
         vi.useRealTimers();
         revokeObjectURL.mockRestore();
         click.mockRestore();
+    });
+
+    it("fetches exported backup json with the auth header", async () => {
+        window.localStorage.setItem("calendar-auth-token", "test-token");
+        const payload = {
+            schema_version: 1,
+            exported_at: "2026-05-14T00:00:00.000Z",
+            tasks: [],
+            task_lists: [],
+        };
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () =>
+                new Response(JSON.stringify(payload), {
+                    status: 200,
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                }),
+            ) as typeof fetch,
+        );
+
+        await expect(fetchBackupExport()).resolves.toEqual(payload);
+
+        expect(fetch).toHaveBeenCalledWith(
+            `${import.meta.env.VITE_API_BASE_URL}/backup/export`,
+            expect.objectContaining({
+                method: "GET",
+                headers: expect.objectContaining({
+                    Authorization: "Bearer test-token",
+                }),
+            }),
+        );
     });
 
     it("posts imported backup json with the auth header", async () => {
