@@ -7,6 +7,7 @@ The project still treats non-Docker Ubuntu deployment as the primary manual path
 - `postgres`: PostgreSQL 16 with a persistent volume.
 - `backend`: FastAPI app started from a Python image.
 - `web`: Caddy serving the built frontend and reverse proxying API routes to the backend.
+- Only `web` is exposed on the host. `backend` and `postgres` stay private on the Compose network.
 
 ## Environment
 
@@ -25,7 +26,8 @@ Required values:
 
 `APP_TIMEZONE` defaults to `UTC` when unset. Use an IANA timezone name such as `UTC`, `Asia/Taipei`, or `America/New_York`.
 
-For Compose, `DATABASE_URL` is overridden to point at the `postgres` service. The other values should point at the public deployment URL.
+For Compose, `DATABASE_URL` is overridden to point at the `postgres` service. The other values should point at the VPN access URL, for example `http://100.64.0.2:8088`.
+Database access for maintenance should use `docker compose exec postgres psql -U calendar -d calendar`, not `localhost:5432`.
 
 ## Build And Start
 
@@ -36,15 +38,19 @@ docker compose up -d --build
 The backend container waits for PostgreSQL readiness, runs `alembic upgrade head`, and then starts Uvicorn.
 
 The `web` container builds the frontend assets and serves them with Caddy.
+Compose maps host port `8088` to container port `80`, so the app is available on the VPN at a URL such as `http://100.64.0.2:8088`.
+The backend listens on `8000` only inside the Compose network, and PostgreSQL listens on `5432` only inside the Compose network.
 
 ## Frontend
 
-The frontend build uses an empty `VITE_API_BASE_URL`, so the browser talks to the same origin that Caddy serves. Caddy reverse proxies these paths to the backend:
+The frontend Docker build forces an empty `VITE_API_BASE_URL` and ignores `frontend/.env.local`, so the browser talks to the same origin that Caddy serves. Caddy reverse proxies these paths to the backend:
 
 - `/api/*`
 - `/auth/*`
 - `/backup/*`
 - `/health`
+
+All other paths serve the React app shell.
 
 ## Health Checks
 
