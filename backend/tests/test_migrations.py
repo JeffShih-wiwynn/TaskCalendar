@@ -7,7 +7,7 @@ from sqlalchemy import create_engine, inspect
 
 def test_alembic_upgrade_head_initializes_fresh_database(tmp_path: Path) -> None:
     database_path = tmp_path / "calendar.db"
-    config = Config("/home/jeff/Projects/Calendar/backend/alembic.ini")
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
     config.set_main_option(
         "sqlalchemy.url",
         f"sqlite:///{database_path}",

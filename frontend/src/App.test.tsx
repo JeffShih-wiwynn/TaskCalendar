@@ -1016,6 +1016,34 @@ describe("App", () => {
         ).toHaveTextContent("Today");
     });
 
+    it("sanity-checks authenticated app navigation and settings backup", async () => {
+        render(<App />);
+
+        expect(await screen.findByText("Hello, alice")).toBeInTheDocument();
+        expect(mocks.listTasks).toHaveBeenCalled();
+        expect(mocks.listTaskLists).toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole("button", { name: "Task view" }));
+        const taskViewOptions = screen.getByRole("listbox", {
+            name: "Task view options",
+        });
+        expect(within(taskViewOptions).getByRole("button", { name: "Today" })).toBeInTheDocument();
+        expect(
+            within(taskViewOptions).getByRole("button", { name: "Upcoming" }),
+        ).toBeInTheDocument();
+        expect(within(taskViewOptions).getByRole("button", { name: "Inbox" })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: "Mobile Calendar" }));
+        expect(await screen.findByRole("button", { name: "Today" })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: "Mobile Settings" }));
+        fireEvent.click(await screen.findByRole("button", { name: "Backup & Restore" }));
+        fireEvent.click(await screen.findByRole("button", { name: "Backup" }));
+
+        await waitFor(() => expect(mocks.fetchBackupExport).toHaveBeenCalledTimes(1));
+        expect(mocks.downloadBackupPayload).toHaveBeenCalled();
+    });
+
     it("clears an invalid token and returns to login", async () => {
         mocks.getCurrentUser.mockRejectedValueOnce(
             new mocks.AuthError("Could not validate credentials"),

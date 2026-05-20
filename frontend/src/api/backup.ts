@@ -20,6 +20,7 @@ export async function exportBackup(): Promise<void> {
 
 export async function fetchBackupExport(): Promise<BackupExportPayload> {
     const response = await fetch(resolveApiUrl("/backup/export"), {
+        method: "GET",
         headers: {
             "Content-Type": "application/json",
             ...getAuthHeaders(),
