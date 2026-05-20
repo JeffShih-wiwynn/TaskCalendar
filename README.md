@@ -58,7 +58,28 @@ Click a blank calendar slot to open the create-task form in the left sidebar. Cl
 ## Production Deployment
 
 For manual Ubuntu deployment, use [docs/ubuntu-production.md](docs/ubuntu-production.md).
-For a minimal Docker/Compose deployment, use [docs/docker-production.md](docs/docker-production.md).
+
+## Docker Deployment
+
+For the minimal Docker/Compose deployment, use the existing stack in [docker-compose.yml](docker-compose.yml).
+Before deploying, make sure `backend/.env` exists and contains production values.
+For this VPN-only setup, use the VPN URL in backend env values, for example `http://100.64.0.2:8088`.
+Only the `web` container is exposed to the host. `backend` and `postgres` stay private inside the Compose network, and database access should use `docker compose exec postgres psql`, not `localhost:5432`.
+
+Build the images:
+
+```sh
+bash ./scripts/docker-build.sh
+```
+
+Start or update the stack:
+
+```sh
+bash ./scripts/docker-deploy.sh
+```
+
+The deploy script prints the container status with `docker compose ps` after startup.
+The web container maps host port `8088` to container port `80`, so the app is served from `http://100.64.0.2:8088` on the VPN.
 
 ## Backup
 
