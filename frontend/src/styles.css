@@ -565,37 +565,16 @@ h2 {
 }
 
 .filter-number-input::-webkit-outer-spin-button,
-.filter-number-input::-webkit-inner-spin-button,
-.calendar-year-form input::-webkit-outer-spin-button,
-.calendar-year-form input::-webkit-inner-spin-button {
+.filter-number-input::-webkit-inner-spin-button {
   appearance: none;
   margin: 0;
 }
 
-.calendar-year-form input {
-  width: 88px;
-  border: 1px solid var(--field-border);
-  border-radius: 6px;
-  padding: 8px 10px;
-  color: var(--text);
-  background: var(--panel-bg);
-  font: inherit;
-  font-weight: 700;
-  text-align: center;
-  appearance: textfield;
-  -moz-appearance: textfield;
-  transition:
-    border-color var(--micro-duration-fast) ease,
-    box-shadow var(--micro-duration-fast) ease;
-}
-
-.filter-number-input:hover,
-.calendar-year-form input:hover {
+.filter-number-input:hover {
   border-color: #587e70;
 }
 
-.filter-number-input:focus-visible,
-.calendar-year-form input:focus-visible {
+.filter-number-input:focus-visible {
   outline: 0;
   border-color: var(--accent);
   box-shadow: 0 0 0 2px rgb(69 181 143 / 18%);
@@ -904,6 +883,22 @@ h2 {
   gap: 8px;
 }
 
+.category-inline-actions--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.category-inline-actions--confirm-delete {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.category-inline-actions--confirm-delete .category-inline-actions__cancel {
+  grid-column: span 2;
+}
+
+.category-inline-actions--confirm-delete .category-inline-actions__confirm-delete {
+  grid-column: span 1;
+}
+
 .category-inline-actions button {
   border: 0;
   border-radius: 6px;
@@ -942,16 +937,16 @@ h2 {
 }
 
 .category-inline-actions .compact-action-button--primary {
-  border: 1px solid color-mix(in srgb, var(--accent) 82%, #000 18%);
-  color: #ffffff;
-  background: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  color: color-mix(in srgb, var(--accent) 90%, #000 10%);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .category-inline-actions .compact-action-button--primary:hover:not(:disabled),
 .category-inline-actions .compact-action-button--primary:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 88%, var(--border));
-  background: color-mix(in srgb, var(--accent) 88%, #ffffff 12%);
-  color: #ffffff;
+  border-color: color-mix(in srgb, var(--accent) 56%, var(--border));
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: color-mix(in srgb, var(--accent) 90%, #000 10%);
 }
 
 .category-inline-actions .compact-action-button--secondary {
@@ -968,16 +963,16 @@ h2 {
 }
 
 .category-inline-actions .compact-action-button--danger {
-  border: 1px solid color-mix(in srgb, #dc3f3f 78%, #000 22%);
-  color: #ffffff;
-  background: #dc3f3f;
+  border: 1px solid color-mix(in srgb, #dc3f3f 40%, var(--border));
+  color: color-mix(in srgb, #dc3f3f 88%, #000 12%);
+  background: color-mix(in srgb, #dc3f3f 12%, transparent);
 }
 
 .category-inline-actions .compact-action-button--danger:hover:not(:disabled),
 .category-inline-actions .compact-action-button--danger:focus-visible {
-  border-color: color-mix(in srgb, #dc3f3f 84%, #000 16%);
-  background: #cf3737;
-  color: #ffffff;
+  border-color: color-mix(in srgb, #dc3f3f 56%, var(--border));
+  background: color-mix(in srgb, #dc3f3f 18%, transparent);
+  color: color-mix(in srgb, #dc3f3f 88%, #000 12%);
 }
 
 .category-inline-actions .compact-action-button:disabled {
@@ -1715,8 +1710,10 @@ h2 {
 }
 
 .task-form-accordion-trigger {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  width: 100%;
+  flex: 1 1 auto;
   min-width: 0;
   border: 0;
   border-radius: 8px;
@@ -1726,6 +1723,7 @@ h2 {
   font: inherit;
   font-size: 0.82rem;
   font-weight: 800;
+  justify-content: flex-start;
   cursor: pointer;
 }
 
@@ -2207,7 +2205,8 @@ input[type="checkbox"].task-checkbox:checked {
 }
 
 .task-form .task-form-accordion-trigger {
-  width: auto;
+  width: 100%;
+  flex: 1 1 auto;
   border: 0;
   border-radius: 8px;
   padding: 6px 8px 6px 4px;
@@ -2215,6 +2214,7 @@ input[type="checkbox"].task-checkbox:checked {
   background: transparent;
   box-shadow: none;
   text-align: left;
+  justify-content: flex-start;
 }
 
 .task-form .task-form-accordion-trigger:hover:not(:disabled),
@@ -2388,14 +2388,100 @@ input[type="checkbox"].task-checkbox:checked {
   font-weight: 700;
 }
 
-.calendar-year-control {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.calendar-month-year-control {
+  position: relative;
+  min-width: 0;
 }
 
-.calendar-title-month {
+.calendar-month-year-dropdown {
+  position: relative;
+}
+
+.calendar-month-year-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  max-width: 100%;
   white-space: nowrap;
+}
+
+.calendar-month-year-trigger span {
+  color: var(--subtle);
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.calendar-month-year-menu {
+  top: calc(100% + 8px);
+  left: auto;
+  right: 50%;
+  width: min(276px, calc(100vw - 24px));
+  margin-right: -138px;
+}
+
+.calendar-month-year-header {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 38px;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.calendar-month-year-current {
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.calendar-month-year-nav,
+.calendar-month-option {
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.calendar-month-year-nav {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.calendar-month-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.calendar-month-option {
+  min-height: 38px;
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  padding: 8px 6px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.calendar-month-option:nth-child(3n + 1) {
+  border-left: 0;
+}
+
+.calendar-month-option:nth-child(-n + 3) {
+  border-top: 0;
+}
+
+.calendar-month-year-nav:hover,
+.calendar-month-year-nav:focus-visible,
+.calendar-month-option:hover,
+.calendar-month-option:focus-visible,
+.calendar-month-option.active {
+  outline: 0;
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .calendar-year-button,
@@ -2836,10 +2922,6 @@ input[type="checkbox"].task-checkbox:checked {
   display: none;
 }
 
-.mobile-calendar-period-control {
-  display: none;
-}
-
 @media (hover: hover) and (pointer: fine) {
   .task-row:hover {
     transform: translateY(-2px);
@@ -3106,10 +3188,15 @@ input[type="checkbox"].task-checkbox:checked {
 .fc .fc-col-header-cell.fc-day-today .fc-col-header-cell-cushion,
 .fc .fc-timegrid-col.fc-day-today .fc-col-header-cell-cushion {
   position: relative;
-  display: inline-flex;
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
-  gap: 6px;
+  gap: 2px 6px;
   font-weight: 700;
+  text-align: center;
 }
 
 .fc .fc-col-header-cell.fc-day-today .fc-col-header-cell-cushion::after,
@@ -4034,23 +4121,19 @@ input[type="checkbox"].task-checkbox:checked {
   }
 
   .calendar-toolbar-dayGridMonth {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "nav title view";
   }
 
   .calendar-toolbar-dayGridMonth .calendar-toolbar-group:first-child {
     gap: 4px;
   }
 
-  .calendar-toolbar-dayGridMonth .mobile-calendar-period-control {
+  .calendar-toolbar-dayGridMonth .calendar-toolbar-title {
+    display: flex;
+    grid-area: title;
+    justify-content: center;
     min-width: 0;
-    display: block;
-  }
-
-  .calendar-toolbar-dayGridMonth .mobile-calendar-period-button {
-    max-width: 7.5rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .calendar-toolbar-button,
@@ -4088,14 +4171,20 @@ input[type="checkbox"].task-checkbox:checked {
     line-height: 1.1;
   }
 
-  .calendar-title-month {
+  .calendar-month-year-control {
+    min-width: 0;
+  }
+
+  .calendar-month-year-trigger {
+    max-width: 9.5rem;
     overflow: hidden;
+    padding-inline: 8px;
     text-overflow: ellipsis;
   }
 
-  .calendar-year-control {
-    min-width: 0;
-    gap: 6px;
+  .calendar-month-year-menu {
+    width: min(92vw, 360px);
+    max-width: calc(100vw - 24px);
   }
 
   .task-form {
@@ -4273,18 +4362,31 @@ input[type="checkbox"].task-checkbox:checked {
     flex-wrap: nowrap;
   }
 
-  .calendar-toolbar-dayGridMonth .mobile-calendar-period-button {
-    max-width: 6.5rem;
+  .calendar-toolbar-dayGridMonth .calendar-month-year-trigger {
+    max-width: 7.5rem;
+  }
+
+  .calendar-month-year-header {
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+  }
+
+  .calendar-month-year-nav {
+    width: 44px;
+    height: 44px;
+  }
+
+  .calendar-month-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .calendar-month-option {
+    min-height: 44px;
+    padding: 10px 6px;
   }
 
   .calendar-task .task-checkbox {
     --checkbox-size: 14px;
     --checkbox-radius: 3px;
-  }
-
-  .calendar-year-control {
-    flex-wrap: wrap;
-    justify-content: center;
   }
 
   .task-row {

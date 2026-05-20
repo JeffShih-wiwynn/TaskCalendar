@@ -26,6 +26,7 @@ import {
     useAnimationControls,
     useReducedMotion,
 } from "framer-motion";
+import { createPortal } from "react-dom";
 import {
     useCallback,
     useEffect,
@@ -39,6 +40,7 @@ import {
     type MouseEvent as ReactMouseEvent,
     type PointerEvent as ReactPointerEvent,
     type ReactNode,
+    type TouchEvent as ReactTouchEvent,
 } from "react";
 
 import {
@@ -116,6 +118,20 @@ const defaultWorkingHours: WorkingHoursSettings = {
 const workingHourOptions = Array.from({ length: 24 }, (_, index) =>
     `${String(index).padStart(2, "0")}:00`,
 );
+const taskFormDropdownThemeVariables = [
+    "--panel-bg",
+    "--text",
+    "--muted",
+    "--subtle",
+    "--border",
+    "--field-border",
+    "--accent",
+    "--accent-soft",
+    "--selected-bg",
+    "--shadow",
+    "--danger",
+    "--danger-soft",
+];
 
 function IconArrowUp() {
     return (
@@ -354,6 +370,14 @@ type TaskRowPointerState = {
     dragging: boolean;
     orderAtStart: string[];
 };
+type CalendarSwipeState = {
+    startX: number;
+    startY: number;
+    currentX: number;
+    currentY: number;
+    blocked: boolean;
+    isHorizontalSwipe: boolean;
+};
 
 const initialFormState: TaskFormState = {
     title: "",
@@ -524,7 +548,21 @@ const calendarViewCycle: Record<CalendarView, CalendarView> = {
     dayGridMonth: "timeGridWeek",
 };
 
+const calendarMonthOptions = Array.from({ length: 12 }, (_, monthIndex) => ({
+    monthIndex,
+    shortLabel: new Intl.DateTimeFormat(undefined, { month: "short" }).format(
+        new Date(2026, monthIndex, 1),
+    ),
+    longLabel: new Intl.DateTimeFormat(undefined, { month: "long" }).format(
+        new Date(2026, monthIndex, 1),
+    ),
+}));
+
 const calendarTransitionEase = [0.22, 1, 0.36, 1] as const;
+const mobileCalendarTapSuppressThresholdPx = 24;
+const mobileCalendarSwipeThresholdPx = 60;
+const mobileCalendarSwipeHorizontalRatio = 1.2;
+const mobileCalendarTapSuppressResetMs = 180;
 const motionTimings = {
     completion: { duration: 0.24, ease: "easeOut" as const },
     panel: { duration: 0.26, ease: "easeOut" as const },
@@ -540,6 +578,45 @@ function isNarrowScreen(): boolean {
         typeof window !== "undefined" &&
         typeof window.matchMedia === "function" &&
         window.matchMedia(mobileLayoutQuery).matches
+    );
+}
+
+function shouldIgnoreCalendarSwipeTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof Element)) {
+        return true;
+    }
+
+    return Boolean(
+        target.closest(
+            [
+                "button",
+                "input",
+                "select",
+                "textarea",
+                "[contenteditable='true']",
+                ".filter-dropdown",
+                ".task-drag-handle",
+                ".fc-event-resizer",
+                ".fc-event-resizer-start",
+                ".fc-event-resizer-end",
+            ].join(","),
+        ),
+    );
+}
+
+function isHorizontalCalendarSwipeIntent(
+    startX: number,
+    startY: number,
+    currentX: number,
+    currentY: number,
+    thresholdPx: number,
+): boolean {
+    const absDeltaX = Math.abs(currentX - startX);
+    const absDeltaY = Math.abs(currentY - startY);
+
+    return (
+        absDeltaX >= thresholdPx &&
+        absDeltaX > absDeltaY * mobileCalendarSwipeHorizontalRatio
     );
 }
 
@@ -594,6 +671,8 @@ export function App() {
     const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
     const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
     const [isAddingCategory, setIsAddingCategory] = useState(false);
+    const [isDeleteCategoryConfirming, setIsDeleteCategoryConfirming] =
+        useState(false);
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
     const [formState, setFormState] = useState<TaskFormState>(initialFormState);
     const [editState, setEditState] = useState<EditFormState | null>(null);
@@ -657,10 +736,12 @@ export function App() {
         useState<Date | null>(null);
     const [mobileQuickActionTaskId, setMobileQuickActionTaskId] =
         useState<string | null>(null);
-    const [isYearPickerOpen, setIsYearPickerOpen] = useState(false);
-    const [yearDraft, setYearDraft] = useState(
-        String(new Date().getFullYear()),
+    const [isMonthYearPickerOpen, setIsMonthYearPickerOpen] = useState(false);
+    const [monthYearPickerYear, setMonthYearPickerYear] = useState(
+        new Date().getFullYear(),
     );
+    const [monthYearPickerStyle, setMonthYearPickerStyle] =
+        useState<CSSProperties | null>(null);
     const editStateSyncTaskIdRef = useRef<string | null>(null);
     const calendarRef = useRef<FullCalendar | null>(null);
     const calendarTransitionTimeoutRef = useRef<number | null>(null);
@@ -695,8 +776,12 @@ export function App() {
     const titleInputRef = useRef<HTMLInputElement | null>(null);
     const createFormRef = useRef<HTMLFormElement | null>(null);
     const categoryNameInputRef = useRef<HTMLInputElement | null>(null);
-    const yearInputRef = useRef<HTMLInputElement | null>(null);
+    const monthYearPickerRef = useRef<HTMLDivElement | null>(null);
+    const monthYearPickerTriggerRef = useRef<HTMLButtonElement | null>(null);
     const timeGridScrollTopRef = useRef<number | null>(null);
+    const calendarSwipeStateRef = useRef<CalendarSwipeState | null>(null);
+    const suppressNextCalendarTapRef = useRef(false);
+    const calendarTapSuppressTimerRef = useRef<number | null>(null);
     const locallyUpdatedTasksRef = useRef<Map<string, ScheduledTask>>(new Map());
     const calendarResizeRafRef = useRef<number | null>(null);
     const calendarResizeRaf2Ref = useRef<number | null>(null);
@@ -1508,10 +1593,89 @@ export function App() {
     }, [calendarDate, calendarView, isTimeGridView]);
 
     useEffect(() => {
-        if (isYearPickerOpen) {
-            window.setTimeout(() => yearInputRef.current?.focus(), 0);
+        if (!isMonthYearPickerOpen) {
+            return;
         }
-    }, [isYearPickerOpen]);
+
+        const handlePointerDown = (event: PointerEvent) => {
+            const target = event.target;
+            if (
+                target instanceof Node &&
+                (monthYearPickerRef.current?.contains(target) ||
+                    monthYearPickerTriggerRef.current?.contains(target))
+            ) {
+                return;
+            }
+
+            setIsMonthYearPickerOpen(false);
+        };
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                setIsMonthYearPickerOpen(false);
+                monthYearPickerTriggerRef.current?.focus();
+            }
+        };
+
+        document.addEventListener("pointerdown", handlePointerDown);
+        document.addEventListener("keydown", handleKeyDown);
+
+        return () => {
+            document.removeEventListener("pointerdown", handlePointerDown);
+            document.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [isMonthYearPickerOpen]);
+
+    useLayoutEffect(() => {
+        if (!isMonthYearPickerOpen || !isMobileLayout) {
+            setMonthYearPickerStyle(null);
+            return;
+        }
+
+        const updateMonthYearPickerPosition = () => {
+            const triggerRect =
+                monthYearPickerTriggerRef.current?.getBoundingClientRect();
+            if (!triggerRect) {
+                return;
+            }
+
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            const margin = 12;
+            const maxWidth = Math.min(360, viewportWidth - margin * 2);
+            const top = Math.min(
+                Math.max(triggerRect.bottom + 10, margin),
+                viewportHeight - margin,
+            );
+            const centeredLeft = triggerRect.left + triggerRect.width / 2;
+            const left = Math.min(
+                Math.max(centeredLeft - maxWidth / 2, margin),
+                viewportWidth - margin - maxWidth,
+            );
+
+            setMonthYearPickerStyle({
+                position: "fixed",
+                top,
+                left,
+                width: maxWidth,
+                maxHeight: `calc(100vh - ${top + margin}px)`,
+            });
+        };
+
+        updateMonthYearPickerPosition();
+
+        const handleResize = () => {
+            updateMonthYearPickerPosition();
+        };
+
+        window.addEventListener("resize", handleResize);
+        window.addEventListener("scroll", handleResize, true);
+
+        return () => {
+            window.removeEventListener("resize", handleResize);
+            window.removeEventListener("scroll", handleResize, true);
+        };
+    }, [isMobileLayout, isMonthYearPickerOpen, monthYearPickerYear]);
 
     useEffect(() => {
         return () => {
@@ -1607,14 +1771,6 @@ export function App() {
             setCalendarTitle(dateInfo.view.title);
             setCalendarDate(
                 calendarRef.current?.getApi().getDate() ?? dateInfo.start,
-            );
-            setYearDraft(
-                String(
-                    (
-                        calendarRef.current?.getApi().getDate() ??
-                        dateInfo.start
-                    ).getFullYear(),
-                ),
             );
             void refreshTasks();
         },
@@ -1819,40 +1975,191 @@ export function App() {
         }
     }, [startCalendarTransition]);
 
+    const isMobileCalendarSwipeEnabled =
+        isMobileLayout && mobileScreen === "calendar";
+
+    const clearCalendarTapSuppressTimer = useCallback(() => {
+        if (calendarTapSuppressTimerRef.current !== null) {
+            window.clearTimeout(calendarTapSuppressTimerRef.current);
+            calendarTapSuppressTimerRef.current = null;
+        }
+    }, []);
+
+    const scheduleCalendarTapSuppressReset = useCallback(() => {
+        clearCalendarTapSuppressTimer();
+        calendarTapSuppressTimerRef.current = window.setTimeout(() => {
+            suppressNextCalendarTapRef.current = false;
+            calendarTapSuppressTimerRef.current = null;
+        }, mobileCalendarTapSuppressResetMs);
+    }, [clearCalendarTapSuppressTimer]);
+
+    const markCalendarSwipeIntent = useCallback(() => {
+        suppressNextCalendarTapRef.current = true;
+    }, []);
+
+    const handleCalendarTouchStart = useCallback(
+        (event: ReactTouchEvent<HTMLElement>) => {
+            const touch = event.touches[0];
+            if (!isMobileCalendarSwipeEnabled || !touch) {
+                calendarSwipeStateRef.current = null;
+                return;
+            }
+
+            calendarSwipeStateRef.current = {
+                startX: touch.clientX,
+                startY: touch.clientY,
+                currentX: touch.clientX,
+                currentY: touch.clientY,
+                blocked: shouldIgnoreCalendarSwipeTarget(event.target),
+                isHorizontalSwipe: false,
+            };
+        },
+        [isMobileCalendarSwipeEnabled],
+    );
+
+    const handleCalendarTouchMove = useCallback(
+        (event: ReactTouchEvent<HTMLElement>) => {
+            const swipeState = calendarSwipeStateRef.current;
+            const touch = event.touches[0];
+            if (
+                !isMobileCalendarSwipeEnabled ||
+                !swipeState ||
+                swipeState.blocked ||
+                !touch
+            ) {
+                return;
+            }
+
+            swipeState.currentX = touch.clientX;
+            swipeState.currentY = touch.clientY;
+
+            if (
+                isHorizontalCalendarSwipeIntent(
+                    swipeState.startX,
+                    swipeState.startY,
+                    swipeState.currentX,
+                    swipeState.currentY,
+                    mobileCalendarTapSuppressThresholdPx,
+                )
+            ) {
+                swipeState.isHorizontalSwipe = true;
+                markCalendarSwipeIntent();
+            }
+        },
+        [isMobileCalendarSwipeEnabled, markCalendarSwipeIntent],
+    );
+
+    const handleCalendarTouchEnd = useCallback(
+        (event: ReactTouchEvent<HTMLElement>) => {
+            const swipeState = calendarSwipeStateRef.current;
+            calendarSwipeStateRef.current = null;
+
+            if (
+                !isMobileCalendarSwipeEnabled ||
+                !swipeState ||
+                swipeState.blocked
+            ) {
+                return;
+            }
+
+            const touch = event.changedTouches[0];
+            if (!touch) {
+                return;
+            }
+
+            const deltaX = touch.clientX - swipeState.startX;
+            const deltaY = touch.clientY - swipeState.startY;
+            const absDeltaX = Math.abs(deltaX);
+            const absDeltaY = Math.abs(deltaY);
+            const isHorizontalTapSuppressGesture =
+                swipeState.isHorizontalSwipe ||
+                isHorizontalCalendarSwipeIntent(
+                    swipeState.startX,
+                    swipeState.startY,
+                    touch.clientX,
+                    touch.clientY,
+                    mobileCalendarTapSuppressThresholdPx,
+                );
+
+            if (isHorizontalTapSuppressGesture) {
+                markCalendarSwipeIntent();
+                scheduleCalendarTapSuppressReset();
+            }
+
+            if (
+                absDeltaX < mobileCalendarSwipeThresholdPx ||
+                absDeltaX <= absDeltaY * mobileCalendarSwipeHorizontalRatio
+            ) {
+                return;
+            }
+
+            navigateCalendar(deltaX < 0 ? "next" : "prev");
+        },
+        [
+            isMobileCalendarSwipeEnabled,
+            markCalendarSwipeIntent,
+            navigateCalendar,
+            scheduleCalendarTapSuppressReset,
+        ],
+    );
+
+    const handleCalendarTouchCancel = useCallback(() => {
+        calendarSwipeStateRef.current = null;
+        scheduleCalendarTapSuppressReset();
+    }, [scheduleCalendarTapSuppressReset]);
+
+    const shouldSuppressCalendarCreateFromTap = useCallback(() => {
+        if (!isMobileCalendarSwipeEnabled || !suppressNextCalendarTapRef.current) {
+            return false;
+        }
+
+        suppressNextCalendarTapRef.current = false;
+        scheduleCalendarTapSuppressReset();
+        return true;
+    }, [isMobileCalendarSwipeEnabled, scheduleCalendarTapSuppressReset]);
+
+    useEffect(
+        () => () => {
+            clearCalendarTapSuppressTimer();
+        },
+        [clearCalendarTapSuppressTimer],
+    );
+
     const goToToday = useCallback(() => {
         startCalendarTransition("today");
         calendarRef.current?.getApi().today();
+        setIsMonthYearPickerOpen(false);
     }, [startCalendarTransition]);
 
     const changeCalendarView = useCallback((nextView: CalendarView) => {
         startCalendarTransition("view");
         calendarRef.current?.getApi().changeView(nextView);
-        setIsYearPickerOpen(false);
+        setIsMonthYearPickerOpen(false);
     }, [startCalendarTransition]);
 
     const cycleCalendarView = useCallback(() => {
         changeCalendarView(calendarViewCycle[calendarView]);
     }, [calendarView, changeCalendarView]);
 
-    const submitYearChange = useCallback(
-        (event: FormEvent<HTMLFormElement>) => {
-            event.preventDefault();
-
-            const nextYear = Number.parseInt(yearDraft, 10);
-            if (Number.isNaN(nextYear)) {
-                return;
+    const toggleMonthYearPicker = useCallback(() => {
+        setIsMonthYearPickerOpen((current) => {
+            if (!current) {
+                setMonthYearPickerYear(calendarDate.getFullYear());
             }
+            return !current;
+        });
+    }, [calendarDate]);
 
+    const selectCalendarMonth = useCallback(
+        (monthIndex: number) => {
             const nextDate = new Date(calendarDate);
-            nextDate.setFullYear(nextYear);
-            if (calendarView === "dayGridMonth") {
-                nextDate.setDate(1);
-            }
+            nextDate.setDate(1);
+            nextDate.setFullYear(monthYearPickerYear, monthIndex, 1);
             startCalendarTransition("today");
             calendarRef.current?.getApi().gotoDate(nextDate);
-            setIsYearPickerOpen(false);
+            setIsMonthYearPickerOpen(false);
         },
-        [calendarDate, calendarView, startCalendarTransition, yearDraft],
+        [calendarDate, monthYearPickerYear, startCalendarTransition],
     );
 
     const handleEventDrop = useCallback(
@@ -2048,6 +2355,10 @@ export function App() {
 
     const handleDateSelect = useCallback(
         (selectInfo: DateSelectArg) => {
+            if (shouldSuppressCalendarCreateFromTap()) {
+                return;
+            }
+
             if (selectInfo.allDay) {
                 openDateOnlyCreatePanel(selectInfo.start);
                 return;
@@ -2058,11 +2369,19 @@ export function App() {
                 selectInfo.end,
             );
         },
-        [openCreatePanel, openDateOnlyCreatePanel],
+        [
+            openCreatePanel,
+            openDateOnlyCreatePanel,
+            shouldSuppressCalendarCreateFromTap,
+        ],
     );
 
     const handleDateClick = useCallback(
         (clickInfo: DateClickArg) => {
+            if (shouldSuppressCalendarCreateFromTap()) {
+                return;
+            }
+
             const isMobileCalendar = isNarrowScreen();
             if (calendarView === "dayGridMonth" && isMobileCalendar) {
                 setMobileMonthPreviewDate(clickInfo.date);
@@ -2080,7 +2399,12 @@ export function App() {
                 : new Date(start.getTime() + 60 * 60 * 1000);
             openCreatePanel(start, end);
         },
-        [calendarView, openCreatePanel, openDateOnlyCreatePanel],
+        [
+            calendarView,
+            openCreatePanel,
+            openDateOnlyCreatePanel,
+            shouldSuppressCalendarCreateFromTap,
+        ],
     );
 
     const handleCheckboxChange = useCallback(
@@ -3175,6 +3499,7 @@ export function App() {
 
     const resetCategoryEditor = useCallback(() => {
         setIsAddingCategory(false);
+        setIsDeleteCategoryConfirming(false);
         setEditingTaskListId(null);
         setNewListName("");
         setNewListColor(defaultCategoryColor);
@@ -3190,6 +3515,7 @@ export function App() {
 
     const startEditingTaskList = useCallback((taskList: TaskList) => {
         setIsAddingCategory(false);
+        setIsDeleteCategoryConfirming(false);
         setEditingTaskListId(taskList.id);
         setEditingListName(taskList.name);
         setEditingListColor(taskList.color);
@@ -4493,47 +4819,85 @@ export function App() {
                                                                 aria-label="Edit category name"
                                                             />
                                                         </div>
-                                                        <div className="category-inline-actions">
-                                                            <button
-                                                                type="submit"
-                                                                className="compact-action-button compact-action-button--primary compact-action-button--icon-only"
-                                                                aria-label="Save category"
-                                                                title="Save category"
-                                                            >
-                                                                <span className="compact-action-button__icon">
-                                                                    <IconCheck />
-                                                                </span>
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                className="compact-action-button compact-action-button--danger compact-action-button--icon-only"
-                                                                disabled={
-                                                                    isDeleting
-                                                                }
-                                                                aria-label="Delete category"
-                                                                title="Delete category"
-                                                                onClick={() =>
-                                                                    void handleDeleteEditingTaskList()
-                                                                }
-                                                            >
-                                                                <span className="compact-action-button__icon">
-                                                                    <IconTrash />
-                                                                </span>
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                className="compact-action-button compact-action-button--secondary compact-action-button--icon-only"
-                                                                aria-label="Cancel"
-                                                                title="Cancel"
-                                                                onClick={() =>
-                                                                    resetCategoryEditor()
-                                                                }
-                                                            >
-                                                                <span className="compact-action-button__icon">
-                                                                    <IconClose />
-                                                                </span>
-                                                            </button>
-                                                        </div>
+                                                        {isDeleteCategoryConfirming ? (
+                                                            <div className="category-inline-actions category-inline-actions--confirm-delete">
+                                                                <button
+                                                                    type="button"
+                                                                    className="compact-action-button compact-action-button--secondary compact-action-button--icon-only category-inline-actions__cancel"
+                                                                    aria-label="Cancel"
+                                                                    title="Cancel"
+                                                                    onClick={() =>
+                                                                        setIsDeleteCategoryConfirming(
+                                                                            false,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <span className="compact-action-button__icon">
+                                                                        <IconClose />
+                                                                    </span>
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className="compact-action-button compact-action-button--danger compact-action-button--icon-only category-inline-actions__confirm-delete"
+                                                                    disabled={
+                                                                        isDeleting
+                                                                    }
+                                                                    aria-label="Delete category"
+                                                                    title="Delete category"
+                                                                    onClick={() =>
+                                                                        void handleDeleteEditingTaskList()
+                                                                    }
+                                                                >
+                                                                    <span className="compact-action-button__icon">
+                                                                        <IconTrash />
+                                                                    </span>
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="category-inline-actions">
+                                                                <button
+                                                                    type="button"
+                                                                    className="compact-action-button compact-action-button--secondary compact-action-button--icon-only"
+                                                                    aria-label="Cancel"
+                                                                    title="Cancel"
+                                                                    onClick={() =>
+                                                                        resetCategoryEditor()
+                                                                    }
+                                                                >
+                                                                    <span className="compact-action-button__icon">
+                                                                        <IconClose />
+                                                                    </span>
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className="compact-action-button compact-action-button--danger compact-action-button--icon-only"
+                                                                    disabled={
+                                                                        isDeleting
+                                                                    }
+                                                                    aria-label="Delete category"
+                                                                    title="Delete category"
+                                                                    onClick={() =>
+                                                                        setIsDeleteCategoryConfirming(
+                                                                            true,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <span className="compact-action-button__icon">
+                                                                        <IconTrash />
+                                                                    </span>
+                                                                </button>
+                                                                <button
+                                                                    type="submit"
+                                                                    className="compact-action-button compact-action-button--primary compact-action-button--icon-only"
+                                                                    aria-label="Save category"
+                                                                    title="Save category"
+                                                                >
+                                                                    <span className="compact-action-button__icon">
+                                                                        <IconCheck />
+                                                                    </span>
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                     </form>
                                                 ) : isAddingCategory ? (
                                                     <form
@@ -4572,17 +4936,7 @@ export function App() {
                                                                 aria-label="New category"
                                                             />
                                                         </div>
-                                                        <div className="category-inline-actions">
-                                                            <button
-                                                                type="submit"
-                                                                className="compact-action-button compact-action-button--primary compact-action-button--icon-only"
-                                                                aria-label="Add category"
-                                                                title="Add category"
-                                                            >
-                                                                <span className="compact-action-button__icon">
-                                                                    <IconPlus />
-                                                                </span>
-                                                            </button>
+                                                        <div className="category-inline-actions category-inline-actions--two">
                                                             <button
                                                                 type="button"
                                                                 className="compact-action-button compact-action-button--secondary compact-action-button--icon-only"
@@ -4594,6 +4948,16 @@ export function App() {
                                                             >
                                                                 <span className="compact-action-button__icon">
                                                                     <IconClose />
+                                                                </span>
+                                                            </button>
+                                                            <button
+                                                                type="submit"
+                                                                className="compact-action-button compact-action-button--primary compact-action-button--icon-only"
+                                                                aria-label="Add category"
+                                                                title="Add category"
+                                                            >
+                                                                <span className="compact-action-button__icon">
+                                                                    <IconCheck />
                                                                 </span>
                                                             </button>
                                                         </div>
@@ -5558,22 +5922,26 @@ export function App() {
                                 ⇥
                             </button>
                         )}
-                        <button
-                            type="button"
-                            className="calendar-nav-button"
-                            aria-label="Previous period"
-                            onClick={() => navigateCalendar("prev")}
-                        >
-                            ‹
-                        </button>
-                        <button
-                            type="button"
-                            className="calendar-nav-button"
-                            aria-label="Next period"
-                            onClick={() => navigateCalendar("next")}
-                        >
-                            ›
-                        </button>
+                        {!isMobileLayout && (
+                            <>
+                                <button
+                                    type="button"
+                                    className="calendar-nav-button"
+                                    aria-label="Previous period"
+                                    onClick={() => navigateCalendar("prev")}
+                                >
+                                    ‹
+                                </button>
+                                <button
+                                    type="button"
+                                    className="calendar-nav-button"
+                                    aria-label="Next period"
+                                    onClick={() => navigateCalendar("next")}
+                                >
+                                    ›
+                                </button>
+                            </>
+                        )}
                         <button
                             type="button"
                             className="calendar-toolbar-button"
@@ -5581,78 +5949,112 @@ export function App() {
                         >
                             Today
                         </button>
-                        <div className="mobile-calendar-period-control">
-                            {isYearPickerOpen ? (
-                                <form
-                                    className="calendar-year-form"
-                                    onSubmit={(event) =>
-                                        void submitYearChange(event)
-                                    }
-                                >
-                                    <input
-                                        type="number"
-                                        min={1}
-                                        step={1}
-                                        value={yearDraft}
-                                        onChange={(event) =>
-                                            setYearDraft(event.target.value)
-                                        }
-                                        aria-label="Calendar year"
-                                    />
-                                </form>
-                            ) : (
-                                <button
-                                    type="button"
-                                    className="calendar-toolbar-button mobile-calendar-period-button"
-                                    onClick={() => setIsYearPickerOpen(true)}
-                                >
-                                    {calendarDate.getFullYear()}{" "}
-                                    {new Intl.DateTimeFormat(undefined, {
-                                        month: "short",
-                                    }).format(calendarDate)}
-                                </button>
-                            )}
-                        </div>
                     </div>
 
                     <div className="calendar-toolbar-title">
                         {calendarView === "dayGridMonth" ? (
-                            <div className="calendar-year-control">
-                                <span className="calendar-title-month">
-                                    {new Intl.DateTimeFormat(undefined, {
-                                        month: "long",
-                                    }).format(calendarDate)}
-                                </span>
-                                {isYearPickerOpen ? (
-                                    <form
-                                        className="calendar-year-form"
-                                        onSubmit={(event) =>
-                                            void submitYearChange(event)
-                                        }
-                                    >
-                                        <input
-                                            ref={yearInputRef}
-                                            type="number"
-                                            min={1}
-                                            step={1}
-                                            value={yearDraft}
-                                            onChange={(event) =>
-                                                setYearDraft(event.target.value)
-                                            }
-                                            aria-label="Calendar year"
-                                        />
-                                    </form>
-                                ) : (
+                            <div className="calendar-month-year-control">
+                                <div className="filter-dropdown calendar-month-year-dropdown">
                                     <button
+                                        ref={monthYearPickerTriggerRef}
                                         type="button"
-                                        className="calendar-year-button"
-                                        onClick={() =>
-                                            setIsYearPickerOpen(true)
-                                        }
+                                        className="calendar-year-button calendar-month-year-trigger"
+                                        aria-haspopup="dialog"
+                                        aria-expanded={isMonthYearPickerOpen}
+                                        onClick={toggleMonthYearPicker}
                                     >
-                                        {calendarDate.getFullYear()}
+                                        {new Intl.DateTimeFormat(undefined, {
+                                            month: "long",
+                                            year: "numeric",
+                                        }).format(calendarDate)}
+                                        <span aria-hidden="true">▼</span>
                                     </button>
-                                )}
+                                    <AnimatePresence initial={false}>
+                                        {isMonthYearPickerOpen && (
+                                            <motion.div
+                                                ref={monthYearPickerRef}
+                                                key="calendar-month-year-picker"
+                                                className="filter-menu calendar-month-year-menu"
+                                                style={monthYearPickerStyle ?? undefined}
+                                                initial="hidden"
+                                                animate="visible"
+                                                exit="exit"
+                                                variants={dropdownVariants}
+                                                transition={dropdownTransition}
+                                                role="dialog"
+                                                aria-label="Choose calendar month"
+                                            >
+                                                <div className="calendar-month-year-header">
+                                                    <button
+                                                        type="button"
+                                                        className="calendar-month-year-nav"
+                                                        aria-label="Previous year"
+                                                        onClick={() =>
+                                                            setMonthYearPickerYear(
+                                                                (year) => year - 1,
+                                                            )
+                                                        }
+                                                    >
+                                                        ‹
+                                                    </button>
+                                                    <span className="calendar-month-year-current">
+                                                        {monthYearPickerYear}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        className="calendar-month-year-nav"
+                                                        aria-label="Next year"
+                                                        onClick={() =>
+                                                            setMonthYearPickerYear(
+                                                                (year) => year + 1,
+                                                            )
+                                                        }
+                                                    >
+                                                        ›
+                                                    </button>
+                                                </div>
+                                                <div className="calendar-month-grid">
+                                                    {calendarMonthOptions.map(
+                                                        (month) => {
+                                                            const isSelected =
+                                                                monthYearPickerYear ===
+                                                                    calendarDate.getFullYear() &&
+                                                                month.monthIndex ===
+                                                                    calendarDate.getMonth();
+
+                                                            return (
+                                                                <button
+                                                                    key={month.shortLabel}
+                                                                    type="button"
+                                                                    className={`calendar-month-option ${
+                                                                        isSelected
+                                                                            ? "active"
+                                                                            : ""
+                                                                    }`}
+                                                                    aria-label={
+                                                                        month.longLabel
+                                                                    }
+                                                                    aria-pressed={
+                                                                        isSelected
+                                                                    }
+                                                                    onClick={() =>
+                                                                        selectCalendarMonth(
+                                                                            month.monthIndex,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    {
+                                                                        month.shortLabel
+                                                                    }
+                                                                </button>
+                                                            );
+                                                        },
+                                                    )}
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
                             </div>
                         ) : isTimeGridView && isMobileLayout ? (
                             <span className="calendar-toolbar-period-label">
@@ -5693,6 +6095,10 @@ export function App() {
                     className={`calendar-transition-shell calendar-shell ${isMobileLayout ? "calendar-shell--mobile-readonly" : ""} calendar-view-${calendarView}`}
                     animate={calendarTransitionControls}
                     initial={false}
+                    onTouchStart={handleCalendarTouchStart}
+                    onTouchMove={handleCalendarTouchMove}
+                    onTouchEnd={handleCalendarTouchEnd}
+                    onTouchCancel={handleCalendarTouchCancel}
                 >
                     <FullCalendar
                         key={`calendar-interactions-${calendarInteractionMode}`}
@@ -6486,6 +6892,7 @@ type TaskComposerDropdownProps = {
     value: string;
     options: TaskComposerDropdownOption[];
     onChange: (value: string) => void;
+    escapeClipping?: boolean;
 };
 
 function TaskComposerDropdown({
@@ -6493,10 +6900,13 @@ function TaskComposerDropdown({
     value,
     options,
     onChange,
+    escapeClipping = false,
 }: TaskComposerDropdownProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [menuPlacement, setMenuPlacement] = useState<"down" | "up">("down");
     const [menuMaxHeight, setMenuMaxHeight] = useState<number | null>(null);
+    const [menuStyle, setMenuStyle] = useState<CSSProperties | null>(null);
+    const dropdownRef = useRef<HTMLDivElement | null>(null);
     const menuRef = useRef<HTMLDivElement | null>(null);
     const triggerRef = useRef<HTMLButtonElement | null>(null);
     const selectedOption =
@@ -6523,24 +6933,60 @@ function TaskComposerDropdown({
             spaceBelow < estimatedMenuHeight && spaceAbove > spaceBelow;
         const availableSpace = Math.max(
             shouldOpenUp ? spaceAbove : spaceBelow,
-            120,
+            escapeClipping ? 44 : 120,
         );
+        const nextMaxHeight = Math.min(estimatedMenuHeight, availableSpace);
+        const inheritedTheme = escapeClipping
+            ? taskFormDropdownThemeVariables.reduce<Record<string, string>>(
+                  (variables, name) => {
+                      const value = getComputedStyle(trigger)
+                          .getPropertyValue(name)
+                          .trim();
+                      if (value) {
+                          variables[name] = value;
+                      }
+                      return variables;
+                  },
+                  {},
+              )
+            : null;
 
         setMenuPlacement(shouldOpenUp ? "up" : "down");
-        setMenuMaxHeight(Math.min(estimatedMenuHeight, availableSpace));
-    }, [options.length]);
+        setMenuMaxHeight(nextMaxHeight);
+        setMenuStyle(
+            escapeClipping
+                ? ({
+                      ...inheritedTheme,
+                      position: "fixed",
+                      left: `${triggerRect.left}px`,
+                      width: `${triggerRect.width}px`,
+                      top: shouldOpenUp
+                          ? "auto"
+                          : `${triggerRect.bottom + 6}px`,
+                      bottom: shouldOpenUp
+                          ? `${window.innerHeight - triggerRect.top + 6}px`
+                          : "auto",
+                      zIndex: 120,
+                      "--task-form-dropdown-menu-max-height": `${nextMaxHeight}px`,
+                  } as CSSProperties)
+                : null,
+        );
+    }, [escapeClipping, options.length]);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (!isOpen) {
+            setMenuStyle(null);
             return;
         }
 
         updateMenuPlacement();
 
         const handlePointerDown = (event: PointerEvent) => {
+            const target = event.target as Node;
             if (
-                menuRef.current &&
-                !menuRef.current.contains(event.target as Node)
+                dropdownRef.current &&
+                !dropdownRef.current.contains(target) &&
+                (!menuRef.current || !menuRef.current.contains(target))
             ) {
                 setIsOpen(false);
             }
@@ -6565,10 +7011,74 @@ function TaskComposerDropdown({
             };
     }, [isOpen, updateMenuPlacement]);
 
+    const menu = isOpen ? (
+        <motion.div
+            ref={menuRef}
+            key={`${label}-menu`}
+            className={`filter-menu task-form-dropdown-menu task-form-dropdown-menu-${menuPlacement}`}
+            role="listbox"
+            aria-label={`${label} options`}
+            style={
+                escapeClipping
+                    ? (menuStyle ?? undefined)
+                    : menuMaxHeight
+                      ? ({
+                            "--task-form-dropdown-menu-max-height": `${menuMaxHeight}px`,
+                        } as CSSProperties)
+                      : undefined
+            }
+            variants={{
+                hidden: { opacity: 0, y: -4, scale: 0.98 },
+                visible: { opacity: 1, y: 0, scale: 1 },
+                exit: { opacity: 0, y: -4, scale: 0.98 },
+            }}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            transition={motionTimings.dropdown}
+        >
+            {options.map((option) => (
+                <button
+                    key={option.value}
+                    type="button"
+                    role="option"
+                    aria-selected={option.value === value}
+                    className={`filter-option ${option.value === value ? "active" : ""}`}
+                    onClick={() => {
+                        onChange(option.value);
+                        setIsOpen(false);
+                    }}
+                >
+                    {option.color || option.mutedDot ? (
+                        <span
+                            className={`task-form-dropdown-dot ${
+                                option.mutedDot
+                                    ? "task-form-dropdown-dot-muted"
+                                    : ""
+                            }`}
+                            style={
+                                option.color
+                                    ? {
+                                          backgroundColor: option.color,
+                                      }
+                                    : undefined
+                            }
+                            aria-hidden="true"
+                        />
+                    ) : null}
+                    <span>{option.label}</span>
+                </button>
+            ))}
+        </motion.div>
+    ) : null;
+    const menuLayer = (
+        <AnimatePresence initial={false}>{menu}</AnimatePresence>
+    );
+
     return (
         <div
             className="filter-dropdown task-form-custom-dropdown"
-            ref={menuRef}
+            ref={dropdownRef}
         >
             <button
                 ref={triggerRef}
@@ -6577,7 +7087,12 @@ function TaskComposerDropdown({
                 aria-label={label}
                 aria-haspopup="listbox"
                 aria-expanded={isOpen}
-                onClick={() => setIsOpen((current) => !current)}
+                onClick={() => {
+                    if (!isOpen) {
+                        updateMenuPlacement();
+                    }
+                    setIsOpen((current) => !current);
+                }}
                 onKeyDown={(event) => {
                     if (event.key === "Escape") {
                         setIsOpen(false);
@@ -6606,66 +7121,9 @@ function TaskComposerDropdown({
                     ▾
                 </span>
             </button>
-            <AnimatePresence initial={false}>
-                {isOpen && (
-                    <motion.div
-                        key={`${label}-menu`}
-                        className={`filter-menu task-form-dropdown-menu task-form-dropdown-menu-${menuPlacement}`}
-                        role="listbox"
-                        aria-label={`${label} options`}
-                        style={
-                            menuMaxHeight
-                                ? ({
-                                      "--task-form-dropdown-menu-max-height": `${menuMaxHeight}px`,
-                                  } as CSSProperties)
-                                : undefined
-                        }
-                        variants={{
-                            hidden: { opacity: 0, y: -4, scale: 0.98 },
-                            visible: { opacity: 1, y: 0, scale: 1 },
-                            exit: { opacity: 0, y: -4, scale: 0.98 },
-                        }}
-                        initial="hidden"
-                        animate="visible"
-                        exit="exit"
-                        transition={motionTimings.dropdown}
-                    >
-                        {options.map((option) => (
-                            <button
-                                key={option.value}
-                                type="button"
-                                role="option"
-                                aria-selected={option.value === value}
-                                className={`filter-option ${option.value === value ? "active" : ""}`}
-                                onClick={() => {
-                                    onChange(option.value);
-                                    setIsOpen(false);
-                                }}
-                            >
-                                {option.color || option.mutedDot ? (
-                                    <span
-                                        className={`task-form-dropdown-dot ${
-                                            option.mutedDot
-                                                ? "task-form-dropdown-dot-muted"
-                                                : ""
-                                        }`}
-                                        style={
-                                            option.color
-                                                ? {
-                                                      backgroundColor:
-                                                          option.color,
-                                                  }
-                                                : undefined
-                                        }
-                                        aria-hidden="true"
-                                    />
-                                ) : null}
-                                <span>{option.label}</span>
-                            </button>
-                        ))}
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {escapeClipping && typeof document !== "undefined"
+                ? createPortal(menuLayer, document.body)
+                : menuLayer}
         </div>
     );
 }
@@ -6900,6 +7358,7 @@ function LabeledSelect({
                 value={value}
                 options={categoryOptions}
                 onChange={onChange}
+                escapeClipping
             />
         </div>
     );

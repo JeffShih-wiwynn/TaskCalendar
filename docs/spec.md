@@ -20,7 +20,7 @@ The current app is web-first:
 - Drag target cues distinguish no-time reorder from drag-to-calendar scheduling.
 - No-time task drag handles rebind after sidebar and detail-panel re-renders, and the month-view drag mirror stays aligned with the cursor.
 - Month view day-grid layout should render aligned immediately on view switch without requiring a click to recalculate the grid.
-- Clickable month-view year control for jumping by year.
+- Clickable month title that opens a compact Month-Year picker for jumping by month and year.
 - Draggable and resizable scheduled task events on desktop; mobile calendar events are tap/click-only and do not expose drag or resize affordances.
 - Week and day views default to the configured working-hours range and include a compact `Work` / `Full` viewport toggle for switching between working-hours and full-day time grids.
 - Task creation from selected calendar time ranges, including all-day slots.
