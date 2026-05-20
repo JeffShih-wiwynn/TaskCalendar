@@ -2169,7 +2169,9 @@ export function App() {
                 return;
             }
 
-            const task = tasks.find((item) => item.id === dropInfo.event.id);
+            const task = tasksRef.current.find(
+                (item) => item.id === dropInfo.event.id,
+            );
             const updates = getCalendarEventScheduleUpdate(dropInfo.event, task);
             clearUndoState();
 
@@ -2200,7 +2202,7 @@ export function App() {
                 );
             }
         },
-        [clearUndoState, isMobileLayout, reloadTasks, showTaskUndo, tasks],
+        [clearUndoState, isMobileLayout, reloadTasks, showTaskUndo],
     );
 
     const handleEventResize = useCallback(
@@ -2210,7 +2212,9 @@ export function App() {
                 return;
             }
 
-            const task = tasks.find((item) => item.id === resizeInfo.event.id);
+            const task = tasksRef.current.find(
+                (item) => item.id === resizeInfo.event.id,
+            );
             const updates = getCalendarEventScheduleUpdate(resizeInfo.event);
             clearUndoState();
 
@@ -2246,7 +2250,7 @@ export function App() {
                 );
             }
         },
-        [clearUndoState, isMobileLayout, reloadTasks, showTaskUndo, tasks],
+        [clearUndoState, isMobileLayout, reloadTasks, showTaskUndo],
     );
 
     const openCreatePanel = useCallback(
