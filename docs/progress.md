@@ -29,6 +29,7 @@ This document summarizes what is already in the repository snapshot and where th
 - [x] Step 5: Frontend FullCalendar UI
   - FullCalendar is wired into the frontend.
   - Month, week, and day views are available through a single cycle button.
+  - Month view now uses the month title as a compact Month-Year picker instead of a year text input.
   - The sidebar includes a `No time tasks` view for unscheduled tasks.
   - Unscheduled task rows can be reordered directly, and the sidebar includes quick `Move to top`, `Move up`, and `Move down` controls.
   - The task right-click menu now includes `Duplicate` for both unscheduled and scheduled tasks.

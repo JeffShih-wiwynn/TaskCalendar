@@ -32,6 +32,9 @@ const mocks = vi.hoisted(() => ({
         dateClick: undefined as
             | ((arg: { date: Date; allDay: boolean }) => void)
             | undefined,
+        select: undefined as
+            | ((arg: { start: Date; end: Date; allDay: boolean }) => void)
+            | undefined,
         drop: undefined as
             | ((arg: {
                   date: Date;
@@ -87,6 +90,8 @@ const mocks = vi.hoisted(() => ({
     fullCalendarMount: vi.fn(),
     fullCalendarRefetchEvents: vi.fn(),
     fullCalendarUpdateSize: vi.fn(),
+    fullCalendarPrev: vi.fn(),
+    fullCalendarNext: vi.fn(),
     dragRevert: vi.fn(),
     draggableConstruct: vi.fn(),
     draggableDestroy: vi.fn(),
@@ -244,8 +249,14 @@ vi.mock("@fullcalendar/react", () => ({
             editable,
             eventStartEditable,
             eventDurationEditable,
+            select,
         }: {
             dateClick?: (arg: { date: Date; allDay: boolean }) => void;
+            select?: (arg: {
+                start: Date;
+                end: Date;
+                allDay: boolean;
+            }) => void;
             datesSet?: (arg: {
                 view: { type: string; title: string };
                 start: Date;
@@ -346,20 +357,24 @@ vi.mock("@fullcalendar/react", () => ({
             ref,
             () => ({
                 getApi: () => ({
-                    prev: () =>
+                    prev: () => {
+                        mocks.fullCalendarPrev();
                         setCurrentDate(
                             (current) =>
                                 new Date(
                                     current.getTime() - 24 * 60 * 60 * 1000,
                                 ),
-                        ),
-                    next: () =>
+                        );
+                    },
+                    next: () => {
+                        mocks.fullCalendarNext();
                         setCurrentDate(
                             (current) =>
                                 new Date(
                                     current.getTime() + 24 * 60 * 60 * 1000,
                                 ),
-                        ),
+                        );
+                    },
                     today: () =>
                         setCurrentDate(new Date("2026-05-08T00:00:00Z")),
                     changeView: (nextView: string) => setView(nextView),
@@ -378,7 +393,10 @@ vi.mock("@fullcalendar/react", () => ({
         useEffect(() => {
             const title =
                 view === "dayGridMonth"
-                    ? "May 2026"
+                    ? new Intl.DateTimeFormat(undefined, {
+                          month: "long",
+                          year: "numeric",
+                      }).format(currentDate)
                     : view === "timeGridDay"
                       ? "May 8, 2026"
                       : "May 4 – 10, 2026";
@@ -390,6 +408,7 @@ vi.mock("@fullcalendar/react", () => ({
 
         mocks.fullCalendarProps.events = events ?? [];
         mocks.fullCalendarProps.dateClick = dateClick;
+        mocks.fullCalendarProps.select = select;
         mocks.fullCalendarProps.drop = drop;
         mocks.fullCalendarProps.eventDrop = eventDrop;
         mocks.fullCalendarProps.eventClick = eventClick;
@@ -922,8 +941,11 @@ describe("App", () => {
         });
         mocks.fullCalendarMount.mockClear();
         mocks.fullCalendarRefetchEvents.mockClear();
+        mocks.fullCalendarPrev.mockClear();
+        mocks.fullCalendarNext.mockClear();
         mocks.fullCalendarProps.events = [];
         mocks.fullCalendarProps.dateClick = undefined;
+        mocks.fullCalendarProps.select = undefined;
         mocks.fullCalendarProps.drop = undefined;
         mocks.fullCalendarProps.eventDrop = undefined;
         mocks.fullCalendarProps.eventClick = undefined;
@@ -1239,6 +1261,85 @@ describe("App", () => {
             screen.queryByRole("button", { name: "Full" }),
         ).not.toBeInTheDocument();
         expect(mocks.fullCalendarProps.expandRows).toBe(false);
+    });
+
+    it("uses the month title as a compact month-year picker", async () => {
+        render(<App />);
+
+        await act(async () => {
+            fireEvent.click(await screen.findByRole("button", { name: "Week" }));
+        });
+        await waitFor(() =>
+            expect(screen.getByRole("button", { name: "Day" })).toBeInTheDocument(),
+        );
+        await act(async () => {
+            fireEvent.click(screen.getByRole("button", { name: "Day" }));
+        });
+        await waitFor(() =>
+            expect(screen.getByRole("button", { name: "May 2026" })).toBeInTheDocument(),
+        );
+
+        expect(
+            screen.queryByLabelText("Calendar year"),
+        ).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: "May 2026" }));
+
+        const picker = await screen.findByRole("dialog", {
+            name: "Choose calendar month",
+        });
+        expect(within(picker).getByText("2026")).toBeInTheDocument();
+        expect(within(picker).getByRole("button", { name: "May" })).toHaveAttribute(
+            "aria-pressed",
+            "true",
+        );
+
+        fireEvent.click(within(picker).getByRole("button", { name: "Next year" }));
+        expect(within(picker).getByText("2027")).toBeInTheDocument();
+        fireEvent.click(within(picker).getByRole("button", { name: "March" }));
+
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("dialog", { name: "Choose calendar month" }),
+            ).not.toBeInTheDocument(),
+        );
+        await waitFor(() =>
+            expect(
+                screen.getByRole("button", { name: "March 2027" }),
+            ).toBeInTheDocument(),
+        );
+    });
+
+    it("widens the month-year picker on mobile without blocking header controls", async () => {
+        setMobileLayout(true);
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Mobile Calendar" }));
+        await act(async () => {
+            fireEvent.click(screen.getByRole("button", { name: "Week" }));
+        });
+        await waitFor(() =>
+            expect(screen.getByRole("button", { name: "Day" })).toBeInTheDocument(),
+        );
+        await act(async () => {
+            fireEvent.click(screen.getByRole("button", { name: "Day" }));
+        });
+        await waitFor(() =>
+            expect(screen.getByRole("button", { name: "Month" })).toBeInTheDocument(),
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: "May 2026" }));
+
+        const picker = await screen.findByRole("dialog", {
+            name: "Choose calendar month",
+        });
+        expect(picker).toHaveStyle({ position: "fixed" });
+        expect(picker).toHaveStyle({ width: "360px" });
+        expect(within(picker).getByRole("button", { name: "Previous year" })).toBeInTheDocument();
+        expect(within(picker).getByRole("button", { name: "Next year" })).toBeInTheDocument();
+        expect(picker.querySelectorAll(".calendar-month-option")).toHaveLength(12);
+        expect(screen.getByRole("button", { name: "Today" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Month" })).toBeInTheDocument();
     });
 
     it("uses FullCalendar overflow and summary-only events for mobile month view", async () => {
@@ -1571,6 +1672,83 @@ describe("App", () => {
         expect(getNotesTextbox()).toHaveValue("Accordion note");
     });
 
+    it("renders the task form category dropdown outside the clipping panel", async () => {
+        const rectSpy = vi
+            .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+            .mockImplementation(function (this: HTMLElement) {
+                if (this.getAttribute("aria-label") === "Category") {
+                    return {
+                        top: 760,
+                        bottom: 796,
+                        left: 24,
+                        right: 324,
+                        width: 300,
+                        height: 36,
+                        x: 24,
+                        y: 760,
+                        toJSON: () => ({}),
+                    };
+                }
+
+                return {
+                    top: 0,
+                    bottom: 40,
+                    left: 0,
+                    right: 300,
+                    width: 300,
+                    height: 40,
+                    x: 0,
+                    y: 0,
+                    toJSON: () => ({}),
+                };
+            });
+        const innerHeightSpy = vi
+            .spyOn(window, "innerHeight", "get")
+            .mockReturnValue(820);
+
+        try {
+            render(<App />);
+
+            fireEvent.click(
+                await screen.findByRole("button", { name: "Open create task" }),
+            );
+            expandTaskFormSection("Categories");
+            const categoryTrigger = screen.getByRole("button", {
+                name: "Category",
+            });
+            categoryTrigger.style.setProperty("--panel-bg", "#18201d");
+            categoryTrigger.style.setProperty("--text", "#eef4f1");
+            categoryTrigger.style.setProperty("--border", "#33413b");
+            fireEvent.click(categoryTrigger);
+
+            const menu = screen.getByRole("listbox", {
+                name: "Category options",
+            });
+            expect(menu).toHaveClass(
+                "filter-menu",
+                "task-form-dropdown-menu",
+                "task-form-dropdown-menu-up",
+            );
+            expect(menu.parentElement).toBe(document.body);
+            expect(screen.getByLabelText("Create task panel")).not.toContainElement(
+                menu,
+            );
+            expect(menu).toHaveStyle({
+                position: "fixed",
+                left: "24px",
+                width: "300px",
+                top: "auto",
+                bottom: "66px",
+                "--panel-bg": "#18201d",
+                "--text": "#eef4f1",
+                "--border": "#33413b",
+            });
+        } finally {
+            rectSpy.mockRestore();
+            innerHeightSpy.mockRestore();
+        }
+    });
+
     it("opens the first edit accordion section with existing data", async () => {
         mocks.tasks = [
             makeTask({
@@ -1670,6 +1848,175 @@ describe("App", () => {
             }),
         );
         expect(screen.queryByLabelText("Edit task panel")).not.toBeInTheDocument();
+    });
+
+    it("uses horizontal swipes to navigate the mobile calendar", async () => {
+        setMobileLayout(true);
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Mobile Calendar" }));
+        const calendarShell = document.querySelector(
+            ".calendar-transition-shell.calendar-shell",
+        ) as HTMLElement | null;
+        expect(calendarShell).not.toBeNull();
+
+        fireEvent.touchStart(calendarShell!, {
+            touches: [{ clientX: 220, clientY: 160 }],
+        });
+        fireEvent.touchEnd(calendarShell!, {
+            changedTouches: [{ clientX: 120, clientY: 170 }],
+        });
+        expect(mocks.fullCalendarNext).toHaveBeenCalledTimes(1);
+        expect(mocks.fullCalendarPrev).not.toHaveBeenCalled();
+
+        fireEvent.touchStart(calendarShell!, {
+            touches: [{ clientX: 120, clientY: 160 }],
+        });
+        fireEvent.touchEnd(calendarShell!, {
+            changedTouches: [{ clientX: 220, clientY: 166 }],
+        });
+        expect(mocks.fullCalendarPrev).toHaveBeenCalledTimes(1);
+        expect(mocks.fullCalendarNext).toHaveBeenCalledTimes(1);
+
+        fireEvent.touchStart(calendarShell!, {
+            touches: [{ clientX: 220, clientY: 160 }],
+        });
+        fireEvent.touchEnd(calendarShell!, {
+            changedTouches: [{ clientX: 180, clientY: 165 }],
+        });
+        expect(mocks.fullCalendarPrev).toHaveBeenCalledTimes(1);
+        expect(mocks.fullCalendarNext).toHaveBeenCalledTimes(1);
+
+        fireEvent.touchStart(calendarShell!, {
+            touches: [{ clientX: 220, clientY: 160 }],
+        });
+        fireEvent.touchEnd(calendarShell!, {
+            changedTouches: [{ clientX: 120, clientY: 270 }],
+        });
+        expect(mocks.fullCalendarPrev).toHaveBeenCalledTimes(1);
+        expect(mocks.fullCalendarNext).toHaveBeenCalledTimes(1);
+    });
+
+    it("suppresses mobile calendar create taps after horizontal swipe movement", async () => {
+        setMobileLayout(true);
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Mobile Calendar" }));
+        expect(
+            screen.queryByRole("button", { name: "Previous period" }),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Next period" }),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.getByRole("button", { name: "Today" }),
+        ).toBeInTheDocument();
+        const calendarShell = document.querySelector(
+            ".calendar-transition-shell.calendar-shell",
+        ) as HTMLElement | null;
+        expect(calendarShell).not.toBeNull();
+
+        fireEvent.touchStart(calendarShell!, {
+            touches: [{ clientX: 220, clientY: 160 }],
+        });
+        fireEvent.touchMove(calendarShell!, {
+            touches: [{ clientX: 190, clientY: 162 }],
+        });
+        fireEvent.touchEnd(calendarShell!, {
+            changedTouches: [{ clientX: 186, clientY: 164 }],
+        });
+
+        mocks.fullCalendarProps.dateClick?.({
+            date: new Date("2026-05-08T09:00:00Z"),
+            allDay: false,
+        });
+
+        expect(
+            screen.queryByLabelText("Create task panel"),
+        ).not.toBeInTheDocument();
+        expect(mocks.fullCalendarNext).not.toHaveBeenCalled();
+        expect(mocks.fullCalendarPrev).not.toHaveBeenCalled();
+
+        fireEvent.touchStart(calendarShell!, {
+            touches: [{ clientX: 220, clientY: 160 }],
+        });
+        fireEvent.touchMove(calendarShell!, {
+            touches: [{ clientX: 188, clientY: 162 }],
+        });
+        fireEvent.touchEnd(calendarShell!, {
+            changedTouches: [{ clientX: 184, clientY: 164 }],
+        });
+
+        mocks.fullCalendarProps.select?.({
+            start: new Date("2026-05-08T09:00:00Z"),
+            end: new Date("2026-05-08T10:00:00Z"),
+            allDay: false,
+        });
+
+        expect(
+            screen.queryByLabelText("Create task panel"),
+        ).not.toBeInTheDocument();
+
+        fireEvent.touchStart(calendarShell!, {
+            touches: [{ clientX: 220, clientY: 160 }],
+        });
+        fireEvent.touchEnd(calendarShell!, {
+            changedTouches: [{ clientX: 222, clientY: 162 }],
+        });
+
+        mocks.fullCalendarProps.dateClick?.({
+            date: new Date("2026-05-08T09:00:00Z"),
+            allDay: false,
+        });
+
+        expect(
+            await screen.findByLabelText("Create task panel"),
+        ).toBeInTheDocument();
+    });
+
+    it("does not navigate calendar swipes from controls or desktop layout", async () => {
+        setMobileLayout(true);
+
+        const { unmount } = render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Mobile Calendar" }));
+        const createButton = screen.getByRole("button", {
+            name: "Open create task",
+        });
+
+        fireEvent.touchStart(createButton, {
+            touches: [{ clientX: 220, clientY: 160 }],
+        });
+        fireEvent.touchEnd(createButton, {
+            changedTouches: [{ clientX: 120, clientY: 165 }],
+        });
+
+        expect(mocks.fullCalendarNext).not.toHaveBeenCalled();
+        expect(mocks.fullCalendarPrev).not.toHaveBeenCalled();
+
+        unmount();
+        setMobileLayout(false);
+        render(<App />);
+
+        const desktopCalendarShell = await waitFor(() => {
+            const shell = document.querySelector(
+                ".calendar-transition-shell.calendar-shell",
+            ) as HTMLElement | null;
+            expect(shell).not.toBeNull();
+            return shell!;
+        });
+
+        fireEvent.touchStart(desktopCalendarShell, {
+            touches: [{ clientX: 220, clientY: 160 }],
+        });
+        fireEvent.touchEnd(desktopCalendarShell, {
+            changedTouches: [{ clientX: 120, clientY: 165 }],
+        });
+
+        expect(mocks.fullCalendarNext).not.toHaveBeenCalled();
+        expect(mocks.fullCalendarPrev).not.toHaveBeenCalled();
     });
 
     it("shows the recurring edit confirmation above the mobile edit sheet", async () => {
@@ -3086,6 +3433,42 @@ describe("App", () => {
         ).not.toBeNull();
     });
 
+    it("uses a check icon for the add-category confirmation button", async () => {
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Task category" }),
+        );
+
+        const addCategoryButton = screen.getByRole("button", {
+            name: "Add category",
+        });
+        expect(addCategoryButton).toHaveTextContent("");
+        expect(addCategoryButton.querySelector("svg path")).toHaveAttribute(
+            "d",
+            "M12 5v14M5 12h14",
+        );
+
+        fireEvent.click(addCategoryButton);
+
+        expect(screen.getByLabelText("New category")).toBeInTheDocument();
+        const addActions = screen
+            .getByLabelText("New category")
+            .closest("form")
+            ?.querySelector(".category-inline-actions--two");
+        expect(addActions?.querySelectorAll("button")).toHaveLength(2);
+        expect(
+            Array.from(addActions?.querySelectorAll("button") ?? []).map((button) =>
+                button.getAttribute("aria-label"),
+            ),
+        ).toEqual(["Cancel", "Add category"]);
+        expect(screen.getByRole("button", { name: "Add category" })).toHaveTextContent("");
+        expect(
+            screen.getByRole("button", { name: "Add category" }).querySelector("svg path"),
+        ).toHaveAttribute("d", "m5 12 4.5 4.5L19 7");
+        expect(screen.getByRole("button", { name: "Cancel" })).toHaveTextContent("");
+    });
+
     it("deletes a category from the inline edit form", async () => {
         render(<App />);
 
@@ -3093,6 +3476,16 @@ describe("App", () => {
             await screen.findByRole("button", { name: "Task category" }),
         );
         fireEvent.click(screen.getByRole("button", { name: "Edit Work" }));
+        const editActions = screen
+            .getByLabelText("Edit category name")
+            .closest("form")
+            ?.querySelector(".category-inline-actions");
+        expect(editActions?.querySelectorAll("button")).toHaveLength(3);
+        expect(
+            Array.from(editActions?.querySelectorAll("button") ?? []).map((button) =>
+                button.getAttribute("aria-label"),
+            ),
+        ).toEqual(["Cancel", "Delete category", "Save category"]);
         expect(screen.getByRole("button", { name: "Save category" })).toHaveClass(
             "compact-action-button",
             "compact-action-button--primary",
@@ -3117,6 +3510,29 @@ describe("App", () => {
         expect(
             screen.getByRole("button", { name: "Cancel" }).querySelector("svg"),
         ).not.toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: "Delete category" }));
+
+        const confirmActions = screen
+            .getByLabelText("Edit category name")
+            .closest("form")
+            ?.querySelector(".category-inline-actions--confirm-delete");
+        expect(confirmActions?.querySelectorAll("button")).toHaveLength(2);
+        expect(
+            Array.from(confirmActions?.querySelectorAll("button") ?? []).map((button) =>
+                button.getAttribute("aria-label"),
+            ),
+        ).toEqual(["Cancel", "Delete category"]);
+        expect(confirmActions).toHaveClass(
+            "category-inline-actions",
+            "category-inline-actions--confirm-delete",
+        );
+        expect(
+            confirmActions?.querySelector(".category-inline-actions__cancel"),
+        ).toHaveClass("category-inline-actions__cancel");
+        expect(
+            confirmActions?.querySelector(".category-inline-actions__confirm-delete"),
+        ).toHaveClass("category-inline-actions__confirm-delete");
+
         fireEvent.click(screen.getByRole("button", { name: "Delete category" }));
 
         await waitFor(() =>

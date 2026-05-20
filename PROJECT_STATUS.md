@@ -61,6 +61,7 @@ This file summarizes the current repository state for future contributors and AI
 - Task form Schedule, Categories, and Notes fields now use a one-open accordion on desktop and mobile while keeping title/basic info visible
 - Schedule now keeps `Clear schedule` in its own row and uses the cleaner `To`, `Every`, `Until`, and `Remind` labels
 - Task-form recurrence, reminder, and category dropdowns now use the shared in-app dropdown pattern with viewport-aware placement and category color dots
+- Month view now uses a clickable month title that opens a compact Month-Year picker instead of the old year text input
 - Desktop calendar events now click reliably again, and mobile calendar events intentionally stay tap-only with drag and resize disabled
 - Mobile month-view day previews now use matching flat icon buttons for `Close` and `Add`, with the `Add` button retaining the semi-transparent green accent treatment
 
