@@ -55,6 +55,8 @@ JWT_ALGORITHM=HS256
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES=1440
 ```
 
+For the Docker deployment path in this repository, there is no repo-root `.env` requirement. The Docker Compose stack reads `backend/.env` directly.
+
 ## Backend Setup
 
 ```sh

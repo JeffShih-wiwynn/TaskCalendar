@@ -45,6 +45,8 @@ import {
 
 import {
     clearStoredAuthToken,
+    changePassword,
+    deleteAccount,
     getCurrentUser,
     getStoredAuthToken,
     isAuthError,
@@ -668,6 +670,12 @@ export function App() {
     const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
     const [isWorkingHoursSettingsOpen, setIsWorkingHoursSettingsOpen] =
         useState(false);
+    const [isAccountSettingsOpen, setIsAccountSettingsOpen] =
+        useState(false);
+    const [isChangePasswordSettingsOpen, setIsChangePasswordSettingsOpen] =
+        useState(false);
+    const [isDeleteAccountSettingsOpen, setIsDeleteAccountSettingsOpen] =
+        useState(false);
     const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
     const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
     const [isAddingCategory, setIsAddingCategory] = useState(false);
@@ -710,6 +718,25 @@ export function App() {
     const [isWebhookSettingsTesting, setIsWebhookSettingsTesting] =
         useState(false);
     const [webhookTestMessage, setWebhookTestMessage] = useState<string | null>(
+        null,
+    );
+    const [changePasswordCurrentPassword, setChangePasswordCurrentPassword] =
+        useState("");
+    const [changePasswordNewPassword, setChangePasswordNewPassword] =
+        useState("");
+    const [changePasswordConfirmNewPassword, setChangePasswordConfirmNewPassword] =
+        useState("");
+    const [isPasswordChanging, setIsPasswordChanging] = useState(false);
+    const [changePasswordError, setChangePasswordError] = useState<
+        string | null
+    >(null);
+    const [changePasswordSuccess, setChangePasswordSuccess] = useState<
+        string | null
+    >(null);
+    const [deleteAccountConfirmation, setDeleteAccountConfirmation] =
+        useState("");
+    const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+    const [deleteAccountError, setDeleteAccountError] = useState<string | null>(
         null,
     );
     const [backupSummary, setBackupSummary] = useState<BackupExportPayload | null>(
@@ -932,6 +959,28 @@ export function App() {
         [],
     );
 
+    const closeSettingsPanels = useCallback(() => {
+        setIsSettingsMenuOpen(false);
+        setIsWorkingHoursSettingsOpen(false);
+        setIsAccountSettingsOpen(false);
+        setIsChangePasswordSettingsOpen(false);
+        setIsDeleteAccountSettingsOpen(false);
+        setIsWebhookSettingsOpen(false);
+        setIsBackupSettingsOpen(false);
+    }, []);
+
+    const resetAccountForms = useCallback(() => {
+        setChangePasswordCurrentPassword("");
+        setChangePasswordNewPassword("");
+        setChangePasswordConfirmNewPassword("");
+        setIsPasswordChanging(false);
+        setChangePasswordError(null);
+        setChangePasswordSuccess(null);
+        setDeleteAccountConfirmation("");
+        setIsDeletingAccount(false);
+        setDeleteAccountError(null);
+    }, []);
+
     const resetAppData = useCallback(() => {
         locallyUpdatedTasksRef.current.clear();
         setTaskState({ status: "loading", tasks: [] });
@@ -945,7 +994,16 @@ export function App() {
             discord_webhook_url: "",
             discord_message_template: "",
         });
-    }, []);
+        setWebhookTestMessage(null);
+        setBackupSummary(null);
+        setBackupImportFile(null);
+        setBackupImportMessage(null);
+        setBackupImportError(null);
+        setIsBackupLoading(false);
+        setIsBackupImporting(false);
+        closeSettingsPanels();
+        resetAccountForms();
+    }, [closeSettingsPanels, resetAccountForms]);
 
     const handleAuthExpired = useCallback(() => {
         clearStoredAuthToken();
@@ -961,7 +1019,8 @@ export function App() {
         setCurrentUser(null);
         setAuthError(null);
         resetAppData();
-    }, [resetAppData]);
+        resetAccountForms();
+    }, [resetAppData, resetAccountForms]);
 
     const handleOpenBackupSummary = useCallback(async () => {
         setIsBackupLoading(true);
@@ -3743,8 +3802,7 @@ export function App() {
         event.preventDefault();
         const saved = await saveWebhookSettings();
         if (saved) {
-            setIsWebhookSettingsOpen(false);
-            setIsSettingsMenuOpen(true);
+            openSettingsMenu();
         }
     };
 
@@ -3773,18 +3831,118 @@ export function App() {
         }
     };
 
+    const openSettingsMenu = () => {
+        closeDetailPanel();
+        closeSettingsPanels();
+        resetAccountForms();
+        setIsSettingsMenuOpen(true);
+    };
+
     const openWebhookSettings = () => {
         closeDetailPanel();
-        setIsWorkingHoursSettingsOpen(false);
+        closeSettingsPanels();
         setIsWebhookSettingsOpen(true);
-        setIsBackupSettingsOpen(false);
         setWebhookTestMessage(null);
         setWebhookSettingsDraft({
             discord_webhook_url: webhookSettings?.discord_webhook_url ?? "",
             discord_message_template:
                 webhookSettings?.discord_message_template ?? "",
         });
-        setIsSettingsMenuOpen(false);
+    };
+
+    const openWorkingHoursSettings = () => {
+        closeDetailPanel();
+        closeSettingsPanels();
+        setIsWorkingHoursSettingsOpen(true);
+    };
+
+    const openBackupSettings = () => {
+        closeDetailPanel();
+        closeSettingsPanels();
+        setBackupImportMessage(null);
+        setBackupImportError(null);
+        setBackupImportFile(null);
+        setIsBackupSettingsOpen(true);
+    };
+
+    const openAccountSettings = () => {
+        closeDetailPanel();
+        closeSettingsPanels();
+        resetAccountForms();
+        setIsAccountSettingsOpen(true);
+    };
+
+    const openChangePasswordSettings = () => {
+        closeDetailPanel();
+        closeSettingsPanels();
+        resetAccountForms();
+        setIsChangePasswordSettingsOpen(true);
+    };
+
+    const openDeleteAccountSettings = () => {
+        closeDetailPanel();
+        closeSettingsPanels();
+        resetAccountForms();
+        setIsDeleteAccountSettingsOpen(true);
+    };
+
+    const handleSavePasswordChange = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setChangePasswordError(null);
+        setChangePasswordSuccess(null);
+
+        if (changePasswordNewPassword !== changePasswordConfirmNewPassword) {
+            setChangePasswordError("New passwords do not match.");
+            return;
+        }
+
+        setIsPasswordChanging(true);
+        try {
+            const result = await changePassword({
+                current_password: changePasswordCurrentPassword,
+                new_password: changePasswordNewPassword,
+                confirm_new_password: changePasswordConfirmNewPassword,
+            });
+            setChangePasswordSuccess(result.message);
+            setChangePasswordCurrentPassword("");
+            setChangePasswordNewPassword("");
+            setChangePasswordConfirmNewPassword("");
+        } catch (error) {
+            setChangePasswordError(
+                error instanceof Error
+                    ? error.message
+                    : "Unable to change password",
+            );
+        } finally {
+            setIsPasswordChanging(false);
+        }
+    };
+
+    const handleDeleteAccount = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setDeleteAccountError(null);
+
+        if (deleteAccountConfirmation !== "DELETE") {
+            setDeleteAccountError('Type DELETE to continue.');
+            return;
+        }
+
+        setIsDeletingAccount(true);
+        try {
+            await deleteAccount({
+                confirmation: deleteAccountConfirmation,
+            });
+            clearStoredUserPreferences();
+            handleLogout();
+        } catch (error) {
+            setDeleteAccountError(
+                error instanceof Error
+                    ? error.message
+                    : "Unable to delete account",
+            );
+        } finally {
+            setIsDeletingAccount(false);
+        }
     };
 
     const handleToggleAllCategories = (event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -3839,9 +3997,8 @@ export function App() {
     };
 
     const toggleSidebar = () => {
-        setIsSettingsMenuOpen(false);
-        setIsBackupSettingsOpen(false);
-        setIsWebhookSettingsOpen(false);
+        closeSettingsPanels();
+        resetAccountForms();
         setContextMenu(null);
         setIsViewMenuOpen(false);
         setIsCategoryMenuOpen(false);
@@ -3890,6 +4047,9 @@ export function App() {
     const isSettingsSubviewOpen =
         isSettingsMenuOpen ||
         isWorkingHoursSettingsOpen ||
+        isAccountSettingsOpen ||
+        isChangePasswordSettingsOpen ||
+        isDeleteAccountSettingsOpen ||
         isWebhookSettingsOpen ||
         isBackupSettingsOpen;
     const openMobileTaskScreen = useCallback(
@@ -3897,35 +4057,30 @@ export function App() {
             setMobileScreen(screen);
             setActiveView(screen);
             setIsSidebarOpen(true);
-            setIsSettingsMenuOpen(false);
-            setIsWorkingHoursSettingsOpen(false);
-            setIsWebhookSettingsOpen(false);
-            setIsBackupSettingsOpen(false);
+            closeSettingsPanels();
+            resetAccountForms();
             closeDetailPanel();
         },
-        [closeDetailPanel],
+        [closeDetailPanel, closeSettingsPanels, resetAccountForms],
     );
     const openMobileCalendarScreen = useCallback(() => {
         setMobileScreen("calendar");
         setIsSidebarOpen(false);
-        setIsSettingsMenuOpen(false);
-        setIsWorkingHoursSettingsOpen(false);
-        setIsWebhookSettingsOpen(false);
-        setIsBackupSettingsOpen(false);
+        closeSettingsPanels();
+        resetAccountForms();
         closeDetailPanel();
         window.setTimeout(() => {
             calendarRef.current?.getApi().updateSize();
         }, 0);
-    }, [closeDetailPanel]);
+    }, [closeDetailPanel, closeSettingsPanels, resetAccountForms]);
     const openMobileSettingsScreen = useCallback(() => {
         setMobileScreen("settings");
         closeDetailPanel();
         setIsSidebarOpen(true);
-        setIsWorkingHoursSettingsOpen(false);
-        setIsWebhookSettingsOpen(false);
-        setIsBackupSettingsOpen(false);
+        closeSettingsPanels();
+        resetAccountForms();
         setIsSettingsMenuOpen(true);
-    }, [closeDetailPanel]);
+    }, [closeDetailPanel, closeSettingsPanels, resetAccountForms]);
 
     const mobileQuickActionCanAdjust = Boolean(
         mobileQuickActionTask &&
@@ -3966,10 +4121,8 @@ export function App() {
                 }
             }}
             onClick={() => {
-                setIsSettingsMenuOpen(false);
-                setIsWorkingHoursSettingsOpen(false);
-                setIsWebhookSettingsOpen(false);
-                setIsBackupSettingsOpen(false);
+                closeSettingsPanels();
+                resetAccountForms();
                 setContextMenu(null);
                 setIsViewMenuOpen(false);
                 setIsCategoryMenuOpen(false);
@@ -4069,12 +4222,13 @@ export function App() {
                                 aria-expanded={isSettingsSubviewOpen}
                                 onClick={() => {
                                     closeDetailPanel();
-                                    setIsWorkingHoursSettingsOpen(false);
-                                    setIsWebhookSettingsOpen(false);
-                                    setIsBackupSettingsOpen(false);
-                                    setIsSettingsMenuOpen((current) =>
-                                        isSettingsSubviewOpen ? false : !current,
-                                    );
+                                    if (isSettingsSubviewOpen) {
+                                        closeSettingsPanels();
+                                        resetAccountForms();
+                                        return;
+                                    }
+                                    resetAccountForms();
+                                    setIsSettingsMenuOpen((current) => !current);
                                 }}
                             >
                                 <span aria-hidden="true">
@@ -4144,42 +4298,269 @@ export function App() {
                                     </div>
                                     <button
                                         type="button"
-                                        className="filter-option"
-                                        onClick={() => {
-                                            setIsSettingsMenuOpen(false);
-                                            setIsWorkingHoursSettingsOpen(true);
-                                        }}
+                                        className="settings-action-button settings-action-button-neutral"
+                                        onClick={openWorkingHoursSettings}
                                     >
                                         Working hours
                                     </button>
                                     <button
                                         type="button"
-                                        className="filter-option"
+                                        className="settings-action-button settings-action-button-neutral"
                                         onClick={openWebhookSettings}
                                     >
                                         Webhook
                                     </button>
                                     <button
                                         type="button"
-                                        className="filter-option"
-                                        onClick={() => {
-                                            setBackupImportMessage(null);
-                                            setBackupImportError(null);
-                                            setIsWorkingHoursSettingsOpen(false);
-                                            setIsSettingsMenuOpen(false);
-                                            setIsBackupSettingsOpen(true);
-                                        }}
+                                        className="settings-action-button settings-action-button-neutral"
+                                        onClick={openBackupSettings}
                                     >
                                         Backup &amp; Restore
                                     </button>
                                     <button
                                         type="button"
-                                        className="filter-option"
+                                        className="settings-action-button settings-action-button-neutral"
+                                        onClick={openAccountSettings}
+                                    >
+                                        Account
+                                    </button>
+                                </div>
+                            </motion.section>
+                        )}
+                        {!detailPanelMode && isAccountSettingsOpen && (
+                            <motion.section
+                                key="account-settings"
+                                className="filter-section"
+                                onClick={(event) => event.stopPropagation()}
+                                variants={panelVariants}
+                                initial="hidden"
+                                animate="visible"
+                                exit="exit"
+                                transition={panelTransition}
+                            >
+                                <div className="task-form account-settings-form">
+                                    <div className="account-settings-heading">
+                                        <h3 className="working-hours-title">
+                                            Account
+                                        </h3>
+                                        <p className="muted">
+                                            Manage your password or delete this
+                                            account.
+                                        </p>
+                                </div>
+                                    <button
+                                        type="button"
+                                        className="settings-action-button settings-action-button-primary"
                                         onClick={handleLogout}
                                     >
                                         Logout
                                     </button>
+                                    <button
+                                        type="button"
+                                        className="settings-action-button settings-action-button-warning"
+                                        onClick={openChangePasswordSettings}
+                                    >
+                                        Change Password
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="settings-action-button settings-action-button-danger"
+                                        onClick={openDeleteAccountSettings}
+                                    >
+                                        Delete Account
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="settings-action-button settings-action-button-neutral"
+                                        onClick={openSettingsMenu}
+                                    >
+                                        Back
+                                    </button>
                                 </div>
+                            </motion.section>
+                        )}
+                        {!detailPanelMode && isChangePasswordSettingsOpen && (
+                            <motion.section
+                                key="change-password-settings"
+                                className="filter-section"
+                                onClick={(event) => event.stopPropagation()}
+                                variants={panelVariants}
+                                initial="hidden"
+                                animate="visible"
+                                exit="exit"
+                                transition={panelTransition}
+                            >
+                                <form
+                                    className="task-form account-settings-form"
+                                    onSubmit={(event) =>
+                                        void handleSavePasswordChange(event)
+                                    }
+                                >
+                                    <div className="account-settings-heading">
+                                        <h3 className="working-hours-title">
+                                            Change Password
+                                        </h3>
+                                        <p className="muted">
+                                            Pick a new password for the current
+                                            account.
+                                        </p>
+                                    </div>
+                                    <label>
+                                        <span>Current password</span>
+                                        <input
+                                            type="password"
+                                            autoComplete="current-password"
+                                            value={changePasswordCurrentPassword}
+                                            onChange={(event) => {
+                                                setChangePasswordCurrentPassword(
+                                                    event.target.value,
+                                                );
+                                                setChangePasswordError(null);
+                                                setChangePasswordSuccess(null);
+                                            }}
+                                            required
+                                        />
+                                    </label>
+                                    <label>
+                                        <span>New password</span>
+                                        <input
+                                            type="password"
+                                            autoComplete="new-password"
+                                            value={changePasswordNewPassword}
+                                            onChange={(event) => {
+                                                setChangePasswordNewPassword(
+                                                    event.target.value,
+                                                );
+                                                setChangePasswordError(null);
+                                                setChangePasswordSuccess(null);
+                                            }}
+                                            required
+                                        />
+                                    </label>
+                                    <label>
+                                        <span>Confirm new password</span>
+                                        <input
+                                            type="password"
+                                            autoComplete="new-password"
+                                            value={changePasswordConfirmNewPassword}
+                                            onChange={(event) => {
+                                                setChangePasswordConfirmNewPassword(
+                                                    event.target.value,
+                                                );
+                                                setChangePasswordError(null);
+                                                setChangePasswordSuccess(null);
+                                            }}
+                                            required
+                                        />
+                                    </label>
+                                    {changePasswordError && (
+                                        <p className="form-error">
+                                            {changePasswordError}
+                                        </p>
+                                    )}
+                                    {changePasswordSuccess && (
+                                        <p className="webhook-test-success">
+                                            {changePasswordSuccess}
+                                        </p>
+                                    )}
+                                    <div className="task-form-actions">
+                                        <button
+                                            type="submit"
+                                            className="settings-action-button settings-action-button-warning"
+                                            disabled={isPasswordChanging}
+                                        >
+                                            {isPasswordChanging
+                                                ? "Changing..."
+                                                : "Change"}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="settings-action-button settings-action-button-neutral"
+                                            disabled={isPasswordChanging}
+                                            onClick={openAccountSettings}
+                                        >
+                                            Back
+                                        </button>
+                                    </div>
+                                </form>
+                            </motion.section>
+                        )}
+                        {!detailPanelMode && isDeleteAccountSettingsOpen && (
+                            <motion.section
+                                key="delete-account-settings"
+                                className="filter-section"
+                                onClick={(event) => event.stopPropagation()}
+                                variants={panelVariants}
+                                initial="hidden"
+                                animate="visible"
+                                exit="exit"
+                                transition={panelTransition}
+                            >
+                                <form
+                                    className="task-form account-settings-form"
+                                    onSubmit={(event) =>
+                                        void handleDeleteAccount(event)
+                                    }
+                                >
+                                    <div className="account-settings-heading">
+                                        <h3 className="working-hours-title">
+                                            Delete Account
+                                        </h3>
+                                        <p className="muted">
+                                            All account data will be permanently
+                                            deleted.
+                                        </p>
+                                    </div>
+                                    <p className="form-error account-delete-warning">
+                                        This removes your tasks, categories,
+                                        and account record. This cannot be
+                                        undone.
+                                    </p>
+                                    <label>
+                                        <span>Type DELETE to confirm</span>
+                                        <input
+                                            type="text"
+                                            autoComplete="off"
+                                            value={deleteAccountConfirmation}
+                                            onChange={(event) => {
+                                                setDeleteAccountConfirmation(
+                                                    event.target.value,
+                                                );
+                                                setDeleteAccountError(null);
+                                            }}
+                                            placeholder="DELETE"
+                                            required
+                                        />
+                                    </label>
+                                    {deleteAccountError && (
+                                        <p className="form-error">
+                                            {deleteAccountError}
+                                        </p>
+                                    )}
+                                    <div className="task-form-actions">
+                                        <button
+                                            type="submit"
+                                            className="settings-action-button settings-action-button-danger"
+                                            disabled={
+                                                isDeletingAccount ||
+                                                deleteAccountConfirmation !==
+                                                    "DELETE"
+                                            }
+                                        >
+                                            {isDeletingAccount
+                                                ? "Deleting..."
+                                                : "Delete"}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="settings-action-button settings-action-button-neutral"
+                                            disabled={isDeletingAccount}
+                                            onClick={openAccountSettings}
+                                        >
+                                            Back
+                                        </button>
+                                    </div>
+                                </form>
                             </motion.section>
                         )}
                         {!detailPanelMode && isWorkingHoursSettingsOpen && (
@@ -4235,10 +4616,9 @@ export function App() {
                                     <div className="task-form-actions">
                                         <button
                                             type="button"
-                                            className="backup-action-button-primary"
+                                            className="settings-action-button settings-action-button-primary"
                                             onClick={() => {
-                                                setIsWorkingHoursSettingsOpen(false);
-                                                setIsSettingsMenuOpen(true);
+                                                openSettingsMenu();
                                             }}
                                         >
                                             Done
@@ -4306,7 +4686,7 @@ export function App() {
                                     )}
                                     <button
                                         type="button"
-                                        className="backup-action-button backup-action-button-primary"
+                                        className="settings-action-button settings-action-button-primary"
                                         disabled={isBackupLoading}
                                         onClick={() =>
                                             void handleOpenBackupSummary()
@@ -4318,7 +4698,7 @@ export function App() {
                                     </button>
                                     <button
                                         type="button"
-                                        className="backup-action-button backup-action-button-danger"
+                                        className="settings-action-button settings-action-button-danger"
                                         disabled={isBackupImporting}
                                         onClick={() => {
                                             if (backupImportFile) {
@@ -4338,15 +4718,11 @@ export function App() {
                                     </button>
                                     <button
                                         type="button"
-                                        className="ghost-button"
+                                        className="settings-action-button settings-action-button-neutral"
                                         disabled={
                                             isBackupLoading || isBackupImporting
                                         }
-                                        onClick={() => {
-                                            setIsWorkingHoursSettingsOpen(false);
-                                            setIsBackupSettingsOpen(false);
-                                            setIsSettingsMenuOpen(true);
-                                        }}
+                                        onClick={openSettingsMenu}
                                     >
                                         Back
                                     </button>
@@ -4437,6 +4813,7 @@ export function App() {
                                     <div className="task-form-actions">
                                         <button
                                             type="button"
+                                            className="settings-action-button settings-action-button-primary"
                                             disabled={
                                                 isWebhookSettingsSaving ||
                                                 isWebhookSettingsTesting
@@ -4446,12 +4823,7 @@ export function App() {
                                                     const saved =
                                                         await saveWebhookSettings();
                                                     if (saved) {
-                                                        setIsWebhookSettingsOpen(
-                                                            false,
-                                                        );
-                                                        setIsSettingsMenuOpen(
-                                                            true,
-                                                        );
+                                                        openSettingsMenu();
                                                     }
                                                 })()
                                             }
@@ -4462,7 +4834,7 @@ export function App() {
                                         </button>
                                         <button
                                             type="button"
-                                            className="warning-button"
+                                            className="settings-action-button settings-action-button-warning"
                                             disabled={
                                                 isWebhookSettingsSaving ||
                                                 isWebhookSettingsTesting
@@ -4485,6 +4857,9 @@ export function App() {
                         !isDetailPanelClosing &&
                         !isSettingsMenuOpen &&
                         !isWorkingHoursSettingsOpen &&
+                        !isAccountSettingsOpen &&
+                        !isChangePasswordSettingsOpen &&
+                        !isDeleteAccountSettingsOpen &&
                         !isBackupSettingsOpen &&
                         !isWebhookSettingsOpen && (
                         <section
@@ -5416,6 +5791,9 @@ export function App() {
                         !isDetailPanelClosing &&
                         !isSettingsMenuOpen &&
                         !isWorkingHoursSettingsOpen &&
+                        !isAccountSettingsOpen &&
+                        !isChangePasswordSettingsOpen &&
+                        !isDeleteAccountSettingsOpen &&
                         !isBackupSettingsOpen &&
                         !isWebhookSettingsOpen && (
             <section
@@ -8767,6 +9145,18 @@ function saveUnscheduledOrder(unscheduledOrder: string[]): void {
         );
     } catch {
         // Unscheduled task order persistence is optional.
+    }
+}
+
+function clearStoredUserPreferences(): void {
+    try {
+        window.localStorage?.removeItem("calendar-theme");
+        window.localStorage?.removeItem("calendar-sidebar");
+        window.localStorage?.removeItem("calendar-sidebar-width");
+        window.localStorage?.removeItem("calendar-working-hours");
+        window.localStorage?.removeItem("calendar-unscheduled-order");
+    } catch {
+        // Preference clearing is optional.
     }
 }
 

@@ -365,6 +365,7 @@ body {
 
 .sidebar-settings-list {
   display: grid;
+  gap: 6px;
 }
 
 .sidebar-settings-row {
@@ -2266,6 +2267,189 @@ input[type="checkbox"].task-checkbox:checked {
 .task-form .backup-action-button-danger:focus-visible {
   outline: 2px solid color-mix(in srgb, #dc3f3f 74%, #ffffff 26%);
   outline-offset: 2px;
+}
+
+.task-form .account-settings-form {
+  gap: 12px;
+}
+
+.task-form .account-settings-heading {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+.settings-action-button,
+.account-action-button,
+.task-form .settings-action-button,
+.task-form .account-action-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 10px 13px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel-bg) 78%, transparent);
+  box-shadow: none;
+  font: inherit;
+  font-weight: 600;
+  text-align: center;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  transition:
+    background-color var(--micro-duration-fast) ease,
+    border-color var(--micro-duration-fast) ease,
+    color var(--micro-duration-fast) ease,
+    box-shadow var(--micro-duration-fast) ease;
+}
+
+.settings-menu-panel .settings-action-button {
+  border-color: color-mix(in srgb, var(--border) 14%, transparent);
+  background: color-mix(in srgb, var(--panel-bg) 66%, transparent);
+}
+
+.settings-menu-panel .settings-action-button + .settings-action-button {
+  margin-top: 0;
+}
+
+.settings-action-button:disabled,
+.account-action-button:disabled,
+.task-form .settings-action-button:disabled,
+.task-form .account-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.settings-action-button-primary,
+.account-action-button-primary,
+.task-form .settings-action-button-primary,
+.task-form .account-action-button-primary {
+  border-color: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: color-mix(in srgb, var(--accent) 92%, #000 8%);
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel-bg));
+}
+
+.settings-action-button-primary:hover:not(:disabled),
+.account-action-button-primary:hover:not(:disabled),
+.task-form .settings-action-button-primary:hover:not(:disabled),
+.task-form .account-action-button-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 20%, var(--panel-bg));
+}
+
+.settings-action-button-primary:active:not(:disabled),
+.account-action-button-primary:active:not(:disabled),
+.task-form .settings-action-button-primary:active:not(:disabled),
+.task-form .account-action-button-primary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 26%, var(--panel-bg));
+}
+
+.settings-action-button-primary:focus-visible,
+.account-action-button-primary:focus-visible,
+.task-form .settings-action-button-primary:focus-visible,
+.task-form .account-action-button-primary:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, #ffffff 28%);
+  outline-offset: 2px;
+}
+
+.settings-action-button-warning,
+.account-action-button-warning,
+.task-form .settings-action-button-warning,
+.task-form .account-action-button-warning {
+  border-color: color-mix(in srgb, var(--warning) 18%, transparent);
+  color: color-mix(in srgb, var(--warning) 92%, #000 8%);
+  background: color-mix(in srgb, var(--warning) 14%, var(--panel-bg));
+}
+
+.settings-action-button-warning:hover:not(:disabled),
+.account-action-button-warning:hover:not(:disabled),
+.task-form .settings-action-button-warning:hover:not(:disabled),
+.task-form .account-action-button-warning:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warning) 20%, var(--panel-bg));
+}
+
+.settings-action-button-warning:active:not(:disabled),
+.account-action-button-warning:active:not(:disabled),
+.task-form .settings-action-button-warning:active:not(:disabled),
+.task-form .account-action-button-warning:active:not(:disabled) {
+  background: color-mix(in srgb, var(--warning) 26%, var(--panel-bg));
+}
+
+.settings-action-button-warning:focus-visible,
+.account-action-button-warning:focus-visible,
+.task-form .settings-action-button-warning:focus-visible,
+.task-form .account-action-button-warning:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--warning) 72%, #ffffff 28%);
+  outline-offset: 2px;
+}
+
+.settings-action-button-danger,
+.account-action-button-danger,
+.task-form .settings-action-button-danger,
+.task-form .account-action-button-danger {
+  border-color: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: color-mix(in srgb, var(--danger) 90%, #000 10%);
+  background: color-mix(in srgb, var(--danger) 14%, var(--panel-bg));
+}
+
+.settings-action-button-danger:hover:not(:disabled),
+.account-action-button-danger:hover:not(:disabled),
+.task-form .settings-action-button-danger:hover:not(:disabled),
+.task-form .account-action-button-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 20%, var(--panel-bg));
+}
+
+.settings-action-button-danger:active:not(:disabled),
+.account-action-button-danger:active:not(:disabled),
+.task-form .settings-action-button-danger:active:not(:disabled),
+.task-form .account-action-button-danger:active:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 26%, var(--panel-bg));
+}
+
+.settings-action-button-danger:focus-visible,
+.account-action-button-danger:focus-visible,
+.task-form .settings-action-button-danger:focus-visible,
+.task-form .account-action-button-danger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--danger) 72%, #ffffff 28%);
+  outline-offset: 2px;
+}
+
+.settings-action-button-neutral,
+.account-action-button-neutral,
+.task-form .settings-action-button-neutral,
+.task-form .account-action-button-neutral {
+  border-color: color-mix(in srgb, var(--border) 10%, transparent);
+  color: color-mix(in srgb, var(--text) 88%, var(--muted) 12%);
+  background: color-mix(in srgb, var(--panel-bg) 66%, transparent);
+}
+
+.settings-action-button-neutral:hover:not(:disabled),
+.account-action-button-neutral:hover:not(:disabled),
+.task-form .settings-action-button-neutral:hover:not(:disabled),
+.task-form .account-action-button-neutral:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-soft) 48%, var(--panel-bg));
+}
+
+.settings-action-button-neutral:active:not(:disabled),
+.account-action-button-neutral:active:not(:disabled),
+.task-form .settings-action-button-neutral:active:not(:disabled),
+.task-form .account-action-button-neutral:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-soft) 56%, var(--panel-bg));
+}
+
+.settings-action-button-neutral:focus-visible,
+.account-action-button-neutral:focus-visible,
+.task-form .settings-action-button-neutral:focus-visible,
+.task-form .account-action-button-neutral:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 54%, #ffffff 46%);
+  outline-offset: 2px;
+}
+
+.task-form .account-delete-warning {
+  margin-top: 2px;
 }
 
 .task-form .ghost-button {

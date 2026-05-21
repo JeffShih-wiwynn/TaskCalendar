@@ -7,10 +7,14 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.auth.dependencies import get_current_user
-from app.auth.router import login, read_current_user, register
-from app.auth.schemas import AuthCredentials
+from app.auth.router import change_password, delete_account, login, read_current_user, register
+from app.auth.schemas import AuthCredentials, ChangePasswordRequest, DeleteAccountRequest
 from app.core.database import Base
 from app.models.user import User
+from app.task_lists import service as task_list_service
+from app.task_lists.schemas import TaskListCreate
+from app.tasks import service as task_service
+from app.tasks.schemas import ScheduledTaskCreate
 
 
 @pytest.fixture()
@@ -98,3 +102,108 @@ def test_me_returns_authenticated_current_user(db_session: Session) -> None:
     response = read_current_user(current_user)
 
     assert response.username == "alice"
+
+
+def test_change_password_requires_current_password(db_session: Session) -> None:
+    credentials = AuthCredentials(username="alice", password="secret-password")
+    register(credentials, db_session)
+    token = login(credentials, db_session).access_token
+    current_user = get_current_user(token, db_session)
+
+    with pytest.raises(HTTPException) as exc_info:
+        change_password(
+            ChangePasswordRequest(
+                current_password="wrong-password",
+                new_password="new-secret",
+                confirm_new_password="new-secret",
+            ),
+            db_session,
+            current_user=current_user,
+        )
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail == "Current password is incorrect"
+
+
+def test_change_password_updates_hash_and_requires_confirmation_match(
+    db_session: Session,
+) -> None:
+    credentials = AuthCredentials(username="alice", password="secret-password")
+    register(credentials, db_session)
+    current_user = get_current_user(login(credentials, db_session).access_token, db_session)
+
+    with pytest.raises(HTTPException) as exc_info:
+        change_password(
+            ChangePasswordRequest(
+                current_password="secret-password",
+                new_password="new-secret",
+                confirm_new_password="different-secret",
+            ),
+            db_session,
+            current_user=current_user,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "New passwords do not match"
+
+    response = change_password(
+        ChangePasswordRequest(
+            current_password="secret-password",
+            new_password="new-secret",
+            confirm_new_password="new-secret",
+        ),
+        db_session,
+        current_user=current_user,
+    )
+
+    assert response.message == "Password updated"
+    with pytest.raises(HTTPException) as exc_info:
+        login(credentials, db_session)
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail == "Invalid username or password"
+    assert login(AuthCredentials(username="alice", password="new-secret"), db_session)
+
+
+def test_delete_account_removes_owned_tasks_and_categories(
+    db_session: Session,
+) -> None:
+    credentials = AuthCredentials(username="alice", password="secret-password")
+    register(credentials, db_session)
+    token = login(credentials, db_session).access_token
+    current_user = get_current_user(token, db_session)
+    task_list = task_list_service.create_task_list(
+        db_session,
+        TaskListCreate(name="Alice list", color="#2f80ed"),
+        user_id=current_user.id,
+    )
+    task_service.create_task(
+        db_session,
+        ScheduledTaskCreate(title="Alice task", list_id=task_list.id),
+        user_id=current_user.id,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        delete_account(
+            DeleteAccountRequest(confirmation="NOPE"),
+            db_session,
+            current_user=current_user,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Type DELETE to confirm account deletion"
+
+    response = delete_account(
+        DeleteAccountRequest(confirmation="DELETE"),
+        db_session,
+        current_user=current_user,
+    )
+
+    assert response.message == "Account deleted"
+    with pytest.raises(HTTPException) as exc_info:
+        get_current_user(token, db_session)
+
+    assert exc_info.value.status_code == 401
+    assert db_session.query(User).filter_by(username="alice").count() == 0
+    assert task_service.list_tasks(db_session, user_id=current_user.id) == []
+    assert task_list_service.list_task_lists(db_session, user_id=current_user.id) == []

@@ -105,6 +105,12 @@ const mocks = vi.hoisted(() => ({
         window.localStorage.setItem("calendar-auth-token", "test-token");
         return "test-token";
     }),
+    changePassword: vi.fn(async () => ({
+        message: "Password updated",
+    })),
+    deleteAccount: vi.fn(async () => ({
+        message: "Account deleted",
+    })),
     fetchBackupExport: vi.fn(async () => ({
         schema_version: 1,
         exported_at: "2026-05-14T00:00:00.000Z",
@@ -613,8 +619,10 @@ vi.mock("./api/settings", () => ({
 
 vi.mock("./api/auth", () => ({
     AuthError: mocks.AuthError,
+    changePassword: mocks.changePassword,
     clearStoredAuthToken: () =>
         window.localStorage.removeItem("calendar-auth-token"),
+    deleteAccount: mocks.deleteAccount,
     getCurrentUser: mocks.getCurrentUser,
     getStoredAuthToken: () => window.localStorage.getItem("calendar-auth-token"),
     isAuthError: (error: unknown) => error instanceof mocks.AuthError,
@@ -964,6 +972,8 @@ describe("App", () => {
         mocks.updateTask.mockClear();
         mocks.updateSettings.mockClear();
         mocks.testSettings.mockClear();
+        mocks.changePassword.mockClear();
+        mocks.deleteAccount.mockClear();
         mocks.login.mockClear();
         mocks.fetchBackupExport.mockClear();
         mocks.importBackup.mockClear();
@@ -1062,7 +1072,8 @@ describe("App", () => {
         render(<App />);
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
-        fireEvent.click(screen.getByRole("button", { name: "Logout" }));
+        fireEvent.click(screen.getByRole("button", { name: "Account" }));
+        fireEvent.click(await screen.findByRole("button", { name: "Logout" }));
 
         expect(window.localStorage.getItem("calendar-auth-token")).toBeNull();
         expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
@@ -2287,6 +2298,7 @@ describe("App", () => {
         const initialTaskListCalls = mocks.listTaskLists.mock.calls.length;
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(screen.getByRole("button", { name: "Account" }));
         fireEvent.click(await screen.findByRole("button", { name: "Logout" }));
         fireEvent.focus(window);
 
@@ -3709,6 +3721,80 @@ describe("App", () => {
             screen.queryByRole("heading", { name: "Create task" }),
         );
         expect(await screen.findByLabelText("Webhook URL")).toBeInTheDocument();
+    });
+
+    it("shows the account section and changes the password after confirmation", async () => {
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Settings" }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Account" }));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Change Password" }),
+        );
+
+        expect(
+            await screen.findByRole("heading", { name: "Change Password" }),
+        ).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText("Current password"), {
+            target: { value: "secret-password" },
+        });
+        fireEvent.change(screen.getByLabelText("New password"), {
+            target: { value: "new-secret" },
+        });
+        fireEvent.change(screen.getByLabelText("Confirm new password"), {
+            target: { value: "other-secret" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Change" }));
+
+        expect(
+            await screen.findByText("New passwords do not match."),
+        ).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText("Confirm new password"), {
+            target: { value: "new-secret" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Change" }));
+
+        await waitFor(() =>
+            expect(mocks.changePassword).toHaveBeenCalledWith({
+                current_password: "secret-password",
+                new_password: "new-secret",
+                confirm_new_password: "new-secret",
+            }),
+        );
+        expect(await screen.findByText("Password updated")).toBeInTheDocument();
+    });
+
+    it("deletes the account after typing DELETE and logs out", async () => {
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Settings" }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Account" }));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Delete Account" }),
+        );
+
+        expect(
+            await screen.findByRole("heading", { name: "Delete Account" }),
+        ).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText("Type DELETE to confirm"), {
+            target: { value: "DELETE" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+        await waitFor(() =>
+            expect(mocks.deleteAccount).toHaveBeenCalledWith({
+                confirmation: "DELETE",
+            }),
+        );
+        expect(window.localStorage.getItem("calendar-auth-token")).toBeNull();
+        expect(
+            await screen.findByRole("heading", { name: "Welcome back" }),
+        ).toBeInTheDocument();
     });
 
     it("closes the create panel after saving a task", async () => {

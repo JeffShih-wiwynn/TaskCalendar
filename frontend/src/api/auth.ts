@@ -13,6 +13,20 @@ export type AuthUser = {
     updated_at: string;
 };
 
+export type ChangePasswordInput = {
+    current_password: string;
+    new_password: string;
+    confirm_new_password: string;
+};
+
+export type DeleteAccountInput = {
+    confirmation: string;
+};
+
+export type ActionResponse = {
+    message: string;
+};
+
 type TokenResponse = {
     access_token: string;
     token_type: string;
@@ -68,6 +82,26 @@ export async function getCurrentUser(): Promise<AuthUser> {
     });
 }
 
+export async function changePassword(
+    input: ChangePasswordInput,
+): Promise<ActionResponse> {
+    return request<ActionResponse>("/auth/password", {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(input),
+    });
+}
+
+export async function deleteAccount(
+    input: DeleteAccountInput,
+): Promise<ActionResponse> {
+    return request<ActionResponse>("/auth/me", {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(input),
+    });
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(resolveApiUrl(path), {
         ...init,
@@ -93,6 +127,18 @@ async function readErrorMessage(response: Response): Promise<string> {
         const body = (await response.json()) as { detail?: unknown };
         if (typeof body.detail === "string") {
             return body.detail;
+        }
+        if (Array.isArray(body.detail)) {
+            const messages = body.detail
+                .map((item) =>
+                    typeof item === "object" && item !== null && "msg" in item
+                        ? String((item as { msg?: unknown }).msg ?? "")
+                        : "",
+                )
+                .filter(Boolean);
+            if (messages.length > 0) {
+                return messages.join(" ");
+            }
         }
     } catch {
         // Fall through to a generic HTTP message.

@@ -63,9 +63,18 @@ For manual Ubuntu deployment, use [docs/ubuntu-production.md](docs/ubuntu-produc
 ## Docker Deployment
 
 For the minimal Docker/Compose deployment, use the existing stack in [docker-compose.yml](docker-compose.yml).
-Before deploying, make sure `backend/.env` exists and contains production values.
+Before deploying, create `backend/.env` from `backend/.env.example` and fill in production values. No repo-root `.env` is required for the current Docker deployment flow.
 For this VPN-only setup, use the VPN URL in backend env values, for example `http://100.64.0.2:8088`.
 Docker deployment uses the `calendar` Compose project. Only the `web` container is exposed to the host. `backend` and `postgres` stay private inside the Compose network, and database access should use `docker compose -p calendar exec postgres psql -U calendar -d calendar`, not `localhost:5432`.
+
+Clean-clone flow:
+
+```sh
+cp backend/.env.example backend/.env
+# edit backend/.env with production values
+bash ./scripts/docker-build.sh
+bash ./scripts/docker-deploy.sh
+```
 
 Build the images:
 
