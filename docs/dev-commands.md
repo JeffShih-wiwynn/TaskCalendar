@@ -149,11 +149,13 @@ Status:
 ./scripts/dev.sh status
 ```
 
-The script writes logs and PID files to `.calendar-dev/` and binds the frontend and backend to `100.64.0.2:5173` and `100.64.0.2:8000`.
+`scripts/dev.sh` is the public dispatcher for local development commands. Its implementation is split under `scripts/dev/` into config, Compose, env, process, database, backend, and frontend helpers.
+The tooling writes logs and PID files to `.calendar-dev/` and binds the frontend and backend to `100.64.0.2:5173` and `100.64.0.2:8000`.
 
 Local development uses `backend/.env.local` and `frontend/.env.local` so deployment settings do not leak into development.
-It starts or verifies the local PostgreSQL service, waits for it to accept connections, and runs Alembic migrations before backend startup.
-Docker deployment uses `docker-compose.yml` and the dedicated production Dockerfiles, but local development stays on `scripts/dev.sh`.
+It starts or verifies the local PostgreSQL service in the `calendar-dev` Compose project, publishes it on `127.0.0.1:5432` for the host backend, waits for it to accept connections, and runs Alembic migrations through the Compose backend container before backend startup.
+Docker deployment uses the `calendar` Compose project, `docker-compose.yml`, and the dedicated production Dockerfiles, but local development stays on `scripts/dev.sh`.
+The two stacks use separate PostgreSQL containers and volumes: dev uses `calendar-dev-postgres` with `calendar-dev_postgres_data`; Docker deployment uses `calendar-postgres` with `calendar_postgres_data`.
 
 Expected development endpoints:
 
@@ -174,11 +176,29 @@ Troubleshooting:
 - If port `5173` is occupied, stop the old Vite process.
 - If port `8000` is occupied, stop the old backend process.
 - If the backend fails on startup, check whether PostgreSQL is running and whether migrations completed.
-- If migrations fail with duplicate tables, reset the local dev database with `./scripts/dev.sh reset-db`.
+- If migrations fail with duplicate tables, reset the local dev database contents with `./scripts/dev.sh reset-db`.
+- Use `./scripts/dev.sh destroy-db` only when you want to permanently delete the local dev PostgreSQL volume and all local dev database data.
 - If login says `Failed to fetch`, check the browser Network request URL.
 
-Reset the local dev database:
+Reset the local dev database contents:
 
 ```sh
 ./scripts/dev.sh reset-db
+```
+
+Permanently delete the local dev database:
+
+```sh
+./scripts/dev.sh destroy-db
+```
+
+`reset-db` and `destroy-db` only operate on the `calendar-dev` Compose project. `destroy-db` requires typing `DESTROY` before it deletes the dev Docker volume and cannot delete the deploy `calendar_postgres_data` volume.
+
+List both stacks and their SQL storage:
+
+```sh
+docker compose ls -a
+docker ps -a --format '{{.Names}}\t{{.Image}}\t{{.Ports}}'
+docker volume ls | grep calendar
+docker inspect calendar-dev-postgres calendar-postgres --format '{{.Name}} {{json .Mounts}}'
 ```

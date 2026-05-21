@@ -6708,7 +6708,7 @@ function AuthScreen({
             <section className="auth-panel" aria-labelledby="auth-title">
                 <p className="eyebrow">SCHEDULED TASK CALENDAR</p>
                 <h1 id="auth-title">
-                    {isRegistering ? "Create account" : "Welcome back"}
+                    {isRegistering ? "Register" : "Welcome back"}
                 </h1>
                 <p className="auth-subtitle">
                     {isRegistering ? "Create a new account" : "Sign in to continue"}
@@ -6723,7 +6723,7 @@ function AuthScreen({
                             onModeChange("login");
                         }}
                     >
-                        Use an existing account
+                        Login
                     </button>
                     <button
                         type="button"
@@ -6734,7 +6734,7 @@ function AuthScreen({
                             onModeChange("register");
                         }}
                     >
-                        Create account
+                        Register
                     </button>
                 </div>
                 <form className="auth-form" onSubmit={onSubmit}>
@@ -6779,8 +6779,8 @@ function AuthScreen({
                                 ? "Creating..."
                                 : "Signing in..."
                             : isRegistering
-                              ? "Create account"
-                              : "Sign in"}
+                              ? "Register"
+                              : "Login"}
                     </button>
                 </form>
             </section>

@@ -36,7 +36,7 @@ It writes only local development env files:
 - `frontend/.env.local`
 - `backend/.env.local`
 
-It starts or verifies the local PostgreSQL service, waits for it to become ready, and runs migrations before launching the backend.
+It starts or verifies the local PostgreSQL service in the `calendar-dev` Compose project, publishes it on `127.0.0.1:5432` for the host backend, waits for it to become ready, and runs migrations before launching the backend. The dev database uses the `calendar-dev-postgres` container and `calendar-dev_postgres_data` volume, separate from Docker deployment.
 
 Login requests should go to:
 
@@ -49,7 +49,8 @@ Troubleshooting:
 - If port `5173` is occupied, stop the old Vite process.
 - If port `8000` is occupied, stop the old backend process.
 - If the backend fails on startup, check whether PostgreSQL is running and whether migrations completed.
-- If migrations fail with duplicate tables, reset the local dev database with `./scripts/dev.sh reset-db`.
+- If migrations fail with duplicate tables, reset the local dev database contents with `./scripts/dev.sh reset-db`.
+- If you need to delete the Compose PostgreSQL volume and all local database data, use `./scripts/dev.sh destroy-db` and type `DESTROY` when prompted.
 - If login says `Failed to fetch`, check the browser Network request URL.
 - Use `lsof -i :5173` and `lsof -i :8000` to find listeners.
 
@@ -64,7 +65,7 @@ For manual Ubuntu deployment, use [docs/ubuntu-production.md](docs/ubuntu-produc
 For the minimal Docker/Compose deployment, use the existing stack in [docker-compose.yml](docker-compose.yml).
 Before deploying, make sure `backend/.env` exists and contains production values.
 For this VPN-only setup, use the VPN URL in backend env values, for example `http://100.64.0.2:8088`.
-Only the `web` container is exposed to the host. `backend` and `postgres` stay private inside the Compose network, and database access should use `docker compose exec postgres psql`, not `localhost:5432`.
+Docker deployment uses the `calendar` Compose project. Only the `web` container is exposed to the host. `backend` and `postgres` stay private inside the Compose network, and database access should use `docker compose -p calendar exec postgres psql -U calendar -d calendar`, not `localhost:5432`.
 
 Build the images:
 
@@ -153,12 +154,30 @@ Check status:
 ./scripts/dev.sh status
 ```
 
-The script stores logs and PID files in `.calendar-dev/`. It does not read or modify deployment files.
-It also starts or verifies the local PostgreSQL service before backend startup and runs Alembic migrations automatically.
-If the local database is stale or partially initialized, reset it with:
+`scripts/dev.sh` is the public dispatcher for local development commands. Its implementation is split under `scripts/dev/` into config, Compose, env, process, database, backend, and frontend helpers.
+The tooling stores logs and PID files in `.calendar-dev/`. It does not read or modify deployment files.
+It starts or verifies the local PostgreSQL service before backend startup and runs Alembic migrations through the Compose backend container. Dev Compose commands are forced to project `calendar-dev`; Docker deployment commands are forced to project `calendar`.
+If the local database is stale or partially initialized, reset only its contents with:
 
 ```sh
 ./scripts/dev.sh reset-db
+```
+
+To permanently delete the local PostgreSQL volume and all local database data, use:
+
+```sh
+./scripts/dev.sh destroy-db
+```
+
+`reset-db` and `destroy-db` only target the `calendar-dev` Compose project. `destroy-db` requires typing `DESTROY` before it deletes the dev Docker volume; it does not remove the deploy `calendar_postgres_data` volume.
+
+Inspect both Compose stacks:
+
+```sh
+docker compose ls -a
+docker ps -a --format '{{.Names}}\t{{.Image}}\t{{.Ports}}'
+docker volume ls | grep calendar
+docker inspect calendar-dev-postgres calendar-postgres --format '{{.Name}} {{json .Mounts}}'
 ```
 
 If `start` fails because a port is already in use, run `./scripts/dev.sh stop` and retry. If needed, inspect `.calendar-dev/logs/backend.log` and `.calendar-dev/logs/frontend.log`.
