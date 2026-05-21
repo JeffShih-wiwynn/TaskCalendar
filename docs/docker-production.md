@@ -8,6 +8,8 @@ The project still treats non-Docker Ubuntu deployment as the primary manual path
 - `backend`: FastAPI app started from a Python image.
 - `web`: Caddy serving the built frontend and reverse proxying API routes to the backend.
 - Only `web` is exposed on the host. `backend` and `postgres` stay private on the Compose network.
+- Docker deployment uses Compose project `calendar`, container `calendar-postgres`, and volume `calendar_postgres_data`.
+- Local development uses Compose project `calendar-dev`, container `calendar-dev-postgres`, and volume `calendar-dev_postgres_data`.
 
 ## Environment
 
@@ -27,12 +29,12 @@ Required values:
 `APP_TIMEZONE` defaults to `UTC` when unset. Use an IANA timezone name such as `UTC`, `Asia/Taipei`, or `America/New_York`.
 
 For Compose, `DATABASE_URL` is overridden to point at the `postgres` service. The other values should point at the VPN access URL, for example `http://100.64.0.2:8088`.
-Database access for maintenance should use `docker compose exec postgres psql -U calendar -d calendar`, not `localhost:5432`.
+Database access for maintenance should use `docker compose -p calendar exec postgres psql -U calendar -d calendar`, not `localhost:5432`.
 
 ## Build And Start
 
 ```sh
-docker compose up -d --build
+docker compose -p calendar up -d --build
 ```
 
 The backend container waits for PostgreSQL readiness, runs `alembic upgrade head`, and then starts Uvicorn.
@@ -40,6 +42,7 @@ The backend container waits for PostgreSQL readiness, runs `alembic upgrade head
 The `web` container builds the frontend assets and serves them with Caddy.
 Compose maps host port `8088` to container port `80`, so the app is available on the VPN at a URL such as `http://100.64.0.2:8088`.
 The backend listens on `8000` only inside the Compose network, and PostgreSQL listens on `5432` only inside the Compose network.
+The deploy PostgreSQL service does not publish host port `5432`; that localhost port is reserved for the dev database when `./scripts/dev.sh` is running.
 
 ## Frontend
 
@@ -60,6 +63,7 @@ All other paths serve the React app shell.
 
 ## Notes
 
-- This setup keeps local development unchanged.
+- This setup keeps local development SQL isolated from Docker deployment SQL.
+- Dev `reset-db` and `destroy-db` target only the `calendar-dev` project and cannot delete the deploy `calendar_postgres_data` volume.
 - Docker is not the primary deployment path yet.
 - Avoid adding extra Compose stacks or orchestration layers unless the deployment model changes.

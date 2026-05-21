@@ -18,7 +18,7 @@ sudo apt-get install -y python3.12 python3.12-venv python3-pip docker.io docker-
 Start PostgreSQL:
 
 ```sh
-docker compose up -d postgres
+./scripts/dev.sh start
 ```
 
 Or start the full local stack in the background:
@@ -70,6 +70,7 @@ Background stack helpers:
 ```
 
 For remote testing, use `PUBLIC_HOST=<reachable-ip> ./scripts/dev.sh start`. The script remembers the last `PUBLIC_HOST` value in `.calendar-dev/public_host` until it is overridden.
+Local development uses Compose project `calendar-dev`; Docker deployment uses Compose project `calendar`.
 
 Frontend validation:
 

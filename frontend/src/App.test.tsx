@@ -1002,7 +1002,7 @@ describe("App", () => {
         fireEvent.change(screen.getByLabelText("Password"), {
             target: { value: "secret-password" },
         });
-        fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+        fireEvent.click(screen.getByRole("button", { name: "Login" }));
 
         await waitFor(() =>
             expect(mocks.login).toHaveBeenCalledWith({
@@ -2391,7 +2391,7 @@ describe("App", () => {
             target: { value: "secret-password" },
         });
 
-        fireEvent.click(screen.getByRole("tab", { name: "Create account" }));
+        fireEvent.click(screen.getByRole("tab", { name: "Register" }));
 
         expect(screen.getByLabelText("Username")).toHaveValue("");
         expect(screen.getByLabelText("Password")).toHaveValue("");
@@ -2403,7 +2403,7 @@ describe("App", () => {
             target: { value: "another-password" },
         });
 
-        fireEvent.click(screen.getByRole("tab", { name: "Use an existing account" }));
+        fireEvent.click(screen.getByRole("tab", { name: "Login" }));
 
         expect(screen.getByLabelText("Username")).toHaveValue("");
         expect(screen.getByLabelText("Password")).toHaveValue("");
