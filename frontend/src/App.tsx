@@ -3345,6 +3345,7 @@ export function App() {
 
         if (
             formState.recurrence_frequency &&
+            !isDateOnlyTask &&
             !isCompleteDateTimeValue(formState.scheduled_start)
         ) {
             setFormError("Recurring tasks require a start time");
@@ -3487,6 +3488,7 @@ export function App() {
 
         if (
             editState.recurrence_frequency &&
+            !isDateOnlyTask &&
             !isCompleteDateTimeValue(editState.scheduled_start)
         ) {
             setFormError("Recurring tasks require a start time");

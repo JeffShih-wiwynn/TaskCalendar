@@ -5535,9 +5535,72 @@ describe("App", () => {
                     scheduled_end: null,
                     all_day: true,
                     due_at: null,
+                    recurrence_rule: null,
                 }),
             ),
         );
+    });
+
+    it("creates an all-day recurring task without requiring a start time", async () => {
+        render(<App />);
+
+        expect(
+            await screen.findByRole("button", { name: "Task view" }),
+        ).toBeInTheDocument();
+        fireEvent.click(
+            screen.getByRole("button", { name: "Open all-day create task" }),
+        );
+
+        expect(screen.getByLabelText("Start date")).toHaveValue("2026-05-08");
+        expect(screen.getByLabelText("Start time")).toHaveValue("");
+
+        fireEvent.change(screen.getByLabelText("Title"), {
+            target: { value: "All-day recurring task" },
+        });
+        await selectTaskDropdownOption("Repeat", "Daily");
+        fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+        await waitFor(() =>
+            expect(mocks.createTask).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    title: "All-day recurring task",
+                    scheduled_start: "2026-05-08T00:00:00",
+                    scheduled_end: null,
+                    all_day: true,
+                    recurrence_rule: "FREQ=DAILY;INTERVAL=1",
+                }),
+            ),
+        );
+        expect(
+            screen.queryByText("Recurring tasks require a start time"),
+        ).not.toBeInTheDocument();
+    });
+
+    it("still requires a complete start time for timed recurring task creation", async () => {
+        render(<App />);
+
+        expect(
+            await screen.findByRole("button", { name: "Task view" }),
+        ).toBeInTheDocument();
+        fireEvent.click(
+            screen.getByRole("button", { name: "Open create task" }),
+        );
+
+        fireEvent.change(screen.getByLabelText("Title"), {
+            target: { value: "Timed recurring task" },
+        });
+        fireEvent.change(screen.getByLabelText("Start time"), {
+            target: { value: "" },
+        });
+        await selectTaskDropdownOption("Repeat", "Daily");
+        fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+        expect(
+            await screen.findByText(
+                "Start and end must include both date and time",
+            ),
+        ).toBeInTheDocument();
+        expect(mocks.createTask).not.toHaveBeenCalled();
     });
 
     it("shows clear in the create form when schedule data exists", async () => {
