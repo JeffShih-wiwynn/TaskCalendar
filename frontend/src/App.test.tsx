@@ -4774,6 +4774,10 @@ describe("App", () => {
 
         render(<App />);
 
+        await screen.findAllByRole("checkbox", {
+            name: "Toggle Recurring drag task",
+        });
+
         fireEvent.click(
             await screen.findByRole("button", { name: "Drop recurring task" }),
         );
@@ -4819,6 +4823,10 @@ describe("App", () => {
         ];
 
         render(<App />);
+
+        await screen.findAllByRole("checkbox", {
+            name: "Toggle Recurring drag task",
+        });
 
         fireEvent.click(
             await screen.findByRole("button", { name: "Drop recurring task" }),
@@ -4909,6 +4917,10 @@ describe("App", () => {
         render(<App />);
 
         expect(mocks.fullCalendarMount).toHaveBeenCalledTimes(1);
+
+        await screen.findAllByRole("checkbox", {
+            name: "Toggle Recurring drag task",
+        });
 
         fireEvent.click(
             await screen.findByRole("button", { name: "Drop recurring task" }),
