@@ -13,7 +13,7 @@ The project still treats non-Docker Ubuntu deployment as the primary manual path
 
 ## Environment
 
-The backend service reads `backend/.env`.
+The backend service reads `backend/.env`. Create it from `backend/.env.example` before building or deploying. The current Docker stack does not require a repo-root `.env`.
 
 Required values:
 
@@ -30,6 +30,15 @@ Required values:
 
 For Compose, `DATABASE_URL` is overridden to point at the `postgres` service. The other values should point at the VPN access URL, for example `http://100.64.0.2:8088`.
 Database access for maintenance should use `docker compose -p calendar exec postgres psql -U calendar -d calendar`, not `localhost:5432`.
+
+Fresh clone setup:
+
+```sh
+cp backend/.env.example backend/.env
+# edit backend/.env with production values
+bash ./scripts/docker-build.sh
+bash ./scripts/docker-deploy.sh
+```
 
 ## Build And Start
 

@@ -20,3 +20,17 @@ class UserRead(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=1)
+    confirm_new_password: str = Field(min_length=1)
+
+
+class DeleteAccountRequest(BaseModel):
+    confirmation: str = Field(min_length=1)
+
+
+class ActionResponse(BaseModel):
+    message: str

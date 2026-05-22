@@ -5,7 +5,14 @@ from sqlalchemy.orm import Session
 
 from app.auth import service
 from app.auth.dependencies import get_current_user
-from app.auth.schemas import AuthCredentials, TokenResponse, UserRead
+from app.auth.schemas import (
+    ActionResponse,
+    AuthCredentials,
+    ChangePasswordRequest,
+    DeleteAccountRequest,
+    TokenResponse,
+    UserRead,
+)
 from app.core.database import get_db
 from app.models.user import User
 
@@ -28,3 +35,25 @@ def login(credentials: AuthCredentials, db: DbSession) -> TokenResponse:
 @router.get("/me", response_model=UserRead)
 def read_current_user(current_user: CurrentUser) -> UserRead:
     return current_user
+
+
+@router.patch("/password", response_model=ActionResponse)
+def change_password(
+    data: ChangePasswordRequest,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> ActionResponse:
+    return ActionResponse(
+        message=service.change_password(db, current_user=current_user, data=data),
+    )
+
+
+@router.delete("/me", response_model=ActionResponse)
+def delete_account(
+    data: DeleteAccountRequest,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> ActionResponse:
+    return ActionResponse(
+        message=service.delete_account(db, current_user=current_user, data=data),
+    )
