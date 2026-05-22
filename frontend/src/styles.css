@@ -2279,6 +2279,109 @@ input[type="checkbox"].task-checkbox:checked {
   margin-bottom: 2px;
 }
 
+.admin-user-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(340px, 48vh);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.admin-user-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 12%, transparent);
+  border-radius: 9px;
+  padding: 8px 9px;
+  background: color-mix(in srgb, var(--panel-bg) 60%, transparent);
+}
+
+.admin-user-summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-user-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-user-role {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--border) 12%, transparent);
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.admin-user-role-admin {
+  border-color: color-mix(in srgb, var(--warning) 22%, transparent);
+  color: color-mix(in srgb, var(--warning) 92%, #000 8%);
+  background: color-mix(in srgb, var(--warning) 12%, var(--panel-bg));
+}
+
+.admin-user-role-user {
+  color: color-mix(in srgb, var(--text) 72%, var(--muted) 28%);
+  background: color-mix(in srgb, var(--panel-bg) 72%, transparent);
+}
+
+.admin-delete-button,
+.admin-user-delete-button {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--danger) 56%, #ffffff 44%);
+  border-radius: 7px;
+  padding: 6px 10px;
+  color: color-mix(in srgb, var(--danger) 88%, #ffffff 12%);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  box-shadow: none;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  transition:
+    background-color var(--micro-duration-fast) ease,
+    border-color var(--micro-duration-fast) ease,
+    color var(--micro-duration-fast) ease;
+}
+
+.admin-delete-button:hover:not(:disabled),
+.admin-user-delete-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 72%, #ffffff 28%);
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
+  color: color-mix(in srgb, var(--danger) 94%, #ffffff 6%);
+}
+
+.admin-delete-button:active:not(:disabled),
+.admin-user-delete-button:active:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 82%, #ffffff 18%);
+  background: color-mix(in srgb, var(--danger) 28%, transparent);
+  color: color-mix(in srgb, var(--danger) 96%, #ffffff 4%);
+}
+
+.admin-delete-button:focus-visible,
+.admin-user-delete-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--danger) 78%, #ffffff 22%);
+  outline-offset: 2px;
+}
+
+.admin-delete-button:disabled,
+.admin-user-delete-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .settings-action-button,
 .account-action-button,
 .task-form .settings-action-button,
@@ -2946,6 +3049,53 @@ input[type="checkbox"].task-checkbox:checked {
 .choice-dialog-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.65;
+}
+
+.settings-panel .admin-delete-button,
+.task-form .admin-delete-button,
+.task-form .admin-user-delete-button {
+  border: 1px solid color-mix(in srgb, var(--danger) 56%, #ffffff 44%);
+  color: color-mix(in srgb, var(--danger) 88%, #ffffff 12%);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.settings-panel .admin-delete-button:hover:not(:disabled),
+.task-form .admin-delete-button:hover:not(:disabled),
+.task-form .admin-user-delete-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 72%, #ffffff 28%);
+  color: color-mix(in srgb, var(--danger) 94%, #ffffff 6%);
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
+.settings-panel .admin-delete-button:active:not(:disabled),
+.task-form .admin-delete-button:active:not(:disabled),
+.task-form .admin-user-delete-button:active:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 82%, #ffffff 18%);
+  color: color-mix(in srgb, var(--danger) 96%, #ffffff 4%);
+  background: color-mix(in srgb, var(--danger) 28%, transparent);
+}
+
+.choice-dialog-actions button.admin-confirm-delete-button {
+  border: 1px solid color-mix(in srgb, var(--danger) 56%, #ffffff 44%);
+  color: color-mix(in srgb, var(--danger) 88%, #ffffff 12%);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.choice-dialog-actions button.admin-confirm-delete-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 72%, #ffffff 28%);
+  color: color-mix(in srgb, var(--danger) 94%, #ffffff 6%);
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
+.choice-dialog-actions button.admin-confirm-delete-button:active:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 82%, #ffffff 18%);
+  color: color-mix(in srgb, var(--danger) 96%, #ffffff 4%);
+  background: color-mix(in srgb, var(--danger) 28%, transparent);
+}
+
+.choice-dialog-actions button.admin-confirm-delete-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--danger) 78%, #ffffff 22%);
+  outline-offset: 2px;
 }
 
 .status-banner {

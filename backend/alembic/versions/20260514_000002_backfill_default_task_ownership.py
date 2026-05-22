@@ -19,13 +19,6 @@ DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000001"
 def upgrade() -> None:
     op.execute(
         f"""
-        INSERT INTO users (id, username, password_hash, created_at, updated_at)
-        VALUES ('{DEFAULT_USER_ID}', 'default', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        ON CONFLICT (id) DO NOTHING
-        """
-    )
-    op.execute(
-        f"""
         UPDATE task_lists
         SET user_id = '{DEFAULT_USER_ID}'
         WHERE user_id IS NULL

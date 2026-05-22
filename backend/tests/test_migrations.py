@@ -3,6 +3,7 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect
+from sqlalchemy import text
 
 
 def test_alembic_upgrade_head_initializes_fresh_database(tmp_path: Path) -> None:
@@ -30,4 +31,10 @@ def test_alembic_upgrade_head_initializes_fresh_database(tmp_path: Path) -> None
         column["name"] for column in inspector.get_columns("scheduled_tasks")
     }
     assert "password_hash" in user_columns
+    assert "is_admin" in user_columns
     assert "notification_offset_minutes" in scheduled_task_columns
+
+    with engine.connect() as connection:
+        user_count = connection.execute(text("SELECT COUNT(*) FROM users")).scalar_one()
+
+    assert user_count == 0

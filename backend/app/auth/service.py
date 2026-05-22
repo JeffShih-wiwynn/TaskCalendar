@@ -1,5 +1,7 @@
 from fastapi import HTTPException, status
-from sqlalchemy import delete, select
+import uuid
+
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -18,7 +20,12 @@ def register_user(db: Session, credentials: AuthCredentials) -> User:
             detail="Username already registered",
         )
 
-    user = User(username=username, password_hash=hash_password(credentials.password))
+    is_first_user = db.scalar(select(func.count()).select_from(User)) == 0
+    user = User(
+        username=username,
+        password_hash=hash_password(credentials.password),
+        is_admin=is_first_user,
+    )
     db.add(user)
     try:
         db.commit()
@@ -99,11 +106,54 @@ def delete_account(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    if user.is_admin and count_admin_users(db) <= 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete the last admin account",
+        )
+
     db.execute(delete(ScheduledTask).where(ScheduledTask.user_id == user.id))
     db.execute(delete(TaskList).where(TaskList.user_id == user.id))
     db.delete(user)
     db.commit()
     return "Account deleted"
+
+
+def list_users(db: Session) -> list[User]:
+    return list(db.scalars(select(User).order_by(User.created_at, User.username)).all())
+
+
+def get_user_or_404(db: Session, user_id: uuid.UUID) -> User:
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    return user
+
+
+def delete_user_as_admin(db: Session, *, user_id: uuid.UUID) -> str:
+    user = get_user_or_404(db, user_id)
+    if user.is_admin and count_admin_users(db) <= 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete the last admin account",
+        )
+
+    db.execute(delete(ScheduledTask).where(ScheduledTask.user_id == user.id))
+    db.execute(delete(TaskList).where(TaskList.user_id == user.id))
+    db.delete(user)
+    db.commit()
+    return "User deleted"
+
+
+def count_admin_users(db: Session) -> int:
+    return int(
+        db.scalar(select(func.count()).select_from(User).where(User.is_admin.is_(True)))
+        or 0
+    )
 
 
 def get_user_by_username(db: Session, username: str) -> User | None:

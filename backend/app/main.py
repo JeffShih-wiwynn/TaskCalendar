@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.admin.router import router as admin_router
 from app.app_settings.router import router as app_settings_router
 from app.backup.router import router as backup_router
 from app.auth.router import router as auth_router
@@ -37,6 +38,7 @@ def create_app(*, start_worker: bool = True) -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.include_router(admin_router)
     app.include_router(app_settings_router)
     app.include_router(auth_router)
     app.include_router(backup_router)

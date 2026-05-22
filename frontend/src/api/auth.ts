@@ -9,6 +9,7 @@ export type AuthCredentials = {
 export type AuthUser = {
     id: string;
     username: string;
+    is_admin: boolean;
     created_at: string;
     updated_at: string;
 };
