@@ -9,6 +9,10 @@
     reverse_proxy backend:8000
   }
 
+  handle /admin/* {
+    reverse_proxy backend:8000
+  }
+
   handle /backup/* {
     reverse_proxy backend:8000
   }

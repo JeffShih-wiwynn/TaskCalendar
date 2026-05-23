@@ -59,10 +59,20 @@ The frontend Docker build forces an empty `VITE_API_BASE_URL` and ignores `front
 
 - `/api/*`
 - `/auth/*`
+- `/admin/*`
 - `/backup/*`
 - `/health`
 
 All other paths serve the React app shell.
+
+Current backend product routes are still split across `/api/*`, `/auth/*`, `/admin/*`, and `/backup/*`. Future work should normalize product APIs under `/api/*` before adding larger integrations, for example:
+
+- `/auth/*` -> `/api/auth/*`
+- `/admin/*` -> `/api/admin/*`
+- `/backup/*` -> `/api/backup/*`
+- future external calendar APIs -> `/api/external-calendars/*` or a similar subtree
+
+`/health` may remain at the root.
 
 ## Health Checks
 

@@ -4139,6 +4139,10 @@ export function App() {
         isAdminSettingsOpen ||
         isWebhookSettingsOpen ||
         isBackupSettingsOpen;
+    const isSidebarTaskContentVisible =
+        !detailPanelMode &&
+        !isDetailPanelClosing &&
+        !isSettingsSubviewOpen;
     const openMobileTaskScreen = useCallback(
         (screen: Extract<MobileScreen, "today" | "upcoming" | "unscheduled">) => {
             setMobileScreen(screen);
@@ -5113,16 +5117,7 @@ export function App() {
                         </div>
                     )}
 
-                    {!detailPanelMode &&
-                        !isDetailPanelClosing &&
-                        !isSettingsMenuOpen &&
-                        !isWorkingHoursSettingsOpen &&
-                        !isAccountSettingsOpen &&
-                        !isChangePasswordSettingsOpen &&
-                        !isDeleteAccountSettingsOpen &&
-                        !isAdminSettingsOpen &&
-                        !isBackupSettingsOpen &&
-                        !isWebhookSettingsOpen && (
+                    {isSidebarTaskContentVisible && (
                         <section
                             className="filter-section"
                             aria-label="Task filters"
@@ -6048,20 +6043,12 @@ export function App() {
                         )}
                     </AnimatePresence>
 
-                    {!detailPanelMode &&
-                        !isDetailPanelClosing &&
-                        !isSettingsMenuOpen &&
-                        !isWorkingHoursSettingsOpen &&
-                        !isAccountSettingsOpen &&
-                        !isChangePasswordSettingsOpen &&
-                        !isDeleteAccountSettingsOpen &&
-                        !isBackupSettingsOpen &&
-                        !isWebhookSettingsOpen && (
-            <section
-                ref={taskListRef}
-                className={`task-list ${dragTargetMode === "reorder" ? "drag-target-list-active" : ""}`}
-                aria-label={`${activeView} tasks`}
-            >
+                    {isSidebarTaskContentVisible && (
+                        <section
+                            ref={taskListRef}
+                            className={`task-list ${dragTargetMode === "reorder" ? "drag-target-list-active" : ""}`}
+                            aria-label={`${activeView} tasks`}
+                        >
                             <motion.div
                                 key={taskContentKey}
                                 className="task-list-content"

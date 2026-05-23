@@ -141,6 +141,10 @@ calendar.example.com {
         reverse_proxy 127.0.0.1:8000
     }
 
+    handle /admin/* {
+        reverse_proxy 127.0.0.1:8000
+    }
+
     handle /backup/* {
         reverse_proxy 127.0.0.1:8000
     }
@@ -154,6 +158,15 @@ calendar.example.com {
 ```
 
 If you prefer a separate static host, point `root` at the deployed `frontend/dist` directory and keep the proxy rules for backend routes.
+
+The backend route layout is currently mixed across `/api/*`, `/auth/*`, `/admin/*`, and `/backup/*`. A future cleanup should normalize product APIs under `/api/*` before larger integrations are added. A reasonable target is:
+
+- `/auth/*` -> `/api/auth/*`
+- `/admin/*` -> `/api/admin/*`
+- `/backup/*` -> `/api/backup/*`
+- future external calendar APIs -> `/api/external-calendars/*` or a similar subtree
+
+`/health` may remain at the root.
 
 ## Deployment Flow
 

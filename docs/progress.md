@@ -90,6 +90,7 @@ This document summarizes what is already in the repository snapshot and where th
 - Existing databases that already match the baseline schema should be adopted with `alembic stamp head` instead of relying on startup mutation.
 - Application timezone behavior is now configurable with `APP_TIMEZONE`, defaulting to `UTC` when unset.
 - Both Ubuntu and Docker production paths are documented, but Ubuntu remains the primary manual path.
+- Backend product routes are still mixed across `/api/*`, `/auth/*`, `/admin/*`, and `/backup/*`; future cleanup should normalize the product APIs under `/api/*` before larger integrations are added.
 - All-day tasks use an explicit `all_day` marker alongside the stored calendar date.
 - Unscheduled tasks now have a dedicated `No time tasks` sidebar view.
 - `No time tasks` order is now stored on each unscheduled task as `unscheduled_order`, with `created_at` as the fallback sort when that field is null.
