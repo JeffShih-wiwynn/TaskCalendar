@@ -175,12 +175,16 @@ body {
   color: var(--text);
   background: var(--page-bg);
   min-height: 100vh;
+  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
   display: grid;
   grid-template-columns:
     var(--sidebar-width, 300px) var(--sidebar-resizer-width, 12px)
     minmax(0, 1fr);
   gap: 0;
   padding: 16px;
+  overflow: hidden;
   transition: grid-template-columns 220ms var(--micro-ease);
 }
 
@@ -207,6 +211,8 @@ body {
 
 .task-sidebar {
   min-width: 0;
+  min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -2583,7 +2589,8 @@ input[type="checkbox"].task-checkbox:checked {
   position: relative;
   isolation: isolate;
   min-width: 0;
-  min-height: calc(100vh - 32px);
+  min-height: 0;
+  height: 100%;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 14px;
@@ -2592,6 +2599,7 @@ input[type="checkbox"].task-checkbox:checked {
   border-radius: 8px;
   background: var(--panel-bg);
   box-shadow: 0 10px 28px var(--shadow);
+  overflow: hidden;
   transition:
     box-shadow var(--micro-duration-medium) var(--micro-ease),
     background-color var(--micro-duration-medium) var(--micro-ease),
@@ -3569,10 +3577,12 @@ input[type="checkbox"].task-checkbox:checked {
 
   body {
     min-width: 0;
+    overflow-y: auto;
   }
 
   .app-shell {
     min-height: 100dvh;
+    height: auto;
     display: flex;
     flex-direction: column;
     grid-template-columns: 1fr;
