@@ -1580,6 +1580,18 @@ export function App() {
         };
     }, []);
 
+    useEffect(() => {
+        const handleViewportResize = () => {
+            scheduleCalendarResize();
+        };
+
+        window.addEventListener("resize", handleViewportResize);
+
+        return () => {
+            window.removeEventListener("resize", handleViewportResize);
+        };
+    }, [scheduleCalendarResize]);
+
     useLayoutEffect(() => {
         const api = calendarRef.current?.getApi();
         if (!api) {
