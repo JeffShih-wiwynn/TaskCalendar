@@ -98,6 +98,7 @@ const mocks = vi.hoisted(() => ({
     getCurrentUser: vi.fn(async () => ({
         id: "user-1",
         username: "alice",
+        is_admin: false,
         created_at: "",
         updated_at: "",
     })),
@@ -110,6 +111,26 @@ const mocks = vi.hoisted(() => ({
     })),
     deleteAccount: vi.fn(async () => ({
         message: "Account deleted",
+    })),
+    adminUsers: [
+        {
+            id: "user-1",
+            username: "alice",
+            is_admin: true,
+            created_at: "",
+            updated_at: "",
+        },
+        {
+            id: "user-2",
+            username: "bob",
+            is_admin: false,
+            created_at: "",
+            updated_at: "",
+        },
+    ],
+    listAdminUsers: vi.fn(async () => mocks.adminUsers),
+    deleteAdminUser: vi.fn(async () => ({
+        message: "User deleted",
     })),
     fetchBackupExport: vi.fn(async () => ({
         schema_version: 1,
@@ -630,6 +651,11 @@ vi.mock("./api/auth", () => ({
     register: mocks.register,
 }));
 
+vi.mock("./api/admin", () => ({
+    deleteAdminUser: mocks.deleteAdminUser,
+    listAdminUsers: mocks.listAdminUsers,
+}));
+
 vi.mock("./api/backup", () => ({
     downloadBackupPayload: mocks.downloadBackupPayload,
     fetchBackupExport: mocks.fetchBackupExport,
@@ -847,6 +873,22 @@ describe("App", () => {
         window.localStorage.clear();
         window.localStorage.setItem("calendar-auth-token", "test-token");
         mocks.tasks = [];
+        mocks.adminUsers = [
+            {
+                id: "user-1",
+                username: "alice",
+                is_admin: true,
+                created_at: "",
+                updated_at: "",
+            },
+            {
+                id: "user-2",
+                username: "bob",
+                is_admin: false,
+                created_at: "",
+                updated_at: "",
+            },
+        ];
         mocks.taskLists = [
             {
                 id: "list-1",
@@ -974,6 +1016,9 @@ describe("App", () => {
         mocks.testSettings.mockClear();
         mocks.changePassword.mockClear();
         mocks.deleteAccount.mockClear();
+        mocks.listAdminUsers.mockClear();
+        mocks.listAdminUsers.mockResolvedValue(mocks.adminUsers);
+        mocks.deleteAdminUser.mockClear();
         mocks.login.mockClear();
         mocks.fetchBackupExport.mockClear();
         mocks.importBackup.mockClear();
@@ -987,6 +1032,7 @@ describe("App", () => {
         mocks.getCurrentUser.mockResolvedValue({
             id: "user-1",
             username: "alice",
+            is_admin: false,
             created_at: "",
             updated_at: "",
         });
@@ -3797,6 +3843,187 @@ describe("App", () => {
         ).toBeInTheDocument();
     });
 
+    it("hides admin settings for non-admin users", async () => {
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Settings" }),
+        );
+
+        expect(
+            screen.queryByRole("button", { name: "Admin" }),
+        ).not.toBeInTheDocument();
+        expect(mocks.listAdminUsers).not.toHaveBeenCalled();
+    });
+
+    it("shows admin settings for admin users and deletes a managed user after confirmation", async () => {
+        mocks.getCurrentUser.mockResolvedValue({
+            id: "user-1",
+            username: "alice",
+            is_admin: true,
+            created_at: "",
+            updated_at: "",
+        });
+        mocks.adminUsers = mocks.adminUsers.map((user) =>
+            user.id === "user-2"
+                ? { ...user, email: "test@example.com" }
+                : user,
+        );
+        mocks.listAdminUsers.mockResolvedValue(mocks.adminUsers);
+
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Settings" }),
+        );
+        fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
+
+        expect(
+            await screen.findByRole("heading", { name: "Admin" }),
+        ).toBeInTheDocument();
+        await waitFor(() => expect(mocks.listAdminUsers).toHaveBeenCalled());
+        expect(
+            screen.queryByRole("button", { name: "Task view" }),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Task category" }),
+        ).not.toBeInTheDocument();
+        const adminUsersList = screen.getByLabelText("Admin users");
+        expect(adminUsersList).toHaveClass("admin-user-list");
+        expect(within(adminUsersList).getByText("alice")).toBeInTheDocument();
+        expect(within(adminUsersList).getByText("Admin")).toBeInTheDocument();
+        expect(within(adminUsersList).getByText("bob")).toBeInTheDocument();
+        expect(within(adminUsersList).getByText("User")).toBeInTheDocument();
+
+        const bobRow = within(adminUsersList)
+            .getByText("bob")
+            .closest(".admin-user-row");
+        expect(bobRow).not.toBeNull();
+        const deleteBobButton = within(bobRow as HTMLElement).getByRole("button", {
+            name: "Delete bob",
+        });
+        expect(deleteBobButton).toHaveClass(
+            "admin-user-delete-button",
+            "admin-delete-button",
+        );
+        expect(deleteBobButton).not.toHaveClass(
+            "settings-action-button-primary",
+            "settings-action-button",
+            "settings-action-button-success",
+            "settings-action-button-confirm",
+            "compact-action-button--primary",
+        );
+
+        fireEvent.click(deleteBobButton);
+
+        expect(mocks.deleteAdminUser).not.toHaveBeenCalled();
+        expect(
+            await screen.findByRole("heading", { name: "Delete user bob?" }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByText(
+                "This will permanently delete this account and its tasks.",
+            ),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole("button", { name: "Cancel" }),
+        ).toHaveClass("secondary-button");
+        expect(
+            screen.getByRole("button", { name: "Cancel" }),
+        ).not.toHaveClass(
+            "admin-confirm-delete-button",
+            "danger-button",
+            "settings-action-button-primary",
+            "settings-action-button-success",
+            "settings-action-button-confirm",
+        );
+        expect(
+            screen.getByRole("button", { name: "Delete test@example.com" }),
+        ).toHaveClass("admin-confirm-delete-button");
+        expect(
+            screen.getByRole("button", { name: "Delete test@example.com" }),
+        ).not.toHaveClass(
+            "danger-button",
+            "settings-action-button-primary",
+            "settings-action-button",
+            "settings-action-button-success",
+            "settings-action-button-confirm",
+            "compact-action-button--primary",
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("heading", { name: "Delete user bob?" }),
+            ).not.toBeInTheDocument(),
+        );
+        expect(mocks.deleteAdminUser).not.toHaveBeenCalled();
+
+        fireEvent.click(deleteBobButton);
+        expect(
+            await screen.findByRole("heading", { name: "Delete user bob?" }),
+        ).toBeInTheDocument();
+        fireEvent.click(
+            screen.getByRole("button", { name: "Delete test@example.com" }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.deleteAdminUser).toHaveBeenCalledWith("user-2"),
+        );
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("heading", { name: "Delete user bob?" }),
+            ).not.toBeInTheDocument(),
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: "Back" }));
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("heading", { name: "Admin" }),
+            ).not.toBeInTheDocument(),
+        );
+        expect(
+            await screen.findByRole("button", { name: "Working hours" }),
+        ).toBeInTheDocument();
+    });
+
+    it("keeps the last admin delete button disabled", async () => {
+        mocks.getCurrentUser.mockResolvedValue({
+            id: "user-1",
+            username: "alice",
+            is_admin: true,
+            created_at: "",
+            updated_at: "",
+        });
+        mocks.adminUsers = [
+            {
+                id: "user-1",
+                username: "alice",
+                is_admin: true,
+                created_at: "",
+                updated_at: "",
+            },
+        ];
+
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Settings" }),
+        );
+        fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
+
+        const adminUsersList = await screen.findByLabelText("Admin users");
+        const aliceRow = within(adminUsersList)
+            .getByText("alice")
+            .closest(".admin-user-row");
+        expect(aliceRow).not.toBeNull();
+        expect(
+            within(aliceRow as HTMLElement).getByRole("button", {
+                name: "Delete alice",
+            }),
+        ).toBeDisabled();
+    });
+
     it("closes the create panel after saving a task", async () => {
         const expectedRepeatUntil = new Date(
             "2026-06-08T23:59:59.999",
@@ -5535,9 +5762,72 @@ describe("App", () => {
                     scheduled_end: null,
                     all_day: true,
                     due_at: null,
+                    recurrence_rule: null,
                 }),
             ),
         );
+    });
+
+    it("creates an all-day recurring task without requiring a start time", async () => {
+        render(<App />);
+
+        expect(
+            await screen.findByRole("button", { name: "Task view" }),
+        ).toBeInTheDocument();
+        fireEvent.click(
+            screen.getByRole("button", { name: "Open all-day create task" }),
+        );
+
+        expect(screen.getByLabelText("Start date")).toHaveValue("2026-05-08");
+        expect(screen.getByLabelText("Start time")).toHaveValue("");
+
+        fireEvent.change(screen.getByLabelText("Title"), {
+            target: { value: "All-day recurring task" },
+        });
+        await selectTaskDropdownOption("Repeat", "Daily");
+        fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+        await waitFor(() =>
+            expect(mocks.createTask).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    title: "All-day recurring task",
+                    scheduled_start: "2026-05-08T00:00:00",
+                    scheduled_end: null,
+                    all_day: true,
+                    recurrence_rule: "FREQ=DAILY;INTERVAL=1",
+                }),
+            ),
+        );
+        expect(
+            screen.queryByText("Recurring tasks require a start time"),
+        ).not.toBeInTheDocument();
+    });
+
+    it("still requires a complete start time for timed recurring task creation", async () => {
+        render(<App />);
+
+        expect(
+            await screen.findByRole("button", { name: "Task view" }),
+        ).toBeInTheDocument();
+        fireEvent.click(
+            screen.getByRole("button", { name: "Open create task" }),
+        );
+
+        fireEvent.change(screen.getByLabelText("Title"), {
+            target: { value: "Timed recurring task" },
+        });
+        fireEvent.change(screen.getByLabelText("Start time"), {
+            target: { value: "" },
+        });
+        await selectTaskDropdownOption("Repeat", "Daily");
+        fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+        expect(
+            await screen.findByText(
+                "Start and end must include both date and time",
+            ),
+        ).toBeInTheDocument();
+        expect(mocks.createTask).not.toHaveBeenCalled();
     });
 
     it("shows clear in the create form when schedule data exists", async () => {

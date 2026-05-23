@@ -40,10 +40,26 @@ def test_register_creates_user_with_password_hash(db_session: Session) -> None:
     )
 
     assert response.username == "alice"
+    assert response.is_admin is True
 
     user = db_session.query(User).filter_by(username="alice").one()
     assert user.password_hash
     assert user.password_hash != "secret-password"
+    assert user.is_admin is True
+
+
+def test_register_only_promotes_first_user_to_admin(db_session: Session) -> None:
+    first = register(
+        AuthCredentials(username="alice", password="secret-password"),
+        db_session,
+    )
+    second = register(
+        AuthCredentials(username="bob", password="secret-password"),
+        db_session,
+    )
+
+    assert first.is_admin is True
+    assert second.is_admin is False
 
 
 def test_register_rejects_duplicate_username(db_session: Session) -> None:
@@ -168,6 +184,10 @@ def test_change_password_updates_hash_and_requires_confirmation_match(
 def test_delete_account_removes_owned_tasks_and_categories(
     db_session: Session,
 ) -> None:
+    register(
+        AuthCredentials(username="admin", password="secret-password"),
+        db_session,
+    )
     credentials = AuthCredentials(username="alice", password="secret-password")
     register(credentials, db_session)
     token = login(credentials, db_session).access_token
@@ -207,3 +227,20 @@ def test_delete_account_removes_owned_tasks_and_categories(
     assert db_session.query(User).filter_by(username="alice").count() == 0
     assert task_service.list_tasks(db_session, user_id=current_user.id) == []
     assert task_list_service.list_task_lists(db_session, user_id=current_user.id) == []
+
+
+def test_delete_account_cannot_remove_last_admin(db_session: Session) -> None:
+    credentials = AuthCredentials(username="admin", password="secret-password")
+    register(credentials, db_session)
+    current_user = get_current_user(login(credentials, db_session).access_token, db_session)
+
+    with pytest.raises(HTTPException) as exc_info:
+        delete_account(
+            DeleteAccountRequest(confirmation="DELETE"),
+            db_session,
+            current_user=current_user,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Cannot delete the last admin account"
+    assert db_session.query(User).filter_by(username="admin").count() == 1

@@ -16,7 +16,13 @@ wait_for_postgres() {
 }
 
 run_migrations() {
-  compose run --rm --no-deps --entrypoint alembic backend upgrade head
+  local python_bin
+
+  python_bin="$(backend_python)"
+  (
+    cd "${ROOT_DIR}/backend"
+    env DATABASE_URL="${LOCAL_DATABASE_URL}" "${python_bin}" -m alembic upgrade head
+  )
 }
 
 reset_db() {

@@ -44,6 +44,11 @@ import {
 } from "react";
 
 import {
+    deleteAdminUser,
+    listAdminUsers,
+    type AdminUser,
+} from "./api/admin";
+import {
     clearStoredAuthToken,
     changePassword,
     deleteAccount,
@@ -108,6 +113,10 @@ type WorkingHoursSettings = {
     end: string;
 };
 const defaultSidebarWidth = 300;
+
+function getAdminUserDisplayName(user: AdminUser): string {
+    return user.email?.trim() || user.username.trim() || user.id;
+}
 const minSidebarWidth = 240;
 const minCalendarWidth = 320;
 const mobileLayoutQuery = "(max-width: 860px)";
@@ -676,6 +685,7 @@ export function App() {
         useState(false);
     const [isDeleteAccountSettingsOpen, setIsDeleteAccountSettingsOpen] =
         useState(false);
+    const [isAdminSettingsOpen, setIsAdminSettingsOpen] = useState(false);
     const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
     const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
     const [isAddingCategory, setIsAddingCategory] = useState(false);
@@ -737,6 +747,14 @@ export function App() {
         useState("");
     const [isDeletingAccount, setIsDeletingAccount] = useState(false);
     const [deleteAccountError, setDeleteAccountError] = useState<string | null>(
+        null,
+    );
+    const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+    const [isAdminUsersLoading, setIsAdminUsersLoading] = useState(false);
+    const [adminUsersError, setAdminUsersError] = useState<string | null>(null);
+    const [adminUserDeleteCandidate, setAdminUserDeleteCandidate] =
+        useState<AdminUser | null>(null);
+    const [deletingAdminUserId, setDeletingAdminUserId] = useState<string | null>(
         null,
     );
     const [backupSummary, setBackupSummary] = useState<BackupExportPayload | null>(
@@ -965,6 +983,7 @@ export function App() {
         setIsAccountSettingsOpen(false);
         setIsChangePasswordSettingsOpen(false);
         setIsDeleteAccountSettingsOpen(false);
+        setIsAdminSettingsOpen(false);
         setIsWebhookSettingsOpen(false);
         setIsBackupSettingsOpen(false);
     }, []);
@@ -979,6 +998,9 @@ export function App() {
         setDeleteAccountConfirmation("");
         setIsDeletingAccount(false);
         setDeleteAccountError(null);
+        setAdminUsersError(null);
+        setAdminUserDeleteCandidate(null);
+        setDeletingAdminUserId(null);
     }, []);
 
     const resetAppData = useCallback(() => {
@@ -995,6 +1017,10 @@ export function App() {
             discord_message_template: "",
         });
         setWebhookTestMessage(null);
+        setAdminUsers([]);
+        setAdminUsersError(null);
+        setIsAdminUsersLoading(false);
+        setDeletingAdminUserId(null);
         setBackupSummary(null);
         setBackupImportFile(null);
         setBackupImportMessage(null);
@@ -3345,6 +3371,7 @@ export function App() {
 
         if (
             formState.recurrence_frequency &&
+            !isDateOnlyTask &&
             !isCompleteDateTimeValue(formState.scheduled_start)
         ) {
             setFormError("Recurring tasks require a start time");
@@ -3487,6 +3514,7 @@ export function App() {
 
         if (
             editState.recurrence_frequency &&
+            !isDateOnlyTask &&
             !isCompleteDateTimeValue(editState.scheduled_start)
         ) {
             setFormError("Recurring tasks require a start time");
@@ -3886,6 +3914,29 @@ export function App() {
         setIsDeleteAccountSettingsOpen(true);
     };
 
+    const refreshAdminUsers = async () => {
+        setIsAdminUsersLoading(true);
+        setAdminUsersError(null);
+        try {
+            setAdminUsers(await listAdminUsers());
+        } catch (error) {
+            setAdminUsersError(
+                error instanceof Error
+                    ? error.message
+                    : "Unable to load users",
+            );
+        } finally {
+            setIsAdminUsersLoading(false);
+        }
+    };
+
+    const openAdminSettings = () => {
+        closeDetailPanel();
+        closeSettingsPanels();
+        setIsAdminSettingsOpen(true);
+        void refreshAdminUsers();
+    };
+
     const handleSavePasswordChange = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         setChangePasswordError(null);
@@ -3942,6 +3993,41 @@ export function App() {
             );
         } finally {
             setIsDeletingAccount(false);
+        }
+    };
+
+    const openDeleteAdminUserConfirm = (user: AdminUser) => {
+        setAdminUsersError(null);
+        setAdminUserDeleteCandidate(user);
+    };
+
+    const closeDeleteAdminUserConfirm = () => {
+        if (deletingAdminUserId) {
+            return;
+        }
+        setAdminUserDeleteCandidate(null);
+    };
+
+    const handleDeleteAdminUser = async () => {
+        if (!adminUserDeleteCandidate) {
+            return;
+        }
+
+        const user = adminUserDeleteCandidate;
+        setAdminUsersError(null);
+        setDeletingAdminUserId(user.id);
+        try {
+            await deleteAdminUser(user.id);
+            setAdminUserDeleteCandidate(null);
+            await refreshAdminUsers();
+        } catch (error) {
+            setAdminUsersError(
+                error instanceof Error
+                    ? error.message
+                    : "Unable to delete user",
+            );
+        } finally {
+            setDeletingAdminUserId(null);
         }
     };
 
@@ -4050,6 +4136,7 @@ export function App() {
         isAccountSettingsOpen ||
         isChangePasswordSettingsOpen ||
         isDeleteAccountSettingsOpen ||
+        isAdminSettingsOpen ||
         isWebhookSettingsOpen ||
         isBackupSettingsOpen;
     const openMobileTaskScreen = useCallback(
@@ -4120,7 +4207,15 @@ export function App() {
                     scheduleCalendarResize();
                 }
             }}
-            onClick={() => {
+            onClick={(event) => {
+                if (
+                    event.target instanceof Element &&
+                    event.target.closest(
+                        ".admin-delete-button, .admin-confirm-delete-button, .dialog-backdrop, .choice-dialog",
+                    )
+                ) {
+                    return;
+                }
                 closeSettingsPanels();
                 resetAccountForms();
                 setContextMenu(null);
@@ -4323,6 +4418,110 @@ export function App() {
                                         onClick={openAccountSettings}
                                     >
                                         Account
+                                    </button>
+                                    {currentUser?.is_admin ? (
+                                        <button
+                                            type="button"
+                                            className="settings-action-button settings-action-button-warning"
+                                            onClick={openAdminSettings}
+                                        >
+                                            Admin
+                                        </button>
+                                    ) : null}
+                                </div>
+                            </motion.section>
+                        )}
+                        {!detailPanelMode && isAdminSettingsOpen && (
+                            <motion.section
+                                key="admin-settings"
+                                className="filter-section"
+                                onClick={(event) => event.stopPropagation()}
+                                variants={panelVariants}
+                                initial="hidden"
+                                animate="visible"
+                                exit="exit"
+                                transition={panelTransition}
+                            >
+                                <div className="task-form account-settings-form">
+                                    <div className="account-settings-heading">
+                                        <h3 className="working-hours-title">
+                                            Admin
+                                        </h3>
+                                        <p className="muted">
+                                            Manage local user accounts.
+                                        </p>
+                                    </div>
+                                    {isAdminUsersLoading ? (
+                                        <p className="muted">Loading users...</p>
+                                    ) : (
+                                        <div
+                                            className="admin-user-list"
+                                            aria-label="Admin users"
+                                        >
+                                            {adminUsers.map((user) => {
+                                                const isLastVisibleAdmin =
+                                                    user.is_admin &&
+                                                    adminUsers.filter(
+                                                        (item) => item.is_admin,
+                                                    ).length <= 1;
+                                                return (
+                                                    <div
+                                                        key={user.id}
+                                                        className="admin-user-row"
+                                                    >
+                                                        <div className="admin-user-summary">
+                                                            <span className="admin-user-name">
+                                                                {user.username}
+                                                            </span>
+                                                            <span
+                                                                className={`admin-user-role ${
+                                                                    user.is_admin
+                                                                        ? "admin-user-role-admin"
+                                                                        : "admin-user-role-user"
+                                                                }`}
+                                                            >
+                                                                {user.is_admin
+                                                                    ? "Admin"
+                                                                    : "User"}
+                                                            </span>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            className="admin-user-delete-button admin-delete-button"
+                                                            aria-label={`Delete ${user.username}`}
+                                                            disabled={
+                                                                deletingAdminUserId ===
+                                                                    user.id ||
+                                                                isLastVisibleAdmin
+                                                            }
+                                                            onClick={(event) => {
+                                                                event.stopPropagation();
+                                                                openDeleteAdminUserConfirm(
+                                                                    user,
+                                                                );
+                                                            }}
+                                                        >
+                                                            {deletingAdminUserId ===
+                                                            user.id
+                                                                ? "Deleting..."
+                                                                : "Delete"}
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                    {adminUsersError && (
+                                        <p className="form-error">
+                                            {adminUsersError}
+                                        </p>
+                                    )}
+                                    <button
+                                        type="button"
+                                        className="settings-action-button settings-action-button-neutral"
+                                        onClick={openSettingsMenu}
+                                    >
+                                        Back
                                     </button>
                                 </div>
                             </motion.section>
@@ -4853,6 +5052,67 @@ export function App() {
                         )}
                     </AnimatePresence>
 
+                    {adminUserDeleteCandidate && (
+                        <div
+                            className={`dialog-backdrop ${
+                                isMobileLayout
+                                    ? "dialog-backdrop--mobile-sheet"
+                                    : ""
+                            }`}
+                            role="presentation"
+                            onClick={closeDeleteAdminUserConfirm}
+                        >
+                            <div
+                                className={`choice-dialog ${
+                                    isMobileLayout
+                                        ? "choice-dialog--mobile-sheet"
+                                        : ""
+                                }`}
+                                role="dialog"
+                                aria-modal="true"
+                                aria-labelledby="delete-admin-user-title"
+                                onClick={(event) => event.stopPropagation()}
+                            >
+                                <h2 id="delete-admin-user-title">
+                                    Delete user {adminUserDeleteCandidate.username}?
+                                </h2>
+                                <p className="muted">
+                                    This will permanently delete this account and its
+                                    tasks.
+                                </p>
+                                <div className="choice-dialog-actions">
+                                    <button
+                                        type="button"
+                                        className="secondary-button"
+                                        disabled={
+                                            deletingAdminUserId ===
+                                            adminUserDeleteCandidate.id
+                                        }
+                                        onClick={closeDeleteAdminUserConfirm}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="admin-confirm-delete-button"
+                                        disabled={
+                                            deletingAdminUserId ===
+                                            adminUserDeleteCandidate.id
+                                        }
+                                        onClick={() => void handleDeleteAdminUser()}
+                                    >
+                                        {deletingAdminUserId ===
+                                        adminUserDeleteCandidate.id
+                                            ? "Deleting..."
+                                            : `Delete ${getAdminUserDisplayName(
+                                                  adminUserDeleteCandidate,
+                                              )}`}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {!detailPanelMode &&
                         !isDetailPanelClosing &&
                         !isSettingsMenuOpen &&
@@ -4860,6 +5120,7 @@ export function App() {
                         !isAccountSettingsOpen &&
                         !isChangePasswordSettingsOpen &&
                         !isDeleteAccountSettingsOpen &&
+                        !isAdminSettingsOpen &&
                         !isBackupSettingsOpen &&
                         !isWebhookSettingsOpen && (
                         <section
