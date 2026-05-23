@@ -50,6 +50,7 @@ export default defineConfig({
         navigateFallbackDenylist: [
           /^\/api\//,
           /^\/auth\//,
+          /^\/admin\//,
           /^\/backup\//,
           /^\/health$/,
         ],

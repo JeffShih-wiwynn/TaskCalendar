@@ -143,6 +143,16 @@ Goal: support interoperability with external calendar and task systems only.
 - [ ] Keep ICS export separate from full backup/import functionality.
 - [ ] Do not implement full CalDAV sync yet.
 
+## Future API Route Cleanup
+
+Goal: normalize backend product routes under `/api/*` once the current MVP surface is stable.
+
+- [ ] Move auth routes from `/auth/*` to `/api/auth/*`.
+- [ ] Move admin routes from `/admin/*` to `/api/admin/*`.
+- [ ] Move backup routes from `/backup/*` to `/api/backup/*`.
+- [ ] Keep `/health` at the root.
+- [ ] Put future external calendar APIs under `/api/external-calendars/*` or a similar subtree.
+
 ---
 
 ## Phase 12: Native Android planning

@@ -3869,9 +3869,27 @@ describe("App", () => {
                 ? { ...user, email: "test@example.com" }
                 : user,
         );
+        mocks.tasks = [
+            makeTask({
+                id: "task-admin-hidden",
+                title: "Admin hidden task",
+                scheduled_start: null,
+                scheduled_end: null,
+                due_at: null,
+                list_id: null,
+            }),
+        ];
         mocks.listAdminUsers.mockResolvedValue(mocks.adminUsers);
 
         render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Task view" }),
+        );
+        fireEvent.click(await screen.findByRole("button", { name: "Inbox" }));
+        expect(
+            await screen.findByText("Admin hidden task"),
+        ).toBeInTheDocument();
 
         fireEvent.click(
             await screen.findByRole("button", { name: "Settings" }),
@@ -3888,6 +3906,11 @@ describe("App", () => {
         expect(
             screen.queryByRole("button", { name: "Task category" }),
         ).not.toBeInTheDocument();
+        await waitFor(() =>
+            expect(
+                screen.queryByText("Admin hidden task"),
+            ).not.toBeInTheDocument(),
+        );
         const adminUsersList = screen.getByLabelText("Admin users");
         expect(adminUsersList).toHaveClass("admin-user-list");
         expect(within(adminUsersList).getByText("alice")).toBeInTheDocument();

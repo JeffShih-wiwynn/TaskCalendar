@@ -79,6 +79,7 @@ This file summarizes the current repository state for future contributors and AI
 - No push notifications
 - Mobile calendar interactions are intentionally touch-first; desktop drag/resize remains available
 - Docker deployment is documented but not the primary production path yet
+- Backend product routes are currently split across `/api/*`, `/auth/*`, `/admin/*`, and `/backup/*`; a future cleanup should normalize the product APIs under `/api/*` before larger integrations such as external calendar support are added
 
 ## Next Recommended Priority
 
