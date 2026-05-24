@@ -8791,6 +8791,16 @@ function isSameLocalDay(left: Date, right: Date): boolean {
     );
 }
 
+function isBeforeLocalDay(left: Date, right: Date): boolean {
+    const leftDay = new Date(left.getFullYear(), left.getMonth(), left.getDate());
+    const rightDay = new Date(
+        right.getFullYear(),
+        right.getMonth(),
+        right.getDate(),
+    );
+    return leftDay < rightDay;
+}
+
 function isWithinUpcomingDays(value: Date, now: Date, days: number): boolean {
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const end = addLocalDays(start, Math.max(1, days));
@@ -8952,6 +8962,10 @@ function parsePositiveIntegerOrZero(value: string): number {
 function isOverdueTask(task: ScheduledTask, now: Date): boolean {
     if (task.completed) {
         return false;
+    }
+
+    if (task.all_day && task.scheduled_start) {
+        return isBeforeLocalDay(parseTaskDate(task.scheduled_start), now);
     }
 
     if (task.scheduled_end) {
