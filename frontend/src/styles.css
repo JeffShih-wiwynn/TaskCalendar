@@ -998,10 +998,44 @@ h2 {
   min-height: 0;
   overflow: auto;
   padding-top: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(110, 127, 144, 0.38) transparent;
   transition:
     box-shadow var(--micro-duration-medium) var(--micro-ease),
     background-color var(--micro-duration-medium) var(--micro-ease),
     transform var(--micro-duration-medium) var(--micro-ease);
+}
+
+.task-list::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.task-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.task-list::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: rgba(110, 127, 144, 0.38);
+}
+
+.task-list::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(110, 127, 144, 0.54);
+}
+
+.app-shell.dark .task-list {
+  scrollbar-color: rgba(148, 163, 184, 0.34) transparent;
+}
+
+.app-shell.dark .task-list::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.34);
+}
+
+.app-shell.dark .task-list::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(148, 163, 184, 0.5);
 }
 
 .task-list.drag-target-list-active {
@@ -1234,6 +1268,57 @@ h2 {
 .task-detail-panel {
   display: grid;
   gap: 12px;
+}
+
+@media (min-width: 861px) {
+  .task-detail-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .task-detail-panel > .task-form {
+    align-content: start;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(110, 127, 144, 0.38) transparent;
+    padding-right: 4px;
+  }
+
+  .task-detail-panel > .task-form::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .task-detail-panel > .task-form::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .task-detail-panel > .task-form::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+    background-color: rgba(110, 127, 144, 0.38);
+  }
+
+  .task-detail-panel > .task-form::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(110, 127, 144, 0.54);
+  }
+
+  .app-shell.dark .task-detail-panel > .task-form {
+    scrollbar-color: rgba(148, 163, 184, 0.34) transparent;
+  }
+
+  .app-shell.dark .task-detail-panel > .task-form::-webkit-scrollbar-thumb {
+    background-color: rgba(148, 163, 184, 0.34);
+  }
+
+  .app-shell.dark .task-detail-panel > .task-form::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(148, 163, 184, 0.5);
+  }
 }
 
 .task-detail-header {
