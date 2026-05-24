@@ -767,6 +767,12 @@ function makeTask(overrides: Record<string, unknown> = {}): Record<string, unkno
     };
 }
 
+function localDateTimeForDayOffset(dayOffset: number): string {
+    const now = new Date();
+    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayOffset);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}T00:00:00`;
+}
+
 type MockMediaQueryList = {
     matches: boolean;
     media: string;
@@ -6144,6 +6150,7 @@ describe("App", () => {
                 scheduled_start: overdueStart.toISOString(),
                 scheduled_end: overdueEnd.toISOString(),
                 due_at: null,
+                all_day: false,
                 timezone: "Asia/Taipei",
                 priority: null,
                 created_at: now.toISOString(),
@@ -6160,6 +6167,41 @@ describe("App", () => {
                 scheduled_start: null,
                 scheduled_end: null,
                 due_at: duePast.toISOString(),
+                all_day: false,
+                timezone: "Asia/Taipei",
+                priority: null,
+                created_at: now.toISOString(),
+                updated_at: now.toISOString(),
+                completed_at: null,
+            },
+            {
+                id: "task-overdue-all-day",
+                user_id: "user-1",
+                list_id: "list-1",
+                title: "Overdue all-day task",
+                notes: null,
+                completed: false,
+                scheduled_start: localDateTimeForDayOffset(-1),
+                scheduled_end: null,
+                all_day: true,
+                due_at: null,
+                timezone: "Asia/Taipei",
+                priority: null,
+                created_at: now.toISOString(),
+                updated_at: now.toISOString(),
+                completed_at: null,
+            },
+            {
+                id: "task-today-all-day",
+                user_id: "user-1",
+                list_id: "list-1",
+                title: "Today all-day task",
+                notes: null,
+                completed: false,
+                scheduled_start: localDateTimeForDayOffset(0),
+                scheduled_end: null,
+                all_day: true,
+                due_at: null,
                 timezone: "Asia/Taipei",
                 priority: null,
                 created_at: now.toISOString(),
@@ -6175,6 +6217,24 @@ describe("App", () => {
                 completed: true,
                 scheduled_start: overdueStart.toISOString(),
                 scheduled_end: overdueEnd.toISOString(),
+                due_at: null,
+                all_day: false,
+                timezone: "Asia/Taipei",
+                priority: null,
+                created_at: now.toISOString(),
+                updated_at: now.toISOString(),
+                completed_at: now.toISOString(),
+            },
+            {
+                id: "task-completed-overdue-all-day",
+                user_id: "user-1",
+                list_id: "list-1",
+                title: "Completed overdue all-day task",
+                notes: null,
+                completed: true,
+                scheduled_start: localDateTimeForDayOffset(-1),
+                scheduled_end: null,
+                all_day: true,
                 due_at: null,
                 timezone: "Asia/Taipei",
                 priority: null,
@@ -6192,7 +6252,29 @@ describe("App", () => {
         expect(screen.getByText("Overdue task")).toBeInTheDocument();
         expect(screen.getByText("Due task")).toBeInTheDocument();
         expect(
+            await screen.findByText("Overdue all-day task"),
+        ).toBeInTheDocument();
+        expect(screen.getByText("Today all-day task")).toBeInTheDocument();
+        expect(
             screen.queryByText("Completed overdue task"),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByText("Completed overdue all-day task"),
+        ).not.toBeInTheDocument();
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(
+            screen.getByRole("switch", { name: "Show completed tasks" }),
+        );
+        fireEvent.click(
+            screen.getByRole("button", { name: "Return to sidebar" }),
+        );
+
+        expect(
+            await screen.findByText("Overdue all-day task"),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByText("Completed overdue all-day task"),
         ).not.toBeInTheDocument();
     });
 
