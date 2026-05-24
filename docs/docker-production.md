@@ -53,6 +53,10 @@ Compose maps host port `8088` to container port `80`, so the app is available on
 The backend listens on `8000` only inside the Compose network, and PostgreSQL listens on `5432` only inside the Compose network.
 The deploy PostgreSQL service does not publish host port `5432`; that localhost port is reserved for the dev database when `./scripts/dev.sh` is running.
 
+## Initial Admin Account
+
+The app does not seed a default user or a default `root`/`111111` account. When the users table is empty, the first registered user becomes an admin. Admin user management is available in Settings -> Admin, and the last admin account cannot be deleted.
+
 ## Frontend
 
 The frontend Docker build forces an empty `VITE_API_BASE_URL` and ignores `frontend/.env.local`, so the browser talks to the same origin that Caddy serves. Caddy reverse proxies these paths to the backend:
@@ -63,7 +67,7 @@ The frontend Docker build forces an empty `VITE_API_BASE_URL` and ignores `front
 - `/backup/*`
 - `/health`
 
-All other paths serve the React app shell.
+All other paths serve the React app shell. `/admin/*` must stay in this proxy list; otherwise Admin API requests can fall through to the React app shell and return HTML instead of backend JSON.
 
 Current backend product routes are still split across `/api/*`, `/auth/*`, `/admin/*`, and `/backup/*`. Future work should normalize product APIs under `/api/*` before adding larger integrations, for example:
 
@@ -79,6 +83,10 @@ Current backend product routes are still split across `/api/*`, `/auth/*`, `/adm
 - PostgreSQL uses `pg_isready`.
 - The backend checks `GET /health`.
 - The web container checks the proxied `GET /health`.
+
+## Backup And Restore
+
+JSON backup/restore is available from Settings for authenticated users. Exports include the current user's task lists/categories, tasks, recurrence fields, notification fields, unscheduled ordering, completed state, and notes. Exports do not include user accounts, password hashes, JWT secrets, or other auth secrets. Restore is replace-only for the current user's calendar data; merge/import-as-copy behavior is future work. This JSON workflow is separate from future ICS/VTODO export.
 
 ## Notes
 

@@ -150,12 +150,20 @@ Status:
 ```
 
 `scripts/dev.sh` is the public dispatcher for local development commands. Its implementation is split under `scripts/dev/` into config, Compose, env, process, database, backend, and frontend helpers.
-The tooling writes logs and PID files to `.calendar-dev/` and binds the frontend and backend to `100.64.0.2:5173` and `100.64.0.2:8000`.
+The tooling writes logs and PID files to `.calendar-dev/` and prints frontend/backend URLs using `100.64.0.2:5173` and `100.64.0.2:8000` by default.
+`100.64.0.2` is the default `DEV_HOST`; override it with `DEV_HOST=<reachable-ip> ./scripts/dev.sh start` when testing from another device.
 
 Local development uses `backend/.env.local` and `frontend/.env.local` so deployment settings do not leak into development.
-It starts or verifies the local PostgreSQL service in the `calendar-dev` Compose project, publishes it on `127.0.0.1:5432` for the host backend, waits for it to accept connections, and runs Alembic migrations through the Compose backend container before backend startup.
+It starts or verifies the local PostgreSQL service in the `calendar-dev` Compose project, publishes database `calendar` on `127.0.0.1:5432` for the host backend, waits for it to accept connections, and runs Alembic migrations from the local backend checkout before backend startup.
 Docker deployment uses the `calendar` Compose project, `docker-compose.yml`, and the dedicated production Dockerfiles, but local development stays on `scripts/dev.sh`.
 The two stacks use separate PostgreSQL containers and volumes: dev uses `calendar-dev-postgres` with `calendar-dev_postgres_data`; Docker deployment uses `calendar-postgres` with `calendar_postgres_data`.
+
+The dev migration command is equivalent to:
+
+```sh
+cd backend
+DATABASE_URL=postgresql+psycopg://calendar:calendar@127.0.0.1:5432/calendar .venv/bin/python -m alembic upgrade head
+```
 
 Expected development endpoints:
 
@@ -193,6 +201,7 @@ Permanently delete the local dev database:
 ```
 
 `reset-db` and `destroy-db` only operate on the `calendar-dev` Compose project. `destroy-db` requires typing `DESTROY` before it deletes the dev Docker volume and cannot delete the deploy `calendar_postgres_data` volume.
+`reset-db` stops the local app processes, drops and recreates only the `calendar` database inside `calendar-dev-postgres`, then reruns local backend migrations. It does not remove Docker volumes.
 
 List both stacks and their SQL storage:
 

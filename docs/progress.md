@@ -61,10 +61,17 @@ This document summarizes what is already in the repository snapshot and where th
   - Backup export is available from the sidebar settings button.
   - Backup import is available from the sidebar settings button and requires explicit confirmation before replacing current user data.
   - Backup import is authenticated and scoped to the current user.
+  - Backup payloads include task lists/categories, tasks, recurrence fields, notification fields, unscheduled ordering, completed state, and notes.
+  - Backup payloads do not include user accounts, password hashes, JWT secrets, or other auth secrets.
 - [x] Step 10: Backend authentication foundation
   - Users can register with a username and hashed password.
   - Users can log in and receive a JWT access token.
-  - The backend has a reusable current-user dependency for future authenticated routes.
+  - The backend has reusable current-user and current-admin dependencies.
+  - The first registered user becomes admin when the users table is empty.
+  - No default `root`/`111111` account or other seeded default user is created.
+  - Settings -> Admin supports listing users and deleting managed users.
+  - Last-admin deletion is blocked.
+  - Users can change their password and delete their own account.
 - [x] Step 11: Production deployment docs
   - Ubuntu production deployment is documented.
   - Docker/Compose production deployment is documented.
@@ -75,7 +82,7 @@ This document summarizes what is already in the repository snapshot and where th
   - Any newer task mutation clears the previous undo state before showing the next undoable or non-undoable message.
 - [x] Step 13: Phase 1 PWA and mobile usability
   - Vite PWA support is configured with a generated manifest, app icons, standalone display mode, and static asset service worker.
-  - The service worker precaches built frontend assets only and avoids intentional caching for API, auth, backup, and health routes.
+  - The service worker precaches built frontend assets only and avoids intentional caching for API, auth, admin, backup, and health routes.
   - Narrow-screen CSS stacks the sidebar and calendar, hides the desktop sidebar resizer, improves touch target sizing, and prevents task forms from overflowing horizontally.
   - Mobile calendar interactions now use a quick action sheet for tap-to-edit while empty-space long press still creates a task.
   - Mobile calendar events are intentionally non-draggable and non-resizable; desktop drag, resize, and event click remain available.
@@ -91,7 +98,13 @@ This document summarizes what is already in the repository snapshot and where th
 - Application timezone behavior is now configurable with `APP_TIMEZONE`, defaulting to `UTC` when unset.
 - Both Ubuntu and Docker production paths are documented, but Ubuntu remains the primary manual path.
 - Backend product routes are still mixed across `/api/*`, `/auth/*`, `/admin/*`, and `/backup/*`; future cleanup should normalize the product APIs under `/api/*` before larger integrations are added.
+- Docker stable mode exposes only the Caddy/web container on host port `8088`; backend and PostgreSQL stay internal-only.
+- Caddy proxies `/api/*`, `/auth/*`, `/admin/*`, `/backup/*`, and `/health`; `/admin/*` must not fall through to the React app shell.
+- Local dev uses `DEV_HOST`, `calendar-dev-postgres`, and database `calendar` on `127.0.0.1:5432`.
+- Dev reset drops and recreates only the local dev `calendar` database, then runs migrations from the local backend checkout.
 - All-day tasks use an explicit `all_day` marker alongside the stored calendar date.
+- Today view includes incomplete overdue all-day tasks.
+- All-day recurring task validation allows date-only starts.
 - Unscheduled tasks now have a dedicated `No time tasks` sidebar view.
 - `No time tasks` order is now stored on each unscheduled task as `unscheduled_order`, with `created_at` as the fallback sort when that field is null.
 - External drag-to-calendar now refreshes through the existing backend-confirmed task reload path, the no-time drag source rebinds after sidebar and panel transitions, the calendar month-view mirror is pinned to the document body, and the calendar event renderer no longer crashes when FullCalendar renders a transient event without a matching task in memory.
@@ -100,7 +113,7 @@ This document summarizes what is already in the repository snapshot and where th
 - The task UI now has smoother shared motion timings, a clearer drag-to-calendar handle, and subtle calendar event enter animations for view and date transitions.
 - No-time and calendar drag targets now use softer drop-zone highlighting and centered helper labeling instead of hard outlines.
 - Calendar event clicks on desktop are restored after the mobile readonly drag guard, and narrow-screen calendar events stay tap-only instead of showing drag or resize affordances.
-- Backup export and import are now available from the sidebar settings menu, with import restricted to authenticated user data and guarded by an explicit confirmation step.
+- Backup export and import are now available from the sidebar settings menu, with import restricted to authenticated user data, guarded by an explicit confirmation step, and currently replace-only.
 - Undo is implemented as a floating icon-only control, stays single-step, and clears on newer task mutations so stale undo actions do not linger.
 - `due_at` still exists in the backend/data model, but the current edit form hides it.
 - The current UI is more sidebar-based than the original floating-column idea.

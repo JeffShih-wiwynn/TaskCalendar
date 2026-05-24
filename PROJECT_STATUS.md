@@ -7,7 +7,8 @@ This file summarizes the current repository state for future contributors and AI
 - Frontend: React + TypeScript + Vite + FullCalendar
 - Backend: FastAPI + SQLAlchemy + psycopg
 - Database: PostgreSQL
-- Auth: JWT authentication with backend register/login/current-user endpoints and a simple frontend login/logout flow
+- Auth: JWT authentication with backend register/login/current-user endpoints and frontend login/logout flow
+- Admin: first registered user becomes admin; Settings -> Admin supports user listing and deletion with last-admin protection
 - Migration: Alembic workflow with baseline and ownership backfill migrations; FastAPI no longer mutates schema on startup
 - Notifications: Discord webhook notifications with per-task notification fields
 - Timezone: application timezone is configurable with `APP_TIMEZONE`, defaulting to `UTC`
@@ -25,7 +26,10 @@ This file summarizes the current repository state for future contributors and AI
 - Backend authentication foundation
 - Frontend login/logout flow with local JWT storage
 - Backend task and category ownership scoping
+- Account password change and self-deletion flows
+- Admin user management without a seeded default account
 - Backend JSON export/import endpoints for the authenticated user's backup data
+- JSON backups include current-user task lists/categories, tasks, recurrence fields, notification fields, unscheduled ordering, completed state, and notes; they exclude auth secrets and user accounts
 - Whole-project sanity checks covering backend app/auth/tasks/categories/backup flow, frontend auth/navigation/backup flow, and the standard validation commands
 - Alembic migrations and migration smoke tests
 - Drag/drop and resize support for scheduled tasks
@@ -40,8 +44,14 @@ This file summarizes the current repository state for future contributors and AI
 - JWT auth foundation
 - Register and login endpoints
 - Password hashing
+- First-user-admin bootstrap with no seeded default `root`/`111111` account
+- Admin user management in Settings, including two-step delete confirmation and last-admin deletion protection
+- Account password change and account deletion
 - Migration workflow and baseline migration
 - Schema auto-mutation removed from FastAPI startup
+- Dev env loading now resolves from the repo checkout, independent of the caller's current directory
+- Dev database reset runs migrations from the local backend checkout instead of a stale Docker backend image
+- Docker Caddy proxies `/admin/*` so admin API requests do not fall through to the React app shell
 - Sidebar drag/drop stability fixes
 - No-time task drag preview and re-render fixes
 - FullCalendar event rendering crash fix for transient drag events
@@ -66,6 +76,8 @@ This file summarizes the current repository state for future contributors and AI
 - Month view now uses a clickable month title that opens a compact Month-Year picker instead of the old year text input
 - Desktop calendar events now click reliably again, and mobile calendar events intentionally stay tap-only with drag and resize disabled
 - Mobile month-view day previews now use matching flat icon buttons for `Close` and `Add`, with the `Add` button retaining the semi-transparent green accent treatment
+- All-day recurring task validation allows date-only starts while still validating timed recurrence inputs
+- Today view includes incomplete overdue all-day tasks
 
 ## Work Currently In Progress
 
@@ -74,7 +86,9 @@ This file summarizes the current repository state for future contributors and AI
 ## Known Limitations
 
 - Full JSON backup/export/import workflow exists for authenticated users
+- JSON restore is replace-only; merge/import-as-copy conflict handling is future work
 - No CalDAV sync
+- No Google Calendar or external calendar subscription sync
 - No offline sync
 - No push notifications
 - Mobile calendar interactions are intentionally touch-first; desktop drag/resize remains available

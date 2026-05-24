@@ -13,7 +13,7 @@ Self-hosted scheduled task calendar app. The MVP is web-first with a React + Typ
 
 ## Requirements
 
-- PostgreSQL running locally with database `calendar` and user `calendar`
+- Docker with Compose for the local development PostgreSQL service
 - Python 3.12+
 - Node.js 20.19+
 
@@ -31,12 +31,25 @@ Backend:  http://100.64.0.2:8000
 Health:   http://100.64.0.2:8000/health
 ```
 
+`100.64.0.2` is the default `DEV_HOST`. Override it when needed:
+
+```sh
+DEV_HOST=<reachable-ip> ./scripts/dev.sh start
+```
+
 It writes only local development env files:
 
 - `frontend/.env.local`
 - `backend/.env.local`
 
-It starts or verifies the local PostgreSQL service in the `calendar-dev` Compose project, publishes it on `127.0.0.1:5432` for the host backend, waits for it to become ready, and runs migrations before launching the backend. The dev database uses the `calendar-dev-postgres` container and `calendar-dev_postgres_data` volume, separate from Docker deployment.
+It starts or verifies the local PostgreSQL service in the `calendar-dev` Compose project, publishes database `calendar` on `127.0.0.1:5432` for the host backend, waits for it to become ready, and runs migrations before launching the backend. The dev database uses the `calendar-dev-postgres` container and `calendar-dev_postgres_data` volume, separate from Docker deployment.
+
+Dev migrations run from the local backend checkout, not from a Docker backend image:
+
+```sh
+cd backend
+DATABASE_URL=postgresql+psycopg://calendar:calendar@127.0.0.1:5432/calendar .venv/bin/python -m alembic upgrade head
+```
 
 Login requests should go to:
 
@@ -90,6 +103,18 @@ bash ./scripts/docker-deploy.sh
 
 The deploy script prints the container status with `docker compose ps` after startup.
 The web container maps host port `8088` to container port `80`, so the app is served from `http://100.64.0.2:8088` on the VPN.
+The backend listens on port `8000` only inside the Compose network, and PostgreSQL listens on port `5432` only inside the Compose network. Caddy in the `web` container proxies `/api/*`, `/auth/*`, `/admin/*`, `/backup/*`, and `/health` to the backend so those routes do not fall through to the React app shell.
+
+## Auth And Admin
+
+- Users register and log in with username/password credentials.
+- Passwords are stored as hashes; password hashes and auth secrets are not exposed through backups or admin APIs.
+- The first registered user becomes an admin when the users table is empty.
+- There is no seeded default `root`/`111111` account and no default seeded user.
+- Admin user management is available in Settings -> Admin.
+- Admins can list users and delete managed users.
+- The last admin account cannot be deleted.
+- Users can change their own password and delete their own account from Settings -> Account.
 
 ## Backup
 
@@ -97,6 +122,9 @@ The web container maps host port `8088` to container port `80`, so the app is se
 - Use the same settings menu to import a `.json` backup for the current user.
 - Importing replaces that user's existing calendar data.
 - Backups are user-scoped and do not include other users' data.
+- Backups include task lists/categories, tasks, recurrence fields, notification fields, unscheduled ordering, completed state, and notes.
+- Backups do not include user accounts, password hashes, JWT secrets, or other auth secrets.
+- JSON backup/restore is separate from future ICS/VTODO export.
 
 ## Timezone
 
@@ -137,7 +165,7 @@ npm run build
 npm run preview
 ```
 
-Open the preview URL in Chrome or another PWA-capable browser. In DevTools, check **Application -> Manifest** for the app name, theme color, standalone display mode, and icons. Check **Application -> Service Workers** to confirm the generated service worker is registered. The service worker precaches built static assets only and uses a fetch handler for the app shell; task API, auth, backup, and health requests are not intentionally cached.
+Open the preview URL in Chrome or another PWA-capable browser. In DevTools, check **Application -> Manifest** for the app name, theme color, standalone display mode, and icons. Check **Application -> Service Workers** to confirm the generated service worker is registered. The service worker precaches built static assets only and uses a fetch handler for the app shell; task API, auth, admin, backup, and health requests are not intentionally cached.
 
 To verify Add to Home Screen, use the browser install button from the address bar on desktop Chrome, or open the browser menu on Android Chrome and choose **Add to Home screen** or **Install app**.
 
@@ -165,7 +193,7 @@ Check status:
 
 `scripts/dev.sh` is the public dispatcher for local development commands. Its implementation is split under `scripts/dev/` into config, Compose, env, process, database, backend, and frontend helpers.
 The tooling stores logs and PID files in `.calendar-dev/`. It does not read or modify deployment files.
-It starts or verifies the local PostgreSQL service before backend startup and runs Alembic migrations through the Compose backend container. Dev Compose commands are forced to project `calendar-dev`; Docker deployment commands are forced to project `calendar`.
+It starts or verifies the local PostgreSQL service before backend startup and runs Alembic migrations from the local backend checkout with the dev database URL. Dev Compose commands are forced to project `calendar-dev`; Docker deployment commands are forced to project `calendar`.
 If the local database is stale or partially initialized, reset only its contents with:
 
 ```sh
@@ -179,6 +207,7 @@ To permanently delete the local PostgreSQL volume and all local database data, u
 ```
 
 `reset-db` and `destroy-db` only target the `calendar-dev` Compose project. `destroy-db` requires typing `DESTROY` before it deletes the dev Docker volume; it does not remove the deploy `calendar_postgres_data` volume.
+`reset-db` stops the local app processes, drops and recreates only the `calendar` database inside `calendar-dev-postgres`, then runs local backend Alembic migrations against `127.0.0.1:5432`. It does not remove Docker volumes.
 
 Inspect both Compose stacks:
 

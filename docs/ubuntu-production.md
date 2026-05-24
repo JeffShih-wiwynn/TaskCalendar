@@ -57,6 +57,10 @@ JWT_ACCESS_TOKEN_EXPIRE_MINUTES=1440
 
 For the Docker deployment path in this repository, there is no repo-root `.env` requirement. The Docker Compose stack reads `backend/.env` directly.
 
+## Initial Admin Account
+
+The app does not seed a default user or a default `root`/`111111` account. When the users table is empty, the first registered user becomes an admin. Admin user management is available in Settings -> Admin, and the last admin account cannot be deleted.
+
 ## Backend Setup
 
 ```sh
@@ -129,15 +133,13 @@ Example `Caddyfile`:
 
 ```caddyfile
 calendar.example.com {
-    root * /var/www/calendar
     encode zstd gzip
-    file_server
 
-    handle_path /api/* {
+    handle /api/* {
         reverse_proxy 127.0.0.1:8000
     }
 
-    handle_path /auth/* {
+    handle /auth/* {
         reverse_proxy 127.0.0.1:8000
     }
 
@@ -153,9 +155,15 @@ calendar.example.com {
         reverse_proxy 127.0.0.1:8000
     }
 
-    try_files {path} /index.html
+    handle {
+        root * /var/www/calendar
+        try_files {path} /index.html
+        file_server
+    }
 }
 ```
+
+Use `handle`, not `handle_path`, for backend route families. The backend routers include their prefixes, so Caddy must preserve `/api`, `/auth`, `/admin`, and `/backup`. In particular, `/admin/*` must reach the backend and must not fall through to the React app shell.
 
 If you prefer a separate static host, point `root` at the deployed `frontend/dist` directory and keep the proxy rules for backend routes.
 
@@ -182,3 +190,4 @@ The backend route layout is currently mixed across `/api/*`, `/auth/*`, `/admin/
 - Docker is not the primary production path yet.
 - This guide does not change the local development workflow.
 - Keep backend and frontend environment values separate from `backend/.env.local` and `frontend/.env.local`, which are for local development only.
+- JSON backup/restore is user-scoped calendar data backup. It is separate from future ICS/VTODO export and does not include password hashes, JWT secrets, or user accounts.
