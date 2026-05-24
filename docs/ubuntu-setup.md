@@ -51,48 +51,40 @@ cp .env.example .env
 
 ## Run PostgreSQL For Local Development
 
-The repository provides PostgreSQL through Docker Compose for local development:
+The supported local development flow is `scripts/dev.sh`. It starts the dev PostgreSQL service, writes local env files, runs migrations, and starts the backend and frontend:
 
 ```sh
-docker compose up -d postgres
+./scripts/dev.sh start
 ```
 
-The default database URL is:
+The dev stack uses Compose project `calendar-dev`, container `calendar-dev-postgres`, database `calendar`, user `calendar`, and host port `127.0.0.1:5432`. The dev database URL is:
 
 ```text
-postgresql+psycopg://calendar:calendar@localhost:5432/calendar
+postgresql+psycopg://calendar:calendar@127.0.0.1:5432/calendar
+```
+
+Migrations run from the local backend checkout, not from a Docker backend image:
+
+```sh
+cd backend
+DATABASE_URL=postgresql+psycopg://calendar:calendar@127.0.0.1:5432/calendar .venv/bin/python -m alembic upgrade head
 ```
 
 ## Run The Dev Servers
 
-Backend:
-
-```sh
-cd backend
-source .venv/bin/activate
-uvicorn app.main:app --reload
-```
-
-Health check:
+Default dev URLs:
 
 ```text
-http://localhost:8000/health
+Frontend: http://100.64.0.2:5173
+Backend:  http://100.64.0.2:8000
+Health:   http://100.64.0.2:8000/health
 ```
 
-Frontend:
+`100.64.0.2` is the default `DEV_HOST`. Override it with `DEV_HOST=<reachable-ip> ./scripts/dev.sh start` if needed.
 
-```sh
-cd frontend
-npm run dev
-```
+If port `5173` or `8000` is busy, stop the old process or run `./scripts/dev.sh stop` before restarting.
 
-Frontend URL:
-
-```text
-http://localhost:5173
-```
-
-If port `5173` is busy, Vite may choose the next available port. The backend allows localhost ports `5173` through `5178` by default.
+`./scripts/dev.sh reset-db` stops local app processes, drops and recreates only the `calendar` database inside `calendar-dev-postgres`, and reruns local backend migrations. `./scripts/dev.sh destroy-db` requires typing `DESTROY` and removes the local dev PostgreSQL volume.
 
 ## Build
 
@@ -113,6 +105,6 @@ For production, use [docs/ubuntu-production.md](docs/ubuntu-production.md) for t
 - `python3 -m pip` says `No module named pip`: install `python3-pip` and recreate the virtual environment after installing `python3.12-venv`.
 - `docker: command not found`: install Docker and the Compose plugin, then ensure your user can run Docker or use `sudo docker compose ...`.
 - `permission denied` when using Docker: add your user to the `docker` group, log out and back in, or run Docker commands with `sudo`.
-- Backend cannot connect to PostgreSQL: confirm `docker compose up -d postgres` is running and `DATABASE_URL` in `backend/.env` matches the compose credentials.
-- Frontend API requests fail: confirm the backend is running on `http://localhost:8000`, or set `VITE_API_BASE_URL` before starting Vite.
+- Backend cannot connect to PostgreSQL: confirm `./scripts/dev.sh start` has started `calendar-dev-postgres` and `backend/.env.local` contains the dev `DATABASE_URL`.
+- Frontend API requests fail: confirm the backend is running on `http://100.64.0.2:8000`, or override `DEV_HOST` before starting the dev stack.
 - npm cache/log write errors in sandboxed automation: use normal terminal execution or set a project-local cache with `npm install --cache .npm-cache`.

@@ -35,6 +35,11 @@ The current app is web-first:
 - Sidebar webhook settings button that expands inline inputs for the Discord webhook URL and custom notification message format.
 - Webhook settings uses `Done` to save the current draft and `Test` to send a one-off Discord test message before saving.
 - Sidebar backup menu that exports the current user's calendar data and imports `.json` backups after explicit confirmation.
+- Settings -> Admin for admin users, including user listing and two-step user deletion.
+- First registered user becomes admin when the users table is empty.
+- No default `root`/`111111` account and no seeded default user.
+- Last-admin deletion protection.
+- Account password change and account deletion.
 - Category/task-list creation, color updates, and deletion.
 - Sidebar filters for Today, Upcoming, Completed, and All tasks.
 - Custom upcoming-day window, including today.
@@ -45,8 +50,10 @@ The current app is web-first:
 - The Schedule section uses dedicated rows for `Clear schedule`, `To`, `Every`, `Until`, and `Remind`, while recurrence and reminder dropdowns use shared in-app menus with viewport-aware placement and category color dots.
 - Backend health endpoint.
 - Backend username/password registration and login endpoints with JWT access tokens.
-- Reusable backend current-user dependency for authenticated endpoints.
+- Reusable backend current-user and current-admin dependencies for authenticated endpoints.
 - Backend REST endpoints for tasks and task lists.
+- Backend admin endpoints under `/admin/*`.
+- Backend backup endpoints under `/backup/*`.
 - Alembic-managed PostgreSQL schema migrations.
 - Phase 1 PWA support with a manifest, app icons, standalone display mode, and generated static asset service worker with app-shell fetch handling.
 - Basic responsive layout for phone-width browsers, stacking the sidebar and calendar instead of forcing the desktop side-by-side layout.
@@ -63,9 +70,12 @@ The current app is web-first:
 
 ## Data Model Assumptions
 
-- `User` stores username, password hash, and creation time for the backend auth foundation.
-- Existing task and category services still preserve the default-user path until task queries are fully scoped to authenticated users.
+- `User` stores username, password hash, admin flag, and timestamps.
+- Public task, category, settings, backup, and admin routes are scoped to the authenticated user or current admin.
+- Some service functions still accept an omitted `user_id` for internal/backward-compatible direct service calls, but public API routes require authentication.
 - Backup export/import is user-scoped and restore replaces the current user's existing calendar data.
+- Backup payloads include task lists/categories, tasks, recurrence fields, notification fields, unscheduled ordering, completed state, and notes.
+- Backup payloads exclude auth secrets, password hashes, and user accounts.
 - `TaskList` represents a category/list with a name and color.
 - `ScheduledTask` is the current task entity and includes both todo state and optional calendar timing.
 - A task can be unscheduled when `scheduled_start` and `scheduled_end` are null.
@@ -78,11 +88,13 @@ The current app is web-first:
 ## Important Edge Cases
 
 - Timezone: `APP_TIMEZONE` controls application datetime behavior and defaults to `UTC`. The frontend sends datetime-local values as ISO strings; naive backend datetimes are interpreted in `APP_TIMEZONE`.
-- All-day tasks: stored with an explicit `all_day` marker and rendered as all-day calendar events while preserving the selected calendar date.
+- All-day tasks: stored with an explicit `all_day` marker and rendered as all-day calendar events while preserving the selected calendar date. Incomplete overdue all-day tasks appear in Today.
 - Timed tasks: both start and end should be present for calendar range behavior. Backend validation rejects end times that are not after start times when both are provided.
-- Recurring tasks: the backend materializes concrete task rows for each occurrence and links them with `recurrence_series_id`. Deleting a recurring task can target only the current occurrence or the current and following occurrences. Switching a whole series to no recurrence removes the sibling occurrences and keeps only the edited task.
+- Recurring tasks: the backend materializes concrete task rows for each occurrence and links them with `recurrence_series_id`. Deleting a recurring task can target only the current occurrence or the current and following occurrences. Switching a whole series to no recurrence removes the sibling occurrences and keeps only the edited task. All-day recurring tasks can use date-only starts.
 - Notifications: Discord delivery can be configured from the app UI through stored webhook settings, and message templates can include `{title}`, `{when}`, `{notes}`, and `{app_url}` placeholders.
 - Completed tasks: completed tasks remain visible and retain calendar timing; completion state should stay task-level.
+- API routes: current product routes are split across `/api/*`, `/auth/*`, `/admin/*`, and `/backup/*`; future cleanup should normalize product APIs under `/api/*` while keeping `/health` root-level.
+- JSON backup/restore is separate from future ICS/VTODO export.
 - Sync conflicts: no conflict resolution exists yet. Future sync should use stable IDs plus `updated_at` and likely a version/revision field.
 
 ## Non-Goals For Now
@@ -94,6 +106,7 @@ The current app is web-first:
 - Push notifications.
 - Full CalDAV server support.
 - Google Calendar or external calendar sync.
+- Email-based password reset until an email system exists.
 - Natural-language task parsing.
 - Multi-user sharing.
 - End-to-end encryption.

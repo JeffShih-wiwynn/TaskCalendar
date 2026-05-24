@@ -20,6 +20,13 @@ Goal: finish multi-user safety before wider deployment and export work.
 - [x] Prevent users from accessing other users' tasks and categories.
 - [x] Add cross-user backend isolation tests.
 - [x] Keep the initial auth UI simple and stable.
+- [x] Promote the first registered user to admin when the users table is empty.
+- [x] Avoid seeding a default `root`/`111111` account or any default user.
+- [x] Add Settings -> Admin user management for admins.
+- [x] Allow admins to list users and delete managed users.
+- [x] Block deletion of the last admin account.
+- [x] Add two-step admin deletion confirmation in the frontend.
+- [x] Add account password change and self-deletion flows.
 - [ ] Preserve local self-hosted usability.
 
 ---
@@ -36,8 +43,11 @@ Goal: make the project portable and easy to configure across local and server en
 - [x] Make timezone configurable.
 - [x] Add deployment instructions for Ubuntu production use.
 - [x] Add reverse proxy examples (Nginx or Caddy).
-- [ ] Keep non-Docker local development working while deployment artifacts are added.
+- [x] Keep non-Docker local development working while deployment artifacts are added.
 - [x] Document the current environment variables and defaults in one place.
+- [x] Keep dev env loading independent of the caller's current working directory.
+- [x] Run dev reset migrations from the local backend checkout instead of a stale Docker backend image.
+- [x] Proxy `/admin/*` in Docker Caddy so Admin API requests reach the backend.
 
 ---
 
@@ -50,9 +60,9 @@ Goal: harden the backend for real-world use and prevent accidental data loss.
 - [x] Stop mutating schema automatically on FastAPI startup.
 - [x] Document migration commands.
 - [x] Add migration smoke tests.
-- [ ] Add backup and restore instructions.
+- [x] Add backup and restore instructions.
 - [ ] Add basic logging guidance.
-- [ ] Add production environment notes.
+- [x] Add production environment notes.
 - [ ] Add a production readiness checklist.
 - [x] Health checks exist, but they still need to be part of the production runbook.
 
@@ -61,7 +71,7 @@ Goal: harden the backend for real-world use and prevent accidental data loss.
 Goal: support full app backup, restore, and migration of user-owned data.
 
 - [x] Add full JSON export endpoint.
-- [ ] Export all user-owned data:
+- [x] Export current user-owned calendar data:
   - tasks
   - categories
   - recurrence fields
@@ -69,11 +79,12 @@ Goal: support full app backup, restore, and migration of user-owned data.
   - unscheduled ordering
   - completed state
   - notes
+- [x] Exclude auth secrets, password hashes, and user accounts from JSON backups.
 - [x] Add JSON import endpoint.
 - [x] Validate import schema before writing to database.
 - [ ] Support conflict behaviors:
-  - replace existing data
   - merge/import as copy
+- [x] Replace existing current-user calendar data during restore.
 - [x] Add backup/import UI in settings.
 - [x] Document manual backup and restore workflow.
 - [ ] Include global app settings only if they become user-scoped later.
@@ -106,6 +117,7 @@ Status: mostly already implemented in the current repository, but keep this phas
 
 - [x] Add `Today`, `Upcoming`, `Completed`, and `All tasks` views.
 - [x] Add an `Overdue` task view/filter.
+- [x] Include incomplete overdue all-day tasks in the Today view.
 - [x] Show checkbox, title, scheduled range, and due date in each task row where available.
 - [x] Clicking a task opens an edit panel.
 - [x] Task changes PATCH the backend.
@@ -122,6 +134,7 @@ Goal: add the smallest safe recurrence and notification support that still fits 
 - [x] Add RRULE-compatible recurrence storage for daily, weekly, monthly, and yearly intervals.
 - [x] Materialize recurring occurrences as independent tasks so completion stays per occurrence.
 - [x] Keep cross-occurrence edits limited for now instead of trying to implement full override behavior.
+- [x] Validate all-day recurring tasks without requiring a time component.
 - [x] Add per-task notification fields and a Discord webhook worker.
 - [ ] Remove the one-year open-ended recurrence horizon only if/when we add a real recurrence scheduler.
 
@@ -152,6 +165,7 @@ Goal: normalize backend product routes under `/api/*` once the current MVP surfa
 - [ ] Move backup routes from `/backup/*` to `/api/backup/*`.
 - [ ] Keep `/health` at the root.
 - [ ] Put future external calendar APIs under `/api/external-calendars/*` or a similar subtree.
+- [ ] Keep current Caddy and PWA route exclusions in sync until normalization is complete.
 
 ---
 
