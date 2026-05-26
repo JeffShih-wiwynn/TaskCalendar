@@ -1283,9 +1283,10 @@ h2 {
     align-content: start;
     min-height: 0;
     overflow-y: auto;
+    scrollbar-gutter: stable;
     scrollbar-width: thin;
     scrollbar-color: rgba(110, 127, 144, 0.38) transparent;
-    padding-right: 4px;
+    padding-right: 8px;
   }
 
   .task-detail-panel > .task-form::-webkit-scrollbar {
