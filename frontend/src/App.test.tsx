@@ -5549,6 +5549,15 @@ describe("App", () => {
         ).toBeInTheDocument();
         fireEvent.click(screen.getByRole("button", { name: "Resize task" }));
 
+        await waitFor(() =>
+            expect(mocks.updateTask).toHaveBeenCalledWith(
+                "task-1",
+                expect.objectContaining({
+                    scheduled_start: "2026-05-08T09:00:00.000Z",
+                    scheduled_end: "2026-05-08T11:30:00.000Z",
+                }),
+            ),
+        );
         await screen.findByRole("button", { name: "Undo task change" });
         fireEvent.click(
             screen.getByRole("button", { name: "Undo task change" }),
