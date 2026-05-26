@@ -282,12 +282,16 @@ def update_task_series(task_db: Session, source_task: ScheduledTask, updates: di
         else None
     )
     final_source_start = updates.get("scheduled_start", source_start)
+    if final_source_start is not None:
+        final_source_start = ensure_aware_datetime(final_source_start)
     source_end = (
         ensure_aware_datetime(source_task.scheduled_end)
         if source_task.scheduled_end is not None
         else None
     )
     final_source_end = updates.get("scheduled_end", source_end)
+    if final_source_end is not None:
+        final_source_end = ensure_aware_datetime(final_source_end)
     start_delta: timedelta | None = None
 
     if (

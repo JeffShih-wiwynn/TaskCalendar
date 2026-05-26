@@ -582,6 +582,45 @@ def test_update_recurring_task_can_update_whole_series(
     assert created.recurrence_series_id == refreshed[0].recurrence_series_id
 
 
+def test_update_recurring_task_series_accepts_naive_date_only_start(
+    db_session: Session, user_id: uuid.UUID
+) -> None:
+    service.create_task(
+        db_session,
+        ScheduledTaskCreate(
+            user_id=user_id,
+            title="Recurring task",
+            scheduled_start=parse_dt("2026-05-08T09:00:00+00:00"),
+            scheduled_end=parse_dt("2026-05-08T10:00:00+00:00"),
+            recurrence_rule="FREQ=DAILY;INTERVAL=1;UNTIL=2026-05-10T09:00:00+00:00",
+        ),
+    )
+
+    tasks = service.list_tasks(db_session)
+
+    updated = service.update_task(
+        db_session,
+        tasks[1].id,
+        ScheduledTaskUpdate(
+            title="Updated recurring task",
+            scheduled_start=parse_dt("2026-05-09T00:00:00"),
+            all_day=True,
+        ),
+        update_scope="series",
+    )
+
+    refreshed = service.list_tasks(db_session)
+
+    assert updated.title == "Updated recurring task"
+    assert updated.all_day is True
+    assert [task.scheduled_start for task in refreshed] == [
+        parse_dt("2026-05-08T00:00:00").replace(tzinfo=None),
+        parse_dt("2026-05-09T00:00:00").replace(tzinfo=None),
+        parse_dt("2026-05-10T00:00:00").replace(tzinfo=None),
+    ]
+    assert all(task.all_day for task in refreshed)
+
+
 def test_update_recurring_task_rule_rebuilds_series(
     db_session: Session, user_id: uuid.UUID
 ) -> None:
