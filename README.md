@@ -37,10 +37,17 @@ Health:   http://100.64.0.2:8000/health
 DEV_HOST=<reachable-ip> ./scripts/dev.sh start
 ```
 
-It writes only local development env files:
+It writes only the frontend local env file:
 
 - `frontend/.env.local`
-- `backend/.env.local`
+
+The backend reads `backend/.env` directly, while `scripts/dev.sh` injects the local backend overrides at process start. To test a non-UTC application timezone in local development, start the stack with `APP_TIMEZONE` set in the command environment, for example:
+
+```sh
+APP_TIMEZONE=Asia/Taipei ./scripts/dev.sh start
+```
+
+That value is forwarded to the backend process and wins over the default `UTC` fallback.
 
 It starts or verifies the local PostgreSQL service in the `calendar-dev` Compose project, publishes database `calendar` on `127.0.0.1:5432` for the host backend, waits for it to become ready, and runs migrations before launching the backend. The dev database uses the `calendar-dev-postgres` container and `calendar-dev_postgres_data` volume, separate from Docker deployment.
 

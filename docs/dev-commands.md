@@ -121,6 +121,12 @@ alembic upgrade head
 
 `APP_TIMEZONE` controls application datetime behavior and defaults to `UTC` when unset. It is used for task datetime serialization, recurrence handling, notification scheduling, and backup datetime import/export. Use an IANA timezone name such as `UTC` or `Asia/Taipei`.
 
+For local development, set it when starting the stack so `scripts/dev.sh` passes the value directly to the backend process:
+
+```sh
+APP_TIMEZONE=Asia/Taipei ./scripts/dev.sh start
+```
+
 Adopt Alembic for an existing database that already matches the baseline schema:
 
 ```sh
@@ -153,7 +159,7 @@ Status:
 The tooling writes logs and PID files to `.calendar-dev/` and prints frontend/backend URLs using `100.64.0.2:5173` and `100.64.0.2:8000` by default.
 `100.64.0.2` is the default `DEV_HOST`; override it with `DEV_HOST=<reachable-ip> ./scripts/dev.sh start` when testing from another device.
 
-Local development uses `backend/.env.local` and `frontend/.env.local` so deployment settings do not leak into development.
+Local development uses `backend/.env` and `frontend/.env.local`; the dev script injects the host-specific backend overrides directly, so there is no backend `.env.local` file.
 It starts or verifies the local PostgreSQL service in the `calendar-dev` Compose project, publishes database `calendar` on `127.0.0.1:5432` for the host backend, waits for it to accept connections, and runs Alembic migrations from the local backend checkout before backend startup.
 Docker deployment uses the `calendar` Compose project, `docker-compose.yml`, and the dedicated production Dockerfiles, but local development stays on `scripts/dev.sh`.
 The two stacks use separate PostgreSQL containers and volumes: dev uses `calendar-dev-postgres` with `calendar-dev_postgres_data`; Docker deployment uses `calendar-postgres` with `calendar_postgres_data`.
