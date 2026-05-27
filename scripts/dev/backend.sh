@@ -18,6 +18,7 @@ backend_python() {
 start_backend() {
   local pid_file="${PID_DIR}/backend.pid"
   local log_file="${LOG_DIR}/backend.log"
+  local env_args
   local python_bin
 
   if is_running "${pid_file}"; then
@@ -31,17 +32,21 @@ start_backend() {
 
   (
     cd "${ROOT_DIR}/backend"
-    # shellcheck disable=SC1090
-    source "${LOCAL_BACKEND_ENV_FILE}"
+    env_args=(
+      DATABASE_URL="${DATABASE_URL:-${LOCAL_DATABASE_URL}}"
+      FRONTEND_ORIGINS="${FRONTEND_URL},http://localhost:${FRONTEND_PORT}"
+      APP_BASE_URL="${FRONTEND_URL}"
+      CORS_ORIGINS="${FRONTEND_URL},http://localhost:${FRONTEND_PORT}"
+      JWT_SECRET_KEY="local-development-secret-key"
+      JWT_SECRET="local-development-secret-key"
+      JWT_ALGORITHM="HS256"
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES="1440"
+    )
+    if [[ -n "${APP_TIMEZONE+x}" ]]; then
+      env_args+=(APP_TIMEZONE="${APP_TIMEZONE}")
+    fi
     nohup env \
-      DATABASE_URL="${DATABASE_URL}" \
-      CORS_ORIGINS="${CORS_ORIGINS}" \
-      FRONTEND_ORIGINS="${CORS_ORIGINS}" \
-      APP_BASE_URL="${APP_BASE_URL}" \
-      JWT_SECRET_KEY="local-development-secret-key" \
-      JWT_SECRET="local-development-secret-key" \
-      JWT_ALGORITHM="HS256" \
-      JWT_ACCESS_TOKEN_EXPIRE_MINUTES="1440" \
+      "${env_args[@]}" \
       "${python_bin}" -m uvicorn app.main:app --reload --host "${BACKEND_BIND_HOST}" --port "${BACKEND_PORT}" \
       > "${log_file}" 2>&1 &
     echo $! > "${pid_file}"

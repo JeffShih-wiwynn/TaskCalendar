@@ -429,6 +429,7 @@ def serialize_task_for_rebuild(task: ScheduledTask) -> dict:
 
 
 def apply_rebuilt_payload(task: ScheduledTask, payload: dict) -> None:
+    old_notify_at = get_task_notify_at(task)
     preserved_fields = {
         "id",
         "created_at",
@@ -443,10 +444,21 @@ def apply_rebuilt_payload(task: ScheduledTask, payload: dict) -> None:
             continue
         setattr(task, field, value)
 
+    reset_notification_sent_at_if_rescheduled(
+        task,
+        old_notify_at=old_notify_at,
+        schedule_update_requested=True,
+    )
+
     task.updated_at = datetime.now(UTC)
 
 
 def apply_task_updates(task: ScheduledTask, updates: dict) -> None:
+    old_notify_at = get_task_notify_at(task)
+    schedule_update_requested = any(
+        field in updates for field in ("scheduled_start", "scheduled_end", "all_day")
+    )
+
     if "completed" in updates:
         now = datetime.now(UTC)
         if updates["completed"] and not task.completed:
@@ -470,7 +482,46 @@ def apply_task_updates(task: ScheduledTask, updates: dict) -> None:
     if task.notification_offset_minutes is None:
         task.notification_offset_minutes = 0
 
+    reset_notification_sent_at_if_rescheduled(
+        task,
+        old_notify_at=old_notify_at,
+        schedule_update_requested=schedule_update_requested,
+    )
+
     task.updated_at = datetime.now(UTC)
+
+
+def reset_notification_sent_at_if_rescheduled(
+    task: ScheduledTask,
+    *,
+    old_notify_at: datetime | None,
+    schedule_update_requested: bool,
+) -> None:
+    if (
+        not schedule_update_requested
+        or task.notification_sent_at is None
+        or task.completed
+        or not task.notification_enabled
+    ):
+        return
+
+    new_notify_at = get_task_notify_at(task)
+    if old_notify_at is None or new_notify_at is None:
+        return
+    if new_notify_at == old_notify_at:
+        return
+    if new_notify_at <= now_in_app_timezone():
+        return
+
+    task.notification_sent_at = None
+
+
+def get_task_notify_at(task: ScheduledTask) -> datetime | None:
+    if task.scheduled_start is None:
+        return None
+
+    offset = max(0, task.notification_offset_minutes or 0)
+    return ensure_aware_datetime(task.scheduled_start) - timedelta(minutes=offset)
 
 
 def normalize_all_day_schedule(values: dict) -> None:

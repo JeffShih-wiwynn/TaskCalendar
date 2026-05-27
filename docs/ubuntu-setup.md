@@ -105,6 +105,6 @@ For production, use [docs/ubuntu-production.md](docs/ubuntu-production.md) for t
 - `python3 -m pip` says `No module named pip`: install `python3-pip` and recreate the virtual environment after installing `python3.12-venv`.
 - `docker: command not found`: install Docker and the Compose plugin, then ensure your user can run Docker or use `sudo docker compose ...`.
 - `permission denied` when using Docker: add your user to the `docker` group, log out and back in, or run Docker commands with `sudo`.
-- Backend cannot connect to PostgreSQL: confirm `./scripts/dev.sh start` has started `calendar-dev-postgres` and `backend/.env.local` contains the dev `DATABASE_URL`.
+- Backend cannot connect to PostgreSQL: confirm `./scripts/dev.sh start` has started `calendar-dev-postgres`; if you are launching the backend manually, make sure `backend/.env` points at `127.0.0.1:5432`.
 - Frontend API requests fail: confirm the backend is running on `http://100.64.0.2:8000`, or override `DEV_HOST` before starting the dev stack.
 - npm cache/log write errors in sandboxed automation: use normal terminal execution or set a project-local cache with `npm install --cache .npm-cache`.

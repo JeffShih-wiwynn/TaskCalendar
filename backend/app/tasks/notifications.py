@@ -222,11 +222,17 @@ def read_discord_error_detail(exc: error.HTTPError) -> str | None:
 
 
 def format_task_time_range(task: ScheduledTask) -> str:
-    start = format_local_datetime(task.scheduled_start, task.timezone)
+    timezone_name = get_effective_notification_timezone(task)
+    start = format_local_datetime(task.scheduled_start, timezone_name)
     if task.scheduled_end is None:
         return start
 
-    return f"{start} - {format_local_datetime(task.scheduled_end, task.timezone)}"
+    return f"{start} - {format_local_datetime(task.scheduled_end, timezone_name)}"
+
+
+def get_effective_notification_timezone(task: ScheduledTask) -> str:
+    user_timezone = task.user.timezone.strip() if task.user and task.user.timezone else ""
+    return user_timezone or settings.app_timezone
 
 
 def format_local_datetime(value: datetime | None, timezone_name: str) -> str:

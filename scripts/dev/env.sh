@@ -28,10 +28,4 @@ ensure_local_env_files() {
   ensure_local_env_file \
     "${LOCAL_FRONTEND_ENV_FILE}" \
     "VITE_API_BASE_URL=${BACKEND_URL}"
-
-  ensure_local_env_file \
-    "${LOCAL_BACKEND_ENV_FILE}" \
-    "CORS_ORIGINS=${FRONTEND_URL},http://localhost:${FRONTEND_PORT}
-APP_BASE_URL=${FRONTEND_URL}
-DATABASE_URL=${LOCAL_DATABASE_URL}"
 }

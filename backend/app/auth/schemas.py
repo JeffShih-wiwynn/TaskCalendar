@@ -18,6 +18,7 @@ class UserRead(BaseModel):
     id: uuid.UUID
     username: str
     is_admin: bool
+    timezone: str | None
     created_at: datetime
     updated_at: datetime
 

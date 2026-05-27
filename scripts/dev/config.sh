@@ -14,7 +14,6 @@ BACKEND_BIND_HOST="0.0.0.0"
 FRONTEND_URL="http://${DEV_HOST}:${FRONTEND_PORT}"
 BACKEND_URL="http://${DEV_HOST}:${BACKEND_PORT}"
 LOCAL_FRONTEND_ENV_FILE="${ROOT_DIR}/frontend/.env.local"
-LOCAL_BACKEND_ENV_FILE="${ROOT_DIR}/backend/.env.local"
 LOCAL_DATABASE_URL="postgresql+psycopg://calendar:calendar@127.0.0.1:5432/calendar"
 
 mkdir -p "${LOG_DIR}" "${PID_DIR}"

@@ -54,6 +54,11 @@ def user_id(db_session: Session) -> uuid.UUID:
     return user.id
 
 
+@pytest.fixture(autouse=True)
+def default_app_timezone(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "app_timezone", "UTC")
+
+
 def test_create_task(db_session: Session, user_id: uuid.UUID) -> None:
     task = service.create_task(
         db_session,
@@ -814,6 +819,12 @@ def test_update_single_recurring_occurrence_becomes_independent_task(
 def test_send_due_notifications_marks_tasks_as_sent(
     db_session: Session, user_id: uuid.UUID
 ) -> None:
+    user = db_session.get(User, user_id)
+    assert user is not None
+    user.timezone = "Asia/Taipei"
+    db_session.add(user)
+    db_session.commit()
+
     task = create_task(
         db_session,
         user_id,
@@ -852,9 +863,607 @@ def test_send_due_notifications_marks_tasks_as_sent(
     ]
 
 
+def test_rescheduled_notified_task_can_notify_again(
+    db_session: Session, user_id: uuid.UUID
+) -> None:
+    task = create_task(
+        db_session,
+        user_id,
+        title="Notify again",
+        scheduled_start=parse_dt("2026-05-08T10:00:00+00:00"),
+        scheduled_end=parse_dt("2026-05-08T11:00:00+00:00"),
+        notification_enabled=True,
+        notification_channel="discord",
+    )
+    task.notification_sent_at = parse_dt("2026-05-08T10:00:00+00:00")
+    db_session.add(task)
+    db_session.commit()
+
+    updated = service.update_task(
+        db_session,
+        task.id,
+        ScheduledTaskUpdate(
+            scheduled_start=parse_dt("2099-05-08T10:00:00+00:00"),
+            scheduled_end=parse_dt("2099-05-08T11:00:00+00:00"),
+        ),
+    )
+
+    assert updated.notification_sent_at is None
+
+    sent_messages: list[str] = []
+    sent_count = send_due_notifications(
+        db_session,
+        now=parse_dt("2099-05-08T10:00:00+00:00"),
+        webhook_url="https://discord.example/webhook",
+        app_base_url=None,
+        sender=lambda _url, message: sent_messages.append(message),
+    )
+
+    assert sent_count == 1
+    assert sent_messages == [
+        "Task due: Notify again\nWhen: 2099-05-08 10:00 - 2099-05-08 11:00"
+    ]
+
+
+def test_title_or_notes_update_keeps_notification_sent_at(
+    db_session: Session, user_id: uuid.UUID
+) -> None:
+    sent_at = parse_dt("2026-05-08T10:00:00+00:00")
+    task = create_task(
+        db_session,
+        user_id,
+        title="Already notified",
+        scheduled_start=parse_dt("2099-05-08T10:00:00+00:00"),
+        notification_enabled=True,
+        notification_channel="discord",
+    )
+    task.notification_sent_at = sent_at
+    db_session.add(task)
+    db_session.commit()
+
+    updated = service.update_task(
+        db_session,
+        task.id,
+        ScheduledTaskUpdate(title="Renamed", notes="Keep notification state"),
+    )
+
+    assert updated.notification_sent_at == sent_at.replace(tzinfo=None)
+
+
+def test_rescheduled_notified_task_to_past_does_not_notify_again(
+    db_session: Session, user_id: uuid.UUID
+) -> None:
+    sent_at = parse_dt("2026-05-08T10:00:00+00:00")
+    task = create_task(
+        db_session,
+        user_id,
+        title="Do not catch up",
+        scheduled_start=parse_dt("2026-05-08T10:00:00+00:00"),
+        notification_enabled=True,
+        notification_channel="discord",
+    )
+    task.notification_sent_at = sent_at
+    db_session.add(task)
+    db_session.commit()
+
+    updated = service.update_task(
+        db_session,
+        task.id,
+        ScheduledTaskUpdate(scheduled_start=parse_dt("2026-05-01T10:00:00+00:00")),
+    )
+
+    assert updated.notification_sent_at == sent_at.replace(tzinfo=None)
+
+    sent_messages: list[str] = []
+    sent_count = send_due_notifications(
+        db_session,
+        now=parse_dt("2026-05-01T10:00:00+00:00"),
+        webhook_url="https://discord.example/webhook",
+        app_base_url=None,
+        sender=lambda _url, message: sent_messages.append(message),
+    )
+
+    assert sent_count == 0
+    assert sent_messages == []
+
+
+def test_completed_rescheduled_notified_task_does_not_notify_again(
+    db_session: Session, user_id: uuid.UUID
+) -> None:
+    sent_at = parse_dt("2026-05-08T10:00:00+00:00")
+    task = create_task(
+        db_session,
+        user_id,
+        title="Completed notify",
+        scheduled_start=parse_dt("2026-05-08T10:00:00+00:00"),
+        notification_enabled=True,
+        notification_channel="discord",
+    )
+    task.notification_sent_at = sent_at
+    task.completed = True
+    db_session.add(task)
+    db_session.commit()
+
+    updated = service.update_task(
+        db_session,
+        task.id,
+        ScheduledTaskUpdate(scheduled_start=parse_dt("2099-05-08T10:00:00+00:00")),
+    )
+
+    assert updated.notification_sent_at == sent_at.replace(tzinfo=None)
+
+    sent_count = send_due_notifications(
+        db_session,
+        now=parse_dt("2099-05-08T10:00:00+00:00"),
+        webhook_url="https://discord.example/webhook",
+        app_base_url=None,
+        sender=lambda _url, _message: None,
+    )
+
+    assert sent_count == 0
+
+
+def test_rescheduled_notified_recurring_occurrence_can_notify_again(
+    db_session: Session, user_id: uuid.UUID
+) -> None:
+    service.create_task(
+        db_session,
+        ScheduledTaskCreate(
+            user_id=user_id,
+            title="Recurring notify",
+            scheduled_start=parse_dt("2099-05-08T10:00:00+00:00"),
+            recurrence_rule="FREQ=DAILY;INTERVAL=1;UNTIL=2099-05-09T10:00:00+00:00",
+            notification_enabled=True,
+            notification_channel="discord",
+        ),
+    )
+    tasks = service.list_tasks(db_session)
+    for task in tasks:
+        task.notification_sent_at = parse_dt("2099-05-09T10:00:00+00:00")
+    occurrence = tasks[1]
+    db_session.add_all(tasks)
+    db_session.commit()
+
+    updated = service.update_task(
+        db_session,
+        occurrence.id,
+        ScheduledTaskUpdate(scheduled_start=parse_dt("2099-05-09T12:00:00+00:00")),
+        update_scope="single",
+    )
+
+    assert updated.notification_sent_at is None
+    assert updated.recurrence_series_id is None
+
+    sent_count = send_due_notifications(
+        db_session,
+        now=parse_dt("2099-05-09T12:00:00+00:00"),
+        webhook_url="https://discord.example/webhook",
+        app_base_url=None,
+        sender=lambda _url, _message: None,
+    )
+
+    assert sent_count == 1
+
+
+def test_recurring_occurrence_title_update_keeps_notification_sent_at(
+    db_session: Session, user_id: uuid.UUID
+) -> None:
+    sent_at = parse_dt("2099-05-09T10:00:00+00:00")
+    service.create_task(
+        db_session,
+        ScheduledTaskCreate(
+            user_id=user_id,
+            title="Recurring notify",
+            scheduled_start=parse_dt("2099-05-08T10:00:00+00:00"),
+            recurrence_rule="FREQ=DAILY;INTERVAL=1;UNTIL=2099-05-09T10:00:00+00:00",
+            notification_enabled=True,
+            notification_channel="discord",
+        ),
+    )
+    occurrence = service.list_tasks(db_session)[1]
+    occurrence.notification_sent_at = sent_at
+    db_session.add(occurrence)
+    db_session.commit()
+
+    updated = service.update_task(
+        db_session,
+        occurrence.id,
+        ScheduledTaskUpdate(title="Renamed occurrence", notes="No schedule change"),
+        update_scope="single",
+    )
+
+    assert updated.notification_sent_at == sent_at.replace(tzinfo=None)
+    assert updated.recurrence_series_id is None
+
+
+def test_recurring_series_schedule_update_resets_only_changed_future_occurrences(
+    db_session: Session,
+    user_id: uuid.UUID,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        service,
+        "now_in_app_timezone",
+        lambda: parse_dt("2026-05-09T12:00:00+00:00"),
+    )
+    sent_at = parse_dt("2026-05-08T10:00:00+00:00")
+    service.create_task(
+        db_session,
+        ScheduledTaskCreate(
+            user_id=user_id,
+            title="Recurring notify",
+            scheduled_start=parse_dt("2026-05-08T09:00:00+00:00"),
+            scheduled_end=parse_dt("2026-05-08T10:00:00+00:00"),
+            recurrence_rule="FREQ=DAILY;INTERVAL=1;UNTIL=2026-05-11T09:00:00+00:00",
+            notification_enabled=True,
+            notification_channel="discord",
+        ),
+    )
+    tasks = service.list_tasks(db_session)
+    for task in tasks:
+        task.notification_sent_at = sent_at
+    tasks[3].completed = True
+    db_session.add_all(tasks)
+    db_session.commit()
+
+    service.update_task(
+        db_session,
+        tasks[1].id,
+        ScheduledTaskUpdate(
+            scheduled_start=parse_dt("2026-05-09T10:00:00+00:00"),
+            scheduled_end=parse_dt("2026-05-09T11:00:00+00:00"),
+        ),
+        update_scope="series",
+    )
+
+    refreshed = service.list_tasks(db_session)
+
+    assert [task.scheduled_start for task in refreshed] == [
+        parse_dt("2026-05-08T10:00:00+00:00").replace(tzinfo=None),
+        parse_dt("2026-05-09T10:00:00+00:00").replace(tzinfo=None),
+        parse_dt("2026-05-10T10:00:00+00:00").replace(tzinfo=None),
+        parse_dt("2026-05-11T10:00:00+00:00").replace(tzinfo=None),
+    ]
+    assert refreshed[0].notification_sent_at == sent_at.replace(tzinfo=None)
+    assert refreshed[1].notification_sent_at == sent_at.replace(tzinfo=None)
+    assert refreshed[2].notification_sent_at is None
+    assert refreshed[3].notification_sent_at == sent_at.replace(tzinfo=None)
+    assert refreshed[3].completed is True
+
+
+def test_recurring_series_title_update_keeps_notification_sent_at(
+    db_session: Session, user_id: uuid.UUID
+) -> None:
+    sent_at = parse_dt("2099-05-08T10:00:00+00:00")
+    service.create_task(
+        db_session,
+        ScheduledTaskCreate(
+            user_id=user_id,
+            title="Recurring notify",
+            scheduled_start=parse_dt("2099-05-08T10:00:00+00:00"),
+            recurrence_rule="FREQ=DAILY;INTERVAL=1;UNTIL=2099-05-09T10:00:00+00:00",
+            notification_enabled=True,
+            notification_channel="discord",
+        ),
+    )
+    tasks = service.list_tasks(db_session)
+    for task in tasks:
+        task.notification_sent_at = sent_at
+    db_session.add_all(tasks)
+    db_session.commit()
+
+    service.update_task(
+        db_session,
+        tasks[0].id,
+        ScheduledTaskUpdate(title="Renamed series"),
+        update_scope="series",
+    )
+
+    assert [
+        task.notification_sent_at
+        for task in service.list_tasks(db_session)
+    ] == [sent_at.replace(tzinfo=None), sent_at.replace(tzinfo=None)]
+
+
+def test_recurring_rule_rebuild_resets_changed_future_notification(
+    db_session: Session,
+    user_id: uuid.UUID,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        service,
+        "now_in_app_timezone",
+        lambda: parse_dt("2026-05-09T12:00:00+00:00"),
+    )
+    sent_at = parse_dt("2026-05-08T09:00:00+00:00")
+    service.create_task(
+        db_session,
+        ScheduledTaskCreate(
+            user_id=user_id,
+            title="Recurring notify rebuild",
+            scheduled_start=parse_dt("2026-05-08T09:00:00+00:00"),
+            recurrence_rule="FREQ=DAILY;INTERVAL=1;UNTIL=2026-05-10T09:00:00+00:00",
+            notification_enabled=True,
+            notification_channel="discord",
+        ),
+    )
+    tasks = service.list_tasks(db_session)
+    for task in tasks:
+        task.notification_sent_at = sent_at
+    db_session.add_all(tasks)
+    db_session.commit()
+
+    service.update_task(
+        db_session,
+        tasks[0].id,
+        ScheduledTaskUpdate(
+            recurrence_rule="FREQ=DAILY;INTERVAL=2;UNTIL=2026-05-12T09:00:00+00:00",
+        ),
+        update_scope="series",
+    )
+
+    refreshed = service.list_tasks(db_session)
+
+    assert [task.scheduled_start for task in refreshed] == [
+        parse_dt("2026-05-08T09:00:00+00:00").replace(tzinfo=None),
+        parse_dt("2026-05-10T09:00:00+00:00").replace(tzinfo=None),
+        parse_dt("2026-05-12T09:00:00+00:00").replace(tzinfo=None),
+    ]
+    assert refreshed[0].notification_sent_at == sent_at.replace(tzinfo=None)
+    assert refreshed[1].notification_sent_at is None
+    assert refreshed[2].notification_sent_at is None
+
+    sent_count = send_due_notifications(
+        db_session,
+        now=parse_dt("2026-05-10T09:00:00+00:00"),
+        webhook_url="https://discord.example/webhook",
+        app_base_url=None,
+        sender=lambda _url, _message: None,
+    )
+
+    assert sent_count == 1
+
+
+def test_recurring_rule_rebuild_keeps_unchanged_notification_sent_at(
+    db_session: Session,
+    user_id: uuid.UUID,
+) -> None:
+    sent_at = parse_dt("2026-05-08T09:00:00+00:00")
+    service.create_task(
+        db_session,
+        ScheduledTaskCreate(
+            user_id=user_id,
+            title="Recurring notify extend",
+            scheduled_start=parse_dt("2026-05-08T09:00:00+00:00"),
+            recurrence_rule="FREQ=DAILY;INTERVAL=1;UNTIL=2026-05-09T09:00:00+00:00",
+            notification_enabled=True,
+            notification_channel="discord",
+        ),
+    )
+    tasks = service.list_tasks(db_session)
+    for task in tasks:
+        task.notification_sent_at = sent_at
+    db_session.add_all(tasks)
+    db_session.commit()
+
+    service.update_task(
+        db_session,
+        tasks[0].id,
+        ScheduledTaskUpdate(
+            recurrence_rule="FREQ=DAILY;INTERVAL=1;UNTIL=2026-05-10T09:00:00+00:00",
+        ),
+        update_scope="series",
+    )
+
+    refreshed = service.list_tasks(db_session)
+
+    assert refreshed[0].notification_sent_at == sent_at.replace(tzinfo=None)
+    assert refreshed[1].notification_sent_at == sent_at.replace(tzinfo=None)
+    assert refreshed[2].notification_sent_at is None
+
+    sent_count = send_due_notifications(
+        db_session,
+        now=parse_dt("2026-05-10T09:00:00+00:00"),
+        webhook_url="https://discord.example/webhook",
+        app_base_url=None,
+        sender=lambda _url, _message: None,
+    )
+
+    assert sent_count == 1
+
+
+def test_recurring_rule_rebuild_keeps_completed_notification_sent_at(
+    db_session: Session,
+    user_id: uuid.UUID,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        service,
+        "now_in_app_timezone",
+        lambda: parse_dt("2026-05-09T12:00:00+00:00"),
+    )
+    sent_at = parse_dt("2026-05-08T09:00:00+00:00")
+    service.create_task(
+        db_session,
+        ScheduledTaskCreate(
+            user_id=user_id,
+            title="Completed recurring notify",
+            scheduled_start=parse_dt("2026-05-08T09:00:00+00:00"),
+            recurrence_rule="FREQ=DAILY;INTERVAL=1;UNTIL=2026-05-10T09:00:00+00:00",
+            notification_enabled=True,
+            notification_channel="discord",
+        ),
+    )
+    tasks = service.list_tasks(db_session)
+    for task in tasks:
+        task.notification_sent_at = sent_at
+    tasks[1].completed = True
+    db_session.add_all(tasks)
+    db_session.commit()
+
+    service.update_task(
+        db_session,
+        tasks[0].id,
+        ScheduledTaskUpdate(
+            recurrence_rule="FREQ=DAILY;INTERVAL=2;UNTIL=2026-05-12T09:00:00+00:00",
+        ),
+        update_scope="series",
+    )
+
+    refreshed = service.list_tasks(db_session)
+
+    assert refreshed[1].scheduled_start == parse_dt(
+        "2026-05-10T09:00:00+00:00"
+    ).replace(tzinfo=None)
+    assert refreshed[1].completed is True
+    assert refreshed[1].notification_sent_at == sent_at.replace(tzinfo=None)
+
+
+def test_recurring_rule_rebuild_keeps_past_or_due_now_notification_sent_at(
+    db_session: Session,
+    user_id: uuid.UUID,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        service,
+        "now_in_app_timezone",
+        lambda: parse_dt("2026-05-10T09:00:00+00:00"),
+    )
+    sent_at = parse_dt("2026-05-08T09:00:00+00:00")
+    service.create_task(
+        db_session,
+        ScheduledTaskCreate(
+            user_id=user_id,
+            title="Past recurring notify",
+            scheduled_start=parse_dt("2026-05-08T09:00:00+00:00"),
+            recurrence_rule="FREQ=WEEKLY;INTERVAL=1;UNTIL=2026-05-22T09:00:00+00:00",
+            notification_enabled=True,
+            notification_channel="discord",
+        ),
+    )
+    tasks = service.list_tasks(db_session)
+    for task in tasks:
+        task.notification_sent_at = sent_at
+    db_session.add_all(tasks)
+    db_session.commit()
+
+    service.update_task(
+        db_session,
+        tasks[0].id,
+        ScheduledTaskUpdate(
+            recurrence_rule="FREQ=DAILY;INTERVAL=1;UNTIL=2026-05-10T09:00:00+00:00",
+        ),
+        update_scope="series",
+    )
+
+    refreshed = service.list_tasks(db_session)
+
+    assert [task.scheduled_start for task in refreshed] == [
+        parse_dt("2026-05-08T09:00:00+00:00").replace(tzinfo=None),
+        parse_dt("2026-05-09T09:00:00+00:00").replace(tzinfo=None),
+        parse_dt("2026-05-10T09:00:00+00:00").replace(tzinfo=None),
+    ]
+    assert [
+        task.notification_sent_at for task in refreshed
+    ] == [
+        sent_at.replace(tzinfo=None),
+        sent_at.replace(tzinfo=None),
+        sent_at.replace(tzinfo=None),
+    ]
+
+    sent_count = send_due_notifications(
+        db_session,
+        now=parse_dt("2026-05-10T09:00:00+00:00"),
+        webhook_url="https://discord.example/webhook",
+        app_base_url=None,
+        sender=lambda _url, _message: None,
+    )
+
+    assert sent_count == 0
+
+
+def test_send_due_notifications_uses_owner_timezone_for_discord_message(
+    db_session: Session, user_id: uuid.UUID
+) -> None:
+    user = db_session.get(User, user_id)
+    assert user is not None
+    user.timezone = "Asia/Taipei"
+    db_session.add(user)
+    db_session.commit()
+
+    task = create_task(
+        db_session,
+        user_id,
+        title="Taipei notify",
+        scheduled_start=parse_dt("2026-05-27T06:00:00+00:00"),
+        scheduled_end=parse_dt("2026-05-27T07:00:00+00:00"),
+        notification_enabled=True,
+        notification_channel="discord",
+        timezone="UTC",
+    )
+
+    sent_messages: list[str] = []
+
+    sent_count = send_due_notifications(
+        db_session,
+        now=parse_dt("2026-05-27T06:00:00+00:00"),
+        webhook_url="https://discord.example/webhook",
+        app_base_url=None,
+        sender=lambda _url, message: sent_messages.append(message),
+    )
+
+    assert sent_count == 1
+    assert task.notification_sent_at is not None
+    assert sent_messages == [
+        "Task due: Taipei notify\nWhen: 2026-05-27 14:00 - 2026-05-27 15:00"
+    ]
+
+
+def test_send_due_notifications_uses_owner_europe_timezone_for_discord_message(
+    db_session: Session, user_id: uuid.UUID
+) -> None:
+    user = db_session.get(User, user_id)
+    assert user is not None
+    user.timezone = "Europe/Berlin"
+    db_session.add(user)
+    db_session.commit()
+
+    create_task(
+        db_session,
+        user_id,
+        title="Berlin notify",
+        scheduled_start=parse_dt("2026-05-27T12:00:00+00:00"),
+        scheduled_end=parse_dt("2026-05-27T13:00:00+00:00"),
+        notification_enabled=True,
+        notification_channel="discord",
+        timezone="UTC",
+    )
+
+    sent_messages: list[str] = []
+
+    sent_count = send_due_notifications(
+        db_session,
+        now=parse_dt("2026-05-27T12:00:00+00:00"),
+        webhook_url="https://discord.example/webhook",
+        app_base_url=None,
+        sender=lambda _url, message: sent_messages.append(message),
+    )
+
+    assert sent_count == 1
+    assert sent_messages == [
+        "Task due: Berlin notify\nWhen: 2026-05-27 14:00 - 2026-05-27 15:00"
+    ]
+
+
 def test_send_due_notifications_uses_custom_message_template(
     db_session: Session, user_id: uuid.UUID
 ) -> None:
+    user = db_session.get(User, user_id)
+    assert user is not None
+    user.timezone = "Asia/Taipei"
+    db_session.add(user)
+    db_session.commit()
+
     task = create_task(
         db_session,
         user_id,
@@ -924,6 +1533,80 @@ def test_send_due_notifications_uses_configured_timezone_for_naive_datetimes(
     assert sent_count == 1
     assert sent_messages == ["Task due: Naive notify\nWhen: 2026-05-08 10:00"]
     assert service.get_task_or_404(db_session, task.id).notification_sent_at is not None
+
+
+def test_send_due_notifications_falls_back_to_app_timezone_without_user_timezone(
+    db_session: Session,
+    user_id: uuid.UUID,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "app_timezone", "Europe/Berlin")
+    user = db_session.get(User, user_id)
+    assert user is not None
+    user.timezone = None
+    db_session.add(user)
+    db_session.commit()
+
+    create_task(
+        db_session,
+        user_id,
+        title="Fallback notify",
+        scheduled_start=parse_dt("2026-05-27T14:00:00"),
+        scheduled_end=parse_dt("2026-05-27T15:00:00"),
+        notification_enabled=True,
+        notification_channel="discord",
+        timezone="UTC",
+    )
+
+    sent_messages: list[str] = []
+
+    sent_count = send_due_notifications(
+        db_session,
+        now=parse_dt("2026-05-27T14:00:00"),
+        webhook_url="https://discord.example/webhook",
+        app_base_url=None,
+        sender=lambda _url, message: sent_messages.append(message),
+    )
+
+    assert sent_count == 1
+    assert sent_messages == [
+        "Task due: Fallback notify\nWhen: 2026-05-27 14:00 - 2026-05-27 15:00"
+    ]
+
+
+def test_send_due_notifications_preserves_all_day_notification_format(
+    db_session: Session, user_id: uuid.UUID, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "app_timezone", "Asia/Taipei")
+    user = db_session.get(User, user_id)
+    assert user is not None
+    user.timezone = "Asia/Taipei"
+    db_session.add(user)
+    db_session.commit()
+
+    create_task(
+        db_session,
+        user_id,
+        title="All-day notify",
+        scheduled_start=parse_dt("2026-05-27T00:00:00"),
+        all_day=True,
+        notification_enabled=True,
+        notification_channel="discord",
+        timezone="Asia/Taipei",
+    )
+
+    sent_messages: list[str] = []
+
+    sent_count = send_due_notifications(
+        db_session,
+        now=parse_dt("2026-05-27T00:00:00"),
+        webhook_url="https://discord.example/webhook",
+        app_base_url=None,
+        sender=lambda _url, message: sent_messages.append(message),
+    )
+
+    assert sent_count == 1
+    assert sent_messages == ["Task due: All-day notify\nWhen: 2026-05-27 00:00"]
 
 
 def test_apply_message_template_preserves_unknown_placeholders() -> None:

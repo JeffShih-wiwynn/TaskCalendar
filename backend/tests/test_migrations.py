@@ -32,6 +32,7 @@ def test_alembic_upgrade_head_initializes_fresh_database(tmp_path: Path) -> None
     }
     assert "password_hash" in user_columns
     assert "is_admin" in user_columns
+    assert "timezone" in user_columns
     assert "notification_offset_minutes" in scheduled_task_columns
 
     with engine.connect() as connection:
