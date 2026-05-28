@@ -1,5 +1,5 @@
 import { AuthError, getAuthHeaders } from "./auth";
-import { API_ROUTES, parseJsonResponse, resolveApiUrl } from "./base";
+import { API_ROUTES, requestJson } from "./base";
 
 export type AppSettings = {
     id: number;
@@ -46,24 +46,20 @@ export async function testSettings(
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(resolveApiUrl(path), {
-        ...init,
-        headers: {
-            "Content-Type": "application/json",
-            ...getAuthHeaders(),
-            ...init?.headers,
+    return requestJson<T>(
+        path,
+        {
+            ...init,
+            headers: {
+                ...getAuthHeaders(),
+                ...init?.headers,
+            },
         },
-    });
-
-    if (response.status === 401) {
-        throw new AuthError(await readErrorMessage(response));
-    }
-
-    if (!response.ok) {
-        throw new Error(await readErrorMessage(response));
-    }
-
-    return parseJsonResponse<T>(response);
+        {
+            createUnauthorizedError: (message) => new AuthError(message),
+            readErrorMessage,
+        },
+    );
 }
 
 async function readErrorMessage(response: Response): Promise<string> {

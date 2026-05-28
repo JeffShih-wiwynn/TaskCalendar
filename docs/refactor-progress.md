@@ -24,6 +24,9 @@ Persistent status for continuing [refactor-backlog.md](./refactor-backlog.md) sa
 - Consolidate settings subview state.
   - Commit: this commit.
   - Notes: replaced separate settings panel booleans with one mutually exclusive `settingsView` state.
+- Finish shared frontend API request helper extraction.
+  - Commit: this commit.
+  - Notes: added `requestJson` and routed API clients through the shared request helper while preserving per-client error behavior.
 
 ## Current
 
@@ -31,11 +34,10 @@ Persistent status for continuing [refactor-backlog.md](./refactor-backlog.md) sa
 
 ## Next Recommended
 
-- Finish shared frontend API request helper extraction.
+- Extract task form sections after manual stable testing.
 
 ## Pending
 
-- Finish shared frontend API request helper extraction.
 - Extract task form sections after manual stable testing.
 - Separate backend auth/admin service concerns after manual stable testing.
 

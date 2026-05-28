@@ -1,5 +1,5 @@
 import { AuthError, getAuthHeaders } from './auth';
-import { API_ROUTES, parseJsonResponse, resolveApiUrl } from './base';
+import { API_ROUTES, requestJson } from './base';
 
 export type TaskList = {
   id: string;
@@ -36,26 +36,14 @@ export async function deleteTaskList(taskListId: string): Promise<void> {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(resolveApiUrl(path), {
+  return requestJson<T>(path, {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
       ...getAuthHeaders(),
       ...init?.headers,
     },
+  }, {
+    createUnauthorizedError: (message) => new AuthError(message),
+    readErrorMessage: async (response) => `Request failed with ${response.status}`,
   });
-
-  if (response.status === 401) {
-    throw new AuthError(`Request failed with ${response.status}`);
-  }
-
-  if (!response.ok) {
-    throw new Error(`Request failed with ${response.status}`);
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return parseJsonResponse<T>(response);
 }

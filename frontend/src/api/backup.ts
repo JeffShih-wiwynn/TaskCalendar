@@ -1,5 +1,5 @@
 import { getAuthHeaders } from "./auth";
-import { API_ROUTES, parseJsonResponse, resolveApiUrl } from "./base";
+import { API_ROUTES, requestJson } from "./base";
 
 export type BackupExportPayload = {
     schema_version: number;
@@ -19,38 +19,29 @@ export async function exportBackup(): Promise<void> {
 }
 
 export async function fetchBackupExport(): Promise<BackupExportPayload> {
-    const response = await fetch(resolveApiUrl(API_ROUTES.backup.export), {
+    return requestJson<BackupExportPayload>(API_ROUTES.backup.export, {
         method: "GET",
         headers: {
-            "Content-Type": "application/json",
             ...getAuthHeaders(),
         },
+    }, {
+        readErrorMessage: async (response) =>
+            `Request failed with ${response.status}`,
     });
-
-    if (!response.ok) {
-        throw new Error(`Request failed with ${response.status}`);
-    }
-
-    return parseJsonResponse<BackupExportPayload>(response);
 }
 
 export async function importBackup(
     payload: BackupExportPayload,
 ): Promise<BackupImportResult> {
-    const response = await fetch(resolveApiUrl(API_ROUTES.backup.import), {
+    return requestJson<BackupImportResult>(API_ROUTES.backup.import, {
         method: "POST",
         headers: {
-            "Content-Type": "application/json",
             ...getAuthHeaders(),
         },
         body: JSON.stringify(payload),
+    }, {
+        readErrorMessage,
     });
-
-    if (!response.ok) {
-        throw new Error(await readErrorMessage(response));
-    }
-
-    return parseJsonResponse<BackupImportResult>(response);
 }
 
 export function downloadBackupPayload(payload: BackupExportPayload): void {

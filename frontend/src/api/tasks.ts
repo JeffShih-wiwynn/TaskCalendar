@@ -1,7 +1,7 @@
 import type { EventInput } from '@fullcalendar/core';
 
 import { AuthError, getAuthHeaders } from './auth';
-import { API_ROUTES, parseJsonResponse, resolveApiUrl } from './base';
+import { API_ROUTES, requestJson } from './base';
 
 export type ScheduledTask = {
   id: string;
@@ -173,29 +173,16 @@ export function mapTaskToEvent(task: ScheduledTask): EventInput {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(resolveApiUrl(path), {
+  return requestJson<T>(path, {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
       ...getAuthHeaders(),
       ...init?.headers,
     },
+  }, {
+    createUnauthorizedError: (message) => new AuthError(message),
+    readErrorMessage,
   });
-
-  if (response.status === 401) {
-    throw new AuthError(await readErrorMessage(response));
-  }
-
-  if (!response.ok) {
-    const message = await readErrorMessage(response);
-    throw new Error(message);
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return parseJsonResponse<T>(response);
 }
 
 async function readErrorMessage(response: Response): Promise<string> {

@@ -43,6 +43,45 @@ export function resolveApiUrl(path: string): string {
     return `${API_BASE_URL}${path}`;
 }
 
+type RequestJsonOptions = {
+    readErrorMessage?: (response: Response) => Promise<string>;
+    createUnauthorizedError?: (message: string) => Error;
+    includeContentType?: boolean;
+};
+
+export async function requestJson<T>(
+    path: string,
+    init: RequestInit = {},
+    options: RequestJsonOptions = {},
+): Promise<T> {
+    const {
+        readErrorMessage = readDefaultErrorMessage,
+        createUnauthorizedError,
+        includeContentType = true,
+    } = options;
+    const response = await fetch(resolveApiUrl(path), {
+        ...init,
+        headers: {
+            ...(includeContentType ? { "Content-Type": "application/json" } : {}),
+            ...init.headers,
+        },
+    });
+
+    if (response.status === 401 && createUnauthorizedError) {
+        throw createUnauthorizedError(await readErrorMessage(response));
+    }
+
+    if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+    }
+
+    if (response.status === 204) {
+        return undefined as T;
+    }
+
+    return parseJsonResponse<T>(response);
+}
+
 export async function parseJsonResponse<T>(response: Response): Promise<T> {
     const contentType = response.headers.get("content-type") ?? "";
 
@@ -53,4 +92,19 @@ export async function parseJsonResponse<T>(response: Response): Promise<T> {
     }
 
     return response.json() as Promise<T>;
+}
+
+export async function readDefaultErrorMessage(
+    response: Response,
+): Promise<string> {
+    try {
+        const body = (await response.json()) as { detail?: unknown };
+        if (typeof body.detail === "string") {
+            return body.detail;
+        }
+    } catch {
+        // Fall through to a generic HTTP message.
+    }
+
+    return `Request failed with ${response.status}`;
 }
