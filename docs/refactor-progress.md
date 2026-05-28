@@ -18,6 +18,9 @@ Persistent status for continuing [refactor-backlog.md](./refactor-backlog.md) sa
   - Notes: added `API_ROUTES` and replaced repeated endpoint strings in API clients. Shared request helper extraction is still pending.
 - Clean up broad CSS selectors.
   - Notes: replaced broad `.task-form button` styling with explicit task-form button class selectors.
+- Extract `AdminSettingsPanel`.
+  - Commit: this commit.
+  - Notes: moved the inline admin settings panel render branch into a focused component.
 
 ## Current
 
@@ -25,11 +28,10 @@ Persistent status for continuing [refactor-backlog.md](./refactor-backlog.md) sa
 
 ## Next Recommended
 
-- Extract `AdminSettingsPanel`.
+- Consolidate settings subview state.
 
 ## Pending
 
-- Extract `AdminSettingsPanel`.
 - Consolidate settings subview state.
 - Finish shared frontend API request helper extraction.
 - Extract task form sections after manual stable testing.
