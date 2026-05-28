@@ -10,3 +10,15 @@ export function resolveApiUrl(path: string): string {
 
     return `${API_BASE_URL}${path}`;
 }
+
+export async function parseJsonResponse<T>(response: Response): Promise<T> {
+    const contentType = response.headers.get("content-type") ?? "";
+
+    if (!contentType.toLowerCase().includes("application/json")) {
+        throw new Error(
+            `Expected JSON response from backend, received ${contentType || "unknown content type"}`,
+        );
+    }
+
+    return response.json() as Promise<T>;
+}

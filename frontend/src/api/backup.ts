@@ -1,5 +1,5 @@
 import { getAuthHeaders } from "./auth";
-import { resolveApiUrl } from "./base";
+import { parseJsonResponse, resolveApiUrl } from "./base";
 
 export type BackupExportPayload = {
     schema_version: number;
@@ -31,7 +31,7 @@ export async function fetchBackupExport(): Promise<BackupExportPayload> {
         throw new Error(`Request failed with ${response.status}`);
     }
 
-    return response.json() as Promise<BackupExportPayload>;
+    return parseJsonResponse<BackupExportPayload>(response);
 }
 
 export async function importBackup(
@@ -50,7 +50,7 @@ export async function importBackup(
         throw new Error(await readErrorMessage(response));
     }
 
-    return response.json() as Promise<BackupImportResult>;
+    return parseJsonResponse<BackupImportResult>(response);
 }
 
 export function downloadBackupPayload(payload: BackupExportPayload): void {

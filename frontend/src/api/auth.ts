@@ -1,4 +1,4 @@
-import { resolveApiUrl } from "./base";
+import { parseJsonResponse, resolveApiUrl } from "./base";
 const AUTH_TOKEN_STORAGE_KEY = "calendar-auth-token";
 
 export type AuthCredentials = {
@@ -120,7 +120,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         throw new Error(await readErrorMessage(response));
     }
 
-    return response.json() as Promise<T>;
+    return parseJsonResponse<T>(response);
 }
 
 async function readErrorMessage(response: Response): Promise<string> {

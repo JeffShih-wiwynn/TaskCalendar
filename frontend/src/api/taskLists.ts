@@ -1,5 +1,5 @@
 import { AuthError, getAuthHeaders } from './auth';
-import { resolveApiUrl } from './base';
+import { parseJsonResponse, resolveApiUrl } from './base';
 
 export type TaskList = {
   id: string;
@@ -57,5 +57,5 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     return undefined as T;
   }
 
-  return response.json() as Promise<T>;
+  return parseJsonResponse<T>(response);
 }

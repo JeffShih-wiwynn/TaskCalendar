@@ -1,4 +1,4 @@
-import { resolveApiUrl } from "./base";
+import { parseJsonResponse, resolveApiUrl } from "./base";
 
 export type HealthResponse = {
   status: string;
@@ -13,5 +13,5 @@ export async function getHealth(): Promise<HealthResponse> {
     throw new Error(`Health check failed with ${response.status}`);
   }
 
-  return response.json() as Promise<HealthResponse>;
+  return parseJsonResponse<HealthResponse>(response);
 }

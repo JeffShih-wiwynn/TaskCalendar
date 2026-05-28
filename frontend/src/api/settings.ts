@@ -1,5 +1,5 @@
 import { AuthError, getAuthHeaders } from "./auth";
-import { resolveApiUrl } from "./base";
+import { parseJsonResponse, resolveApiUrl } from "./base";
 
 export type AppSettings = {
     id: number;
@@ -63,7 +63,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         throw new Error(await readErrorMessage(response));
     }
 
-    return response.json() as Promise<T>;
+    return parseJsonResponse<T>(response);
 }
 
 async function readErrorMessage(response: Response): Promise<string> {
