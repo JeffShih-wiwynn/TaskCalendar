@@ -15,21 +15,29 @@ Persistent status for continuing [refactor-backlog.md](./refactor-backlog.md) sa
   - Notes: added shared JSON response parsing with clearer non-JSON errors.
 - Centralize frontend API route constants.
   - Commit: `9107679 Centralize frontend API route constants`
-  - Notes: added `API_ROUTES` and replaced repeated endpoint strings in API clients.
+  - Notes: added `API_ROUTES` and replaced repeated endpoint strings in API clients. Shared request helper extraction is still pending.
 - Clean up broad CSS selectors.
   - Notes: replaced broad `.task-form button` styling with explicit task-form button class selectors.
 
 ## Current
 
-- No active refactor in progress. Next recommended Pending item: extract `AdminSettingsPanel`.
+- None
+
+## Next Recommended
+
+- Extract `AdminSettingsPanel`.
 
 ## Pending
 
 - Extract `AdminSettingsPanel`.
 - Consolidate settings subview state.
-- Finish shared frontend API request helper work.
+- Finish shared frontend API request helper extraction.
 - Extract task form sections after manual stable testing.
 - Separate backend auth/admin service concerns after manual stable testing.
+
+## Long-term Direction
+
+- Reduce `frontend/src/App.tsx` incrementally through small, behavior-preserving extractions. Do not rewrite it wholesale.
 
 ## Skipped
 
