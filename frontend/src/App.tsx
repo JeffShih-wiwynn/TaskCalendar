@@ -227,6 +227,15 @@ type TaskUndoState = {
 };
 
 type DetailPanelMode = "create" | "edit" | null;
+type SettingsView =
+    | "menu"
+    | "working-hours"
+    | "account"
+    | "change-password"
+    | "delete-account"
+    | "admin"
+    | "webhook"
+    | "backup";
 type TaskFormAccordionSectionId = "schedule" | "organization" | "notes";
 type TaskRowDragEvent =
     | ReactMouseEvent<HTMLElement>
@@ -533,16 +542,7 @@ export function App() {
     const [editingListName, setEditingListName] = useState("");
     const [editingListColor, setEditingListColor] =
         useState(defaultCategoryColor);
-    const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
-    const [isWorkingHoursSettingsOpen, setIsWorkingHoursSettingsOpen] =
-        useState(false);
-    const [isAccountSettingsOpen, setIsAccountSettingsOpen] =
-        useState(false);
-    const [isChangePasswordSettingsOpen, setIsChangePasswordSettingsOpen] =
-        useState(false);
-    const [isDeleteAccountSettingsOpen, setIsDeleteAccountSettingsOpen] =
-        useState(false);
-    const [isAdminSettingsOpen, setIsAdminSettingsOpen] = useState(false);
+    const [settingsView, setSettingsView] = useState<SettingsView | null>(null);
     const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
     const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
     const [isAddingCategory, setIsAddingCategory] = useState(false);
@@ -570,8 +570,6 @@ export function App() {
     const [detailPanelMode, setDetailPanelMode] =
         useState<DetailPanelMode>(null);
     const [isDetailPanelClosing, setIsDetailPanelClosing] = useState(false);
-    const [isWebhookSettingsOpen, setIsWebhookSettingsOpen] = useState(false);
-    const [isBackupSettingsOpen, setIsBackupSettingsOpen] = useState(false);
     const [webhookSettings, setWebhookSettings] = useState<AppSettings | null>(
         null,
     );
@@ -835,14 +833,7 @@ export function App() {
     );
 
     const closeSettingsPanels = useCallback(() => {
-        setIsSettingsMenuOpen(false);
-        setIsWorkingHoursSettingsOpen(false);
-        setIsAccountSettingsOpen(false);
-        setIsChangePasswordSettingsOpen(false);
-        setIsDeleteAccountSettingsOpen(false);
-        setIsAdminSettingsOpen(false);
-        setIsWebhookSettingsOpen(false);
-        setIsBackupSettingsOpen(false);
+        setSettingsView(null);
     }, []);
 
     const resetAccountForms = useCallback(() => {
@@ -3740,13 +3731,13 @@ export function App() {
         closeDetailPanel();
         closeSettingsPanels();
         resetAccountForms();
-        setIsSettingsMenuOpen(true);
+        setSettingsView("menu");
     };
 
     const openWebhookSettings = () => {
         closeDetailPanel();
         closeSettingsPanels();
-        setIsWebhookSettingsOpen(true);
+        setSettingsView("webhook");
         setWebhookTestMessage(null);
         setWebhookSettingsDraft({
             discord_webhook_url: webhookSettings?.discord_webhook_url ?? "",
@@ -3758,7 +3749,7 @@ export function App() {
     const openWorkingHoursSettings = () => {
         closeDetailPanel();
         closeSettingsPanels();
-        setIsWorkingHoursSettingsOpen(true);
+        setSettingsView("working-hours");
     };
 
     const openBackupSettings = () => {
@@ -3767,28 +3758,28 @@ export function App() {
         setBackupImportMessage(null);
         setBackupImportError(null);
         setBackupImportFile(null);
-        setIsBackupSettingsOpen(true);
+        setSettingsView("backup");
     };
 
     const openAccountSettings = () => {
         closeDetailPanel();
         closeSettingsPanels();
         resetAccountForms();
-        setIsAccountSettingsOpen(true);
+        setSettingsView("account");
     };
 
     const openChangePasswordSettings = () => {
         closeDetailPanel();
         closeSettingsPanels();
         resetAccountForms();
-        setIsChangePasswordSettingsOpen(true);
+        setSettingsView("change-password");
     };
 
     const openDeleteAccountSettings = () => {
         closeDetailPanel();
         closeSettingsPanels();
         resetAccountForms();
-        setIsDeleteAccountSettingsOpen(true);
+        setSettingsView("delete-account");
     };
 
     const refreshAdminUsers = async () => {
@@ -3810,7 +3801,7 @@ export function App() {
     const openAdminSettings = () => {
         closeDetailPanel();
         closeSettingsPanels();
-        setIsAdminSettingsOpen(true);
+        setSettingsView("admin");
         void refreshAdminUsers();
     };
 
@@ -4007,15 +3998,15 @@ export function App() {
         "--sidebar-width": `${isSidebarOpen ? Math.max(240, sidebarWidth) : 0}px`,
         "--sidebar-resizer-width": `${isSidebarOpen ? 12 : 0}px`,
     } as CSSProperties;
-    const isSettingsSubviewOpen =
-        isSettingsMenuOpen ||
-        isWorkingHoursSettingsOpen ||
-        isAccountSettingsOpen ||
-        isChangePasswordSettingsOpen ||
-        isDeleteAccountSettingsOpen ||
-        isAdminSettingsOpen ||
-        isWebhookSettingsOpen ||
-        isBackupSettingsOpen;
+    const isSettingsMenuOpen = settingsView === "menu";
+    const isWorkingHoursSettingsOpen = settingsView === "working-hours";
+    const isAccountSettingsOpen = settingsView === "account";
+    const isChangePasswordSettingsOpen = settingsView === "change-password";
+    const isDeleteAccountSettingsOpen = settingsView === "delete-account";
+    const isAdminSettingsOpen = settingsView === "admin";
+    const isWebhookSettingsOpen = settingsView === "webhook";
+    const isBackupSettingsOpen = settingsView === "backup";
+    const isSettingsSubviewOpen = settingsView !== null;
     const isSidebarTaskContentVisible =
         !detailPanelMode &&
         !isDetailPanelClosing &&
@@ -4047,7 +4038,7 @@ export function App() {
         setIsSidebarOpen(true);
         closeSettingsPanels();
         resetAccountForms();
-        setIsSettingsMenuOpen(true);
+        setSettingsView("menu");
     }, [closeDetailPanel, closeSettingsPanels, resetAccountForms]);
 
     const mobileQuickActionCanAdjust = Boolean(
@@ -4204,7 +4195,9 @@ export function App() {
                                         return;
                                     }
                                     resetAccountForms();
-                                    setIsSettingsMenuOpen((current) => !current);
+                                    setSettingsView((current) =>
+                                        current === "menu" ? null : "menu",
+                                    );
                                 }}
                             >
                                 <span aria-hidden="true">

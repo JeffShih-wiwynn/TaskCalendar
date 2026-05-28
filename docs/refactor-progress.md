@@ -21,6 +21,9 @@ Persistent status for continuing [refactor-backlog.md](./refactor-backlog.md) sa
 - Extract `AdminSettingsPanel`.
   - Commit: this commit.
   - Notes: moved the inline admin settings panel render branch into a focused component.
+- Consolidate settings subview state.
+  - Commit: this commit.
+  - Notes: replaced separate settings panel booleans with one mutually exclusive `settingsView` state.
 
 ## Current
 
@@ -28,11 +31,10 @@ Persistent status for continuing [refactor-backlog.md](./refactor-backlog.md) sa
 
 ## Next Recommended
 
-- Consolidate settings subview state.
+- Finish shared frontend API request helper extraction.
 
 ## Pending
 
-- Consolidate settings subview state.
 - Finish shared frontend API request helper extraction.
 - Extract task form sections after manual stable testing.
 - Separate backend auth/admin service concerns after manual stable testing.
