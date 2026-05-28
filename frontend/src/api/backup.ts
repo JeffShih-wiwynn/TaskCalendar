@@ -1,5 +1,5 @@
 import { getAuthHeaders } from "./auth";
-import { parseJsonResponse, resolveApiUrl } from "./base";
+import { API_ROUTES, parseJsonResponse, resolveApiUrl } from "./base";
 
 export type BackupExportPayload = {
     schema_version: number;
@@ -19,7 +19,7 @@ export async function exportBackup(): Promise<void> {
 }
 
 export async function fetchBackupExport(): Promise<BackupExportPayload> {
-    const response = await fetch(resolveApiUrl("/backup/export"), {
+    const response = await fetch(resolveApiUrl(API_ROUTES.backup.export), {
         method: "GET",
         headers: {
             "Content-Type": "application/json",
@@ -37,7 +37,7 @@ export async function fetchBackupExport(): Promise<BackupExportPayload> {
 export async function importBackup(
     payload: BackupExportPayload,
 ): Promise<BackupImportResult> {
-    const response = await fetch(resolveApiUrl("/backup/import"), {
+    const response = await fetch(resolveApiUrl(API_ROUTES.backup.import), {
         method: "POST",
         headers: {
             "Content-Type": "application/json",

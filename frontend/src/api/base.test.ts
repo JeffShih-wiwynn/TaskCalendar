@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import { parseJsonResponse } from "./base";
+import { API_ROUTES, parseJsonResponse } from "./base";
+
+describe("API_ROUTES", () => {
+    it("keeps top-level route families explicit", () => {
+        expect(API_ROUTES.auth.login).toBe("/auth/login");
+        expect(API_ROUTES.admin.users).toBe("/admin/users");
+        expect(API_ROUTES.backup.export).toBe("/backup/export");
+        expect(API_ROUTES.settings.root).toBe("/api/settings");
+        expect(API_ROUTES.taskLists.root).toBe("/api/task-lists");
+        expect(API_ROUTES.tasks.root).toBe("/api/tasks");
+        expect(API_ROUTES.health).toBe("/health");
+    });
+});
 
 describe("parseJsonResponse", () => {
     it("returns parsed JSON responses", async () => {

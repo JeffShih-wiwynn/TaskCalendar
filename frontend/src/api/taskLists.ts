@@ -1,5 +1,5 @@
 import { AuthError, getAuthHeaders } from './auth';
-import { parseJsonResponse, resolveApiUrl } from './base';
+import { API_ROUTES, parseJsonResponse, resolveApiUrl } from './base';
 
 export type TaskList = {
   id: string;
@@ -11,11 +11,11 @@ export type TaskList = {
 };
 
 export async function listTaskLists(): Promise<TaskList[]> {
-  return request<TaskList[]>('/api/task-lists');
+  return request<TaskList[]>(API_ROUTES.taskLists.root);
 }
 
 export async function createTaskList(name: string, color: string): Promise<TaskList> {
-  return request<TaskList>('/api/task-lists', {
+  return request<TaskList>(API_ROUTES.taskLists.root, {
     method: 'POST',
     body: JSON.stringify({ name, color }),
   });
@@ -25,14 +25,14 @@ export async function updateTaskList(
   taskListId: string,
   input: Partial<Pick<TaskList, 'name' | 'color'>>,
 ): Promise<TaskList> {
-  return request<TaskList>(`/api/task-lists/${taskListId}`, {
+  return request<TaskList>(API_ROUTES.taskLists.item(taskListId), {
     method: 'PATCH',
     body: JSON.stringify(input),
   });
 }
 
 export async function deleteTaskList(taskListId: string): Promise<void> {
-  await request<void>(`/api/task-lists/${taskListId}`, { method: 'DELETE' });
+  await request<void>(API_ROUTES.taskLists.item(taskListId), { method: 'DELETE' });
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

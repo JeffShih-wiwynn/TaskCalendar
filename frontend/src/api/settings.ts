@@ -1,5 +1,5 @@
 import { AuthError, getAuthHeaders } from "./auth";
-import { parseJsonResponse, resolveApiUrl } from "./base";
+import { API_ROUTES, parseJsonResponse, resolveApiUrl } from "./base";
 
 export type AppSettings = {
     id: number;
@@ -24,13 +24,13 @@ export type TestAppSettingsResponse = {
 };
 
 export async function getSettings(): Promise<AppSettings> {
-    return request<AppSettings>("/api/settings");
+    return request<AppSettings>(API_ROUTES.settings.root);
 }
 
 export async function updateSettings(
     input: UpdateAppSettingsInput,
 ): Promise<AppSettings> {
-    return request<AppSettings>("/api/settings", {
+    return request<AppSettings>(API_ROUTES.settings.root, {
         method: "PATCH",
         body: JSON.stringify(input),
     });
@@ -39,7 +39,7 @@ export async function updateSettings(
 export async function testSettings(
     input: TestAppSettingsInput,
 ): Promise<TestAppSettingsResponse> {
-    return request<TestAppSettingsResponse>("/api/settings/test-discord", {
+    return request<TestAppSettingsResponse>(API_ROUTES.settings.testDiscord, {
         method: "POST",
         body: JSON.stringify(input),
     });

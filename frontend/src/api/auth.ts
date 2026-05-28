@@ -1,4 +1,4 @@
-import { parseJsonResponse, resolveApiUrl } from "./base";
+import { API_ROUTES, parseJsonResponse, resolveApiUrl } from "./base";
 const AUTH_TOKEN_STORAGE_KEY = "calendar-auth-token";
 
 export type AuthCredentials = {
@@ -62,7 +62,7 @@ export function isAuthError(error: unknown): boolean {
 }
 
 export async function login(credentials: AuthCredentials): Promise<string> {
-    const response = await request<TokenResponse>("/auth/login", {
+    const response = await request<TokenResponse>(API_ROUTES.auth.login, {
         method: "POST",
         body: JSON.stringify(credentials),
     });
@@ -71,14 +71,14 @@ export async function login(credentials: AuthCredentials): Promise<string> {
 }
 
 export async function register(credentials: AuthCredentials): Promise<AuthUser> {
-    return request<AuthUser>("/auth/register", {
+    return request<AuthUser>(API_ROUTES.auth.register, {
         method: "POST",
         body: JSON.stringify(credentials),
     });
 }
 
 export async function getCurrentUser(): Promise<AuthUser> {
-    return request<AuthUser>("/auth/me", {
+    return request<AuthUser>(API_ROUTES.auth.me, {
         headers: getAuthHeaders(),
     });
 }
@@ -86,7 +86,7 @@ export async function getCurrentUser(): Promise<AuthUser> {
 export async function changePassword(
     input: ChangePasswordInput,
 ): Promise<ActionResponse> {
-    return request<ActionResponse>("/auth/password", {
+    return request<ActionResponse>(API_ROUTES.auth.password, {
         method: "PATCH",
         headers: getAuthHeaders(),
         body: JSON.stringify(input),
@@ -96,7 +96,7 @@ export async function changePassword(
 export async function deleteAccount(
     input: DeleteAccountInput,
 ): Promise<ActionResponse> {
-    return request<ActionResponse>("/auth/me", {
+    return request<ActionResponse>(API_ROUTES.auth.me, {
         method: "DELETE",
         headers: getAuthHeaders(),
         body: JSON.stringify(input),
