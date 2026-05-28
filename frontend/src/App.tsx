@@ -2777,7 +2777,11 @@ export function App() {
 
             if (isMobileMonthEvent) {
                 return (
-                    <div className="calendar-task calendar-task-month-summary">
+                    <div
+                        className="calendar-task calendar-task-month-summary"
+                        data-testid="calendar-task-event"
+                        data-task-id={task.id}
+                    >
                         <span
                             className={
                                 task.completed
@@ -2792,7 +2796,11 @@ export function App() {
             }
 
             return (
-                <div className="calendar-task">
+                <div
+                    className="calendar-task"
+                    data-testid="calendar-task-event"
+                    data-task-id={task.id}
+                >
                     {!isMobileWeekEvent && (
                         <motion.input
                             type="checkbox"
@@ -6109,6 +6117,7 @@ export function App() {
                                                     key={task.id}
                                                     role="button"
                                                     tabIndex={0}
+                                                    data-testid="task-row"
                                                     data-task-id={task.id}
                                                     layout={
                                                         activeView ===
@@ -6382,6 +6391,7 @@ export function App() {
                                                         <button
                                                             type="button"
                                                             className="task-drag-handle task-schedule-button"
+                                                            data-testid="task-schedule-drag-handle"
                                                             data-task-id={
                                                                 task.id
                                                             }
@@ -6457,6 +6467,7 @@ export function App() {
 
             <section
                 className={`calendar-panel ${dragTargetMode === "schedule" ? "drag-target-calendar-active" : ""}`}
+                data-testid="calendar-panel"
                 aria-label="Scheduled tasks calendar"
                 onTransitionEnd={(event) => {
                     if (

@@ -27,3 +27,7 @@ coverage/
 
 # docs
 docs/TODO.md
+
+# playwright
+frontend/playwright-report/
+frontend/test-results/
