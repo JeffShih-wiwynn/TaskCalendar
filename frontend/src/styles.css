@@ -302,7 +302,18 @@ body {
 .secondary-button,
 .sidebar-create-task-button,
 .task-order-button,
-.task-form button,
+.task-form :is(
+  .task-form-accordion-trigger,
+  .secondary-button,
+  .settings-action-button,
+  .account-action-button,
+  .ghost-button,
+  .admin-delete-button,
+  .admin-user-delete-button,
+  .filter-trigger,
+  .filter-option
+),
+.task-form-dropdown-menu .filter-option,
 .calendar-year-button,
 .calendar-toolbar-button,
 .calendar-nav-button,
@@ -324,7 +335,18 @@ body {
 .secondary-button:active:not(:disabled),
 .sidebar-create-task-button:active:not(:disabled),
 .task-order-button:active:not(:disabled),
-.task-form button:active:not(:disabled),
+.task-form :is(
+  .task-form-accordion-trigger,
+  .secondary-button,
+  .settings-action-button,
+  .account-action-button,
+  .ghost-button,
+  .admin-delete-button,
+  .admin-user-delete-button,
+  .filter-trigger,
+  .filter-option
+):active:not(:disabled),
+.task-form-dropdown-menu .filter-option:active:not(:disabled),
 .calendar-year-button:active:not(:disabled),
 .calendar-toolbar-button:active:not(:disabled),
 .calendar-nav-button:active:not(:disabled),
@@ -2281,18 +2303,18 @@ input[type="checkbox"].task-checkbox:checked {
   gap: 10px;
 }
 
-.task-form button {
-  border: 0;
-  border-radius: 6px;
-  padding: 11px 14px;
-  color: #ffffff;
-  background: var(--accent);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.task-form button:disabled {
+.task-form :is(
+  .task-form-accordion-trigger,
+  .secondary-button,
+  .settings-action-button,
+  .account-action-button,
+  .ghost-button,
+  .admin-delete-button,
+  .admin-user-delete-button,
+  .filter-trigger,
+  .filter-option
+):disabled,
+.task-form-dropdown-menu .filter-option:disabled {
   cursor: not-allowed;
   opacity: 0.65;
 }
@@ -3369,7 +3391,18 @@ input[type="checkbox"].task-checkbox:checked {
   .secondary-button:hover:not(:disabled),
   .sidebar-create-task-button:hover:not(:disabled),
   .task-order-button:hover:not(:disabled),
-  .task-form button:hover:not(:disabled),
+  .task-form :is(
+    .task-form-accordion-trigger,
+    .secondary-button,
+    .settings-action-button,
+    .account-action-button,
+    .ghost-button,
+    .admin-delete-button,
+    .admin-user-delete-button,
+    .filter-trigger,
+    .filter-option
+  ):hover:not(:disabled),
+  .task-form-dropdown-menu .filter-option:hover:not(:disabled),
   .calendar-year-button:hover:not(:disabled),
   .calendar-toolbar-button:hover:not(:disabled),
   .calendar-nav-button:hover:not(:disabled),
@@ -3392,7 +3425,18 @@ input[type="checkbox"].task-checkbox:checked {
   .secondary-button,
   .sidebar-create-task-button,
   .task-order-button,
-  .task-form button,
+  .task-form :is(
+    .task-form-accordion-trigger,
+    .secondary-button,
+    .settings-action-button,
+    .account-action-button,
+    .ghost-button,
+    .admin-delete-button,
+    .admin-user-delete-button,
+    .filter-trigger,
+    .filter-option
+  ),
+  .task-form-dropdown-menu .filter-option,
   .calendar-year-button,
   .calendar-toolbar-button,
   .calendar-nav-button,
@@ -4573,7 +4617,18 @@ input[type="checkbox"].task-checkbox:checked {
   .filter-trigger,
   .filter-add-button,
   .sidebar-create-task-button,
-  .task-form button,
+  .task-form :is(
+    .task-form-accordion-trigger,
+    .secondary-button,
+    .settings-action-button,
+    .account-action-button,
+    .ghost-button,
+    .admin-delete-button,
+    .admin-user-delete-button,
+    .filter-trigger,
+    .filter-option
+  ),
+  .task-form-dropdown-menu .filter-option,
   .secondary-button {
     min-height: 44px;
   }

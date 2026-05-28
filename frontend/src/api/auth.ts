@@ -1,4 +1,4 @@
-import { resolveApiUrl } from "./base";
+import { API_ROUTES, requestJson } from "./base";
 const AUTH_TOKEN_STORAGE_KEY = "calendar-auth-token";
 
 export type AuthCredentials = {
@@ -62,23 +62,26 @@ export function isAuthError(error: unknown): boolean {
 }
 
 export async function login(credentials: AuthCredentials): Promise<string> {
-    const response = await request<TokenResponse>("/auth/login", {
-        method: "POST",
-        body: JSON.stringify(credentials),
-    });
+    const response = await requestAuth<TokenResponse>(
+        API_ROUTES.auth.login,
+        {
+            method: "POST",
+            body: JSON.stringify(credentials),
+        },
+    );
     storeAuthToken(response.access_token);
     return response.access_token;
 }
 
 export async function register(credentials: AuthCredentials): Promise<AuthUser> {
-    return request<AuthUser>("/auth/register", {
+    return requestAuth<AuthUser>(API_ROUTES.auth.register, {
         method: "POST",
         body: JSON.stringify(credentials),
     });
 }
 
 export async function getCurrentUser(): Promise<AuthUser> {
-    return request<AuthUser>("/auth/me", {
+    return requestAuth<AuthUser>(API_ROUTES.auth.me, {
         headers: getAuthHeaders(),
     });
 }
@@ -86,7 +89,7 @@ export async function getCurrentUser(): Promise<AuthUser> {
 export async function changePassword(
     input: ChangePasswordInput,
 ): Promise<ActionResponse> {
-    return request<ActionResponse>("/auth/password", {
+    return requestAuth<ActionResponse>(API_ROUTES.auth.password, {
         method: "PATCH",
         headers: getAuthHeaders(),
         body: JSON.stringify(input),
@@ -96,31 +99,18 @@ export async function changePassword(
 export async function deleteAccount(
     input: DeleteAccountInput,
 ): Promise<ActionResponse> {
-    return request<ActionResponse>("/auth/me", {
+    return requestAuth<ActionResponse>(API_ROUTES.auth.me, {
         method: "DELETE",
         headers: getAuthHeaders(),
         body: JSON.stringify(input),
     });
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(resolveApiUrl(path), {
-        ...init,
-        headers: {
-            "Content-Type": "application/json",
-            ...init?.headers,
-        },
+async function requestAuth<T>(path: string, init?: RequestInit): Promise<T> {
+    return requestJson<T>(path, init, {
+        createUnauthorizedError: (message) => new AuthError(message),
+        readErrorMessage,
     });
-
-    if (response.status === 401) {
-        throw new AuthError(await readErrorMessage(response));
-    }
-
-    if (!response.ok) {
-        throw new Error(await readErrorMessage(response));
-    }
-
-    return response.json() as Promise<T>;
 }
 
 async function readErrorMessage(response: Response): Promise<string> {

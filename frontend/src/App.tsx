@@ -88,6 +88,19 @@ import {
     type CreateScheduledTaskInput,
     type ScheduledTask,
 } from "./api/tasks";
+import {
+    IconArrowDown,
+    IconArrowUp,
+    IconCheck,
+    IconChevronDown,
+    IconClose,
+    IconEdit,
+    IconMinus,
+    IconPlus,
+    IconSave,
+    IconTrash,
+} from "./components/icons";
+import { AdminSettingsPanel } from "./components/AdminSettingsPanel";
 
 type TaskState =
     | { status: "loading"; tasks: ScheduledTask[] }
@@ -143,162 +156,6 @@ const taskFormDropdownThemeVariables = [
     "--danger",
     "--danger-soft",
 ];
-
-function IconArrowUp() {
-    return (
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path
-                d="M12 19V5m0 0-6 6m6-6 6 6"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-            />
-        </svg>
-    );
-}
-
-function IconArrowDown() {
-    return (
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path
-                d="M12 5v14m0 0 6-6m-6 6-6-6"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-            />
-        </svg>
-    );
-}
-
-function IconMinus() {
-    return (
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path
-                d="M6 12h12"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeWidth="2"
-            />
-        </svg>
-    );
-}
-
-function IconPlus() {
-    return (
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path
-                d="M12 5v14M5 12h14"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeWidth="2"
-            />
-        </svg>
-    );
-}
-
-function IconChevronDown() {
-    return (
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path
-                d="m6 9 6 6 6-6"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-            />
-        </svg>
-    );
-}
-
-function IconEdit() {
-    return (
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path
-                d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-            />
-        </svg>
-    );
-}
-
-function IconTrash() {
-    return (
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path
-                d="M5 7h14m-9 4v6m4-6v6M8 7l1 13h6l1-13M10 7V5h4v2"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-            />
-        </svg>
-    );
-}
-
-function IconSave() {
-    return (
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path
-                d="M5 4h12l2 2v14H5z"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-            />
-            <path
-                d="M8 4v6h8V4M8 20v-7h8v7"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-            />
-        </svg>
-    );
-}
-
-function IconCheck() {
-    return (
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path
-                d="m5 12 4.5 4.5L19 7"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-            />
-        </svg>
-    );
-}
-
-function IconClose() {
-    return (
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path
-                d="M6 6l12 12M18 6 6 18"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-            />
-        </svg>
-    );
-}
 
 type TaskFormState = {
     title: string;
@@ -370,6 +227,15 @@ type TaskUndoState = {
 };
 
 type DetailPanelMode = "create" | "edit" | null;
+type SettingsView =
+    | "menu"
+    | "working-hours"
+    | "account"
+    | "change-password"
+    | "delete-account"
+    | "admin"
+    | "webhook"
+    | "backup";
 type TaskFormAccordionSectionId = "schedule" | "organization" | "notes";
 type TaskRowDragEvent =
     | ReactMouseEvent<HTMLElement>
@@ -676,16 +542,7 @@ export function App() {
     const [editingListName, setEditingListName] = useState("");
     const [editingListColor, setEditingListColor] =
         useState(defaultCategoryColor);
-    const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
-    const [isWorkingHoursSettingsOpen, setIsWorkingHoursSettingsOpen] =
-        useState(false);
-    const [isAccountSettingsOpen, setIsAccountSettingsOpen] =
-        useState(false);
-    const [isChangePasswordSettingsOpen, setIsChangePasswordSettingsOpen] =
-        useState(false);
-    const [isDeleteAccountSettingsOpen, setIsDeleteAccountSettingsOpen] =
-        useState(false);
-    const [isAdminSettingsOpen, setIsAdminSettingsOpen] = useState(false);
+    const [settingsView, setSettingsView] = useState<SettingsView | null>(null);
     const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
     const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
     const [isAddingCategory, setIsAddingCategory] = useState(false);
@@ -713,8 +570,6 @@ export function App() {
     const [detailPanelMode, setDetailPanelMode] =
         useState<DetailPanelMode>(null);
     const [isDetailPanelClosing, setIsDetailPanelClosing] = useState(false);
-    const [isWebhookSettingsOpen, setIsWebhookSettingsOpen] = useState(false);
-    const [isBackupSettingsOpen, setIsBackupSettingsOpen] = useState(false);
     const [webhookSettings, setWebhookSettings] = useState<AppSettings | null>(
         null,
     );
@@ -978,14 +833,7 @@ export function App() {
     );
 
     const closeSettingsPanels = useCallback(() => {
-        setIsSettingsMenuOpen(false);
-        setIsWorkingHoursSettingsOpen(false);
-        setIsAccountSettingsOpen(false);
-        setIsChangePasswordSettingsOpen(false);
-        setIsDeleteAccountSettingsOpen(false);
-        setIsAdminSettingsOpen(false);
-        setIsWebhookSettingsOpen(false);
-        setIsBackupSettingsOpen(false);
+        setSettingsView(null);
     }, []);
 
     const resetAccountForms = useCallback(() => {
@@ -3883,13 +3731,13 @@ export function App() {
         closeDetailPanel();
         closeSettingsPanels();
         resetAccountForms();
-        setIsSettingsMenuOpen(true);
+        setSettingsView("menu");
     };
 
     const openWebhookSettings = () => {
         closeDetailPanel();
         closeSettingsPanels();
-        setIsWebhookSettingsOpen(true);
+        setSettingsView("webhook");
         setWebhookTestMessage(null);
         setWebhookSettingsDraft({
             discord_webhook_url: webhookSettings?.discord_webhook_url ?? "",
@@ -3901,7 +3749,7 @@ export function App() {
     const openWorkingHoursSettings = () => {
         closeDetailPanel();
         closeSettingsPanels();
-        setIsWorkingHoursSettingsOpen(true);
+        setSettingsView("working-hours");
     };
 
     const openBackupSettings = () => {
@@ -3910,28 +3758,28 @@ export function App() {
         setBackupImportMessage(null);
         setBackupImportError(null);
         setBackupImportFile(null);
-        setIsBackupSettingsOpen(true);
+        setSettingsView("backup");
     };
 
     const openAccountSettings = () => {
         closeDetailPanel();
         closeSettingsPanels();
         resetAccountForms();
-        setIsAccountSettingsOpen(true);
+        setSettingsView("account");
     };
 
     const openChangePasswordSettings = () => {
         closeDetailPanel();
         closeSettingsPanels();
         resetAccountForms();
-        setIsChangePasswordSettingsOpen(true);
+        setSettingsView("change-password");
     };
 
     const openDeleteAccountSettings = () => {
         closeDetailPanel();
         closeSettingsPanels();
         resetAccountForms();
-        setIsDeleteAccountSettingsOpen(true);
+        setSettingsView("delete-account");
     };
 
     const refreshAdminUsers = async () => {
@@ -3953,7 +3801,7 @@ export function App() {
     const openAdminSettings = () => {
         closeDetailPanel();
         closeSettingsPanels();
-        setIsAdminSettingsOpen(true);
+        setSettingsView("admin");
         void refreshAdminUsers();
     };
 
@@ -4150,15 +3998,15 @@ export function App() {
         "--sidebar-width": `${isSidebarOpen ? Math.max(240, sidebarWidth) : 0}px`,
         "--sidebar-resizer-width": `${isSidebarOpen ? 12 : 0}px`,
     } as CSSProperties;
-    const isSettingsSubviewOpen =
-        isSettingsMenuOpen ||
-        isWorkingHoursSettingsOpen ||
-        isAccountSettingsOpen ||
-        isChangePasswordSettingsOpen ||
-        isDeleteAccountSettingsOpen ||
-        isAdminSettingsOpen ||
-        isWebhookSettingsOpen ||
-        isBackupSettingsOpen;
+    const isSettingsMenuOpen = settingsView === "menu";
+    const isWorkingHoursSettingsOpen = settingsView === "working-hours";
+    const isAccountSettingsOpen = settingsView === "account";
+    const isChangePasswordSettingsOpen = settingsView === "change-password";
+    const isDeleteAccountSettingsOpen = settingsView === "delete-account";
+    const isAdminSettingsOpen = settingsView === "admin";
+    const isWebhookSettingsOpen = settingsView === "webhook";
+    const isBackupSettingsOpen = settingsView === "backup";
+    const isSettingsSubviewOpen = settingsView !== null;
     const isSidebarTaskContentVisible =
         !detailPanelMode &&
         !isDetailPanelClosing &&
@@ -4190,7 +4038,7 @@ export function App() {
         setIsSidebarOpen(true);
         closeSettingsPanels();
         resetAccountForms();
-        setIsSettingsMenuOpen(true);
+        setSettingsView("menu");
     }, [closeDetailPanel, closeSettingsPanels, resetAccountForms]);
 
     const mobileQuickActionCanAdjust = Boolean(
@@ -4347,7 +4195,9 @@ export function App() {
                                         return;
                                     }
                                     resetAccountForms();
-                                    setIsSettingsMenuOpen((current) => !current);
+                                    setSettingsView((current) =>
+                                        current === "menu" ? null : "menu",
+                                    );
                                 }}
                             >
                                 <span aria-hidden="true">
@@ -4466,88 +4316,14 @@ export function App() {
                                 exit="exit"
                                 transition={panelTransition}
                             >
-                                <div className="task-form account-settings-form">
-                                    <div className="account-settings-heading">
-                                        <h3 className="working-hours-title">
-                                            Admin
-                                        </h3>
-                                        <p className="muted">
-                                            Manage local user accounts.
-                                        </p>
-                                    </div>
-                                    {isAdminUsersLoading ? (
-                                        <p className="muted">Loading users...</p>
-                                    ) : (
-                                        <div
-                                            className="admin-user-list"
-                                            aria-label="Admin users"
-                                        >
-                                            {adminUsers.map((user) => {
-                                                const isLastVisibleAdmin =
-                                                    user.is_admin &&
-                                                    adminUsers.filter(
-                                                        (item) => item.is_admin,
-                                                    ).length <= 1;
-                                                return (
-                                                    <div
-                                                        key={user.id}
-                                                        className="admin-user-row"
-                                                    >
-                                                        <div className="admin-user-summary">
-                                                            <span className="admin-user-name">
-                                                                {user.username}
-                                                            </span>
-                                                            <span
-                                                                className={`admin-user-role ${
-                                                                    user.is_admin
-                                                                        ? "admin-user-role-admin"
-                                                                        : "admin-user-role-user"
-                                                                }`}
-                                                            >
-                                                                {user.is_admin
-                                                                    ? "Admin"
-                                                                    : "User"}
-                                                            </span>
-                                                        </div>
-                                                        <button
-                                                            type="button"
-                                                            className="admin-user-delete-button admin-delete-button"
-                                                            aria-label={`Delete ${user.username}`}
-                                                            disabled={
-                                                                deletingAdminUserId ===
-                                                                    user.id ||
-                                                                isLastVisibleAdmin
-                                                            }
-                                                            onClick={(event) => {
-                                                                event.stopPropagation();
-                                                                openDeleteAdminUserConfirm(
-                                                                    user,
-                                                                );
-                                                            }}
-                                                        >
-                                                            {deletingAdminUserId ===
-                                                            user.id
-                                                                ? "Deleting..."
-                                                                : "Delete"}
-                                                        </button>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                    {adminUsersError && (
-                                        <p className="form-error">
-                                            {adminUsersError}
-                                        </p>
-                                    )}
-                                    <button
-                                        type="button"
-                                        className="settings-action-button settings-action-button-neutral"
-                                        onClick={openSettingsMenu}
-                                    >
-                                        Back
-                                    </button>
-                                </div>
+                                <AdminSettingsPanel
+                                    users={adminUsers}
+                                    isLoading={isAdminUsersLoading}
+                                    error={adminUsersError}
+                                    deletingUserId={deletingAdminUserId}
+                                    onBack={openSettingsMenu}
+                                    onDeleteUser={openDeleteAdminUserConfirm}
+                                />
                             </motion.section>
                         )}
                         {!detailPanelMode && isAccountSettingsOpen && (

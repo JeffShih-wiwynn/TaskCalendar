@@ -1,7 +1,7 @@
 import type { EventInput } from '@fullcalendar/core';
 
 import { AuthError, getAuthHeaders } from './auth';
-import { resolveApiUrl } from './base';
+import { API_ROUTES, requestJson } from './base';
 
 export type ScheduledTask = {
   id: string;
@@ -94,12 +94,14 @@ export async function listTasks(options: ListTasksOptions = {}): Promise<Schedul
   }
 
   const query = params.toString();
-  const tasks = await request<ScheduledTask[]>(query ? `/api/tasks?${query}` : '/api/tasks');
+  const tasks = await request<ScheduledTask[]>(
+    query ? `${API_ROUTES.tasks.root}?${query}` : API_ROUTES.tasks.root,
+  );
   return tasks.map(normalizeTaskDates);
 }
 
 export async function createTask(input: CreateScheduledTaskInput): Promise<ScheduledTask> {
-  const task = await request<ScheduledTask>('/api/tasks', {
+  const task = await request<ScheduledTask>(API_ROUTES.tasks.root, {
     method: 'POST',
     body: JSON.stringify(input),
   });
@@ -117,7 +119,7 @@ export async function updateTask(
   }
 
   const query = params.toString();
-  const task = await request<ScheduledTask>(query ? `/api/tasks/${taskId}?${query}` : `/api/tasks/${taskId}`, {
+  const task = await request<ScheduledTask>(query ? `${API_ROUTES.tasks.item(taskId)}?${query}` : API_ROUTES.tasks.item(taskId), {
     method: 'PATCH',
     body: JSON.stringify(input),
   });
@@ -125,12 +127,12 @@ export async function updateTask(
 }
 
 export async function completeTask(taskId: string): Promise<ScheduledTask> {
-  const task = await request<ScheduledTask>(`/api/tasks/${taskId}/complete`, { method: 'POST' });
+  const task = await request<ScheduledTask>(API_ROUTES.tasks.complete(taskId), { method: 'POST' });
   return normalizeTaskDates(task);
 }
 
 export async function uncompleteTask(taskId: string): Promise<ScheduledTask> {
-  const task = await request<ScheduledTask>(`/api/tasks/${taskId}/uncomplete`, { method: 'POST' });
+  const task = await request<ScheduledTask>(API_ROUTES.tasks.uncomplete(taskId), { method: 'POST' });
   return normalizeTaskDates(task);
 }
 
@@ -148,7 +150,7 @@ export async function deleteTask(
   }
 
   const query = params.toString();
-  await request<void>(query ? `/api/tasks/${taskId}?${query}` : `/api/tasks/${taskId}`, {
+  await request<void>(query ? `${API_ROUTES.tasks.item(taskId)}?${query}` : API_ROUTES.tasks.item(taskId), {
     method: 'DELETE',
   });
 }
@@ -171,29 +173,16 @@ export function mapTaskToEvent(task: ScheduledTask): EventInput {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(resolveApiUrl(path), {
+  return requestJson<T>(path, {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
       ...getAuthHeaders(),
       ...init?.headers,
     },
+  }, {
+    createUnauthorizedError: (message) => new AuthError(message),
+    readErrorMessage,
   });
-
-  if (response.status === 401) {
-    throw new AuthError(await readErrorMessage(response));
-  }
-
-  if (!response.ok) {
-    const message = await readErrorMessage(response);
-    throw new Error(message);
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return response.json() as Promise<T>;
 }
 
 async function readErrorMessage(response: Response): Promise<string> {
