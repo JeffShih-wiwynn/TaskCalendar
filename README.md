@@ -2,6 +2,8 @@
 
 Self-hosted scheduled task calendar app. The MVP is web-first with a React + TypeScript frontend, a FastAPI backend, and PostgreSQL for local development and production.
 
+Calendar is licensed under the GNU Affero General Public License v3.0. See [LICENSE](LICENSE).
+
 ## Project Status
 
 - [Progress](docs/progress.md)
@@ -26,12 +28,12 @@ Self-hosted scheduled task calendar app. The MVP is web-first with a React + Typ
 The script starts the backend and frontend from the current source tree:
 
 ```text
-Frontend: http://100.64.0.2:5173
-Backend:  http://100.64.0.2:8000
-Health:   http://100.64.0.2:8000/health
+Frontend: http://127.0.0.1:5173
+Backend:  http://127.0.0.1:8000
+Health:   http://127.0.0.1:8000/health
 ```
 
-`100.64.0.2` is the default `DEV_HOST`. Override it when needed:
+`127.0.0.1` is the default `DEV_HOST`. Override it when testing from another device:
 
 ```sh
 DEV_HOST=<reachable-ip> ./scripts/dev.sh start
@@ -40,6 +42,8 @@ DEV_HOST=<reachable-ip> ./scripts/dev.sh start
 It writes only the frontend local env file:
 
 - `frontend/.env.local`
+
+`frontend/.env.local` is local-only and ignored by git. Use `frontend/.env.example` as the public template.
 
 The backend reads `backend/.env` directly, while `scripts/dev.sh` injects the local backend overrides at process start. To test a non-UTC application timezone in local development, start the stack with `APP_TIMEZONE` set in the command environment, for example:
 
@@ -61,7 +65,7 @@ DATABASE_URL=postgresql+psycopg://calendar:calendar@127.0.0.1:5432/calendar .ven
 Login requests should go to:
 
 ```text
-http://100.64.0.2:8000/auth/login
+http://127.0.0.1:8000/auth/login
 ```
 
 Troubleshooting:
@@ -83,15 +87,16 @@ For manual Ubuntu deployment, use [docs/ubuntu-production.md](docs/ubuntu-produc
 ## Docker Deployment
 
 For the minimal Docker/Compose deployment, use the existing stack in [docker-compose.yml](docker-compose.yml).
-Before deploying, create `backend/.env` from `backend/.env.example` and fill in production values. No repo-root `.env` is required for the current Docker deployment flow.
-For this VPN-only setup, use the VPN URL in backend env values, for example `http://100.64.0.2:8088`.
+Before deploying, create `backend/.env` from `backend/.env.example` and fill in production values. Also create a repo-root `.env` from `.env.example` and set a strong `POSTGRES_PASSWORD`.
+Use your public or private access URL in backend env values, for example `https://calendar.example.com`.
 Docker deployment uses the `calendar` Compose project. Only the `web` container is exposed to the host. `backend` and `postgres` stay private inside the Compose network, and database access should use `docker compose -p calendar exec postgres psql -U calendar -d calendar`, not `localhost:5432`.
 
 Clean-clone flow:
 
 ```sh
 cp backend/.env.example backend/.env
-# edit backend/.env with production values
+cp .env.example .env
+# edit backend/.env and .env with production values
 bash ./scripts/docker-build.sh
 bash ./scripts/docker-deploy.sh
 ```
@@ -109,14 +114,25 @@ bash ./scripts/docker-deploy.sh
 ```
 
 The deploy script prints the container status with `docker compose ps` after startup.
-The web container maps host port `8088` to container port `80`, so the app is served from `http://100.64.0.2:8088` on the VPN.
+The web container maps host port `8088` to container port `80` by default, so the app is served from `http://<your-server-ip>:8088` unless you put it behind a reverse proxy such as Caddy.
 The backend listens on port `8000` only inside the Compose network, and PostgreSQL listens on port `5432` only inside the Compose network. Caddy in the `web` container proxies `/api/*`, `/auth/*`, `/admin/*`, `/backup/*`, and `/health` to the backend so those routes do not fall through to the React app shell.
+
+Before exposing this app to the internet:
+
+- Set a strong `JWT_SECRET_KEY` in `backend/.env`; do not use the example value.
+- Set a strong `POSTGRES_PASSWORD` in the repo-root `.env`.
+- Set `APP_BASE_URL` and `FRONTEND_ORIGINS` to the actual HTTPS origin.
+- Serve the app over HTTPS.
+- Decide whether open registration is acceptable. Anyone who can reach the app can register.
+- Register the first account yourself; the first registered user becomes the admin.
+- Back up the PostgreSQL volume or database before upgrades.
 
 ## Auth And Admin
 
 - Users register and log in with username/password credentials.
 - Passwords are stored as hashes; password hashes and auth secrets are not exposed through backups or admin APIs.
 - The first registered user becomes an admin when the users table is empty.
+- Registration is open to anyone who can reach the app.
 - There is no seeded default `root`/`111111` account and no default seeded user.
 - Admin user management is available in Settings -> Admin.
 - Admins can list users and delete managed users.
@@ -132,6 +148,7 @@ The backend listens on port `8000` only inside the Compose network, and PostgreS
 - Backups include task lists/categories, tasks, recurrence fields, notification fields, unscheduled ordering, completed state, and notes.
 - Backups do not include user accounts, password hashes, JWT secrets, or other auth secrets.
 - JSON backup/restore is separate from future ICS/VTODO export.
+- JSON backups are not full-instance backups. Back up PostgreSQL separately to preserve users, admin status, app settings, and all accounts.
 
 ## Timezone
 
@@ -176,7 +193,7 @@ Open the preview URL in Chrome or another PWA-capable browser. In DevTools, chec
 
 To verify Add to Home Screen, use the browser install button from the address bar on desktop Chrome, or open the browser menu on Android Chrome and choose **Add to Home screen** or **Install app**.
 
-Real installability still requires HTTPS on Android Chrome/Brave, except for `localhost`. If you open the app over plain HTTP, especially through VPN or headscale, Chromium may only offer **Create shortcut** instead of full install UI.
+Real installability still requires HTTPS on Android Chrome/Brave, except for `localhost`. If you open the app over plain HTTP, Chromium may only offer **Create shortcut** instead of full install UI.
 
 ## Convenience Script
 

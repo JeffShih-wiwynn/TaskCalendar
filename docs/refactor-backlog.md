@@ -4,7 +4,7 @@ This backlog is derived from the current codebase audit. It is intentionally nar
 
 ## Overview
 
-The main concentration of technical debt is in [frontend/src/App.tsx](/home/jeff/Projects/Calendar/frontend/src/App.tsx), which currently owns auth, settings, admin, backup, task form state, recurrence, sidebar filtering, calendar synchronization, and mobile layout behavior in one component. The other recurring theme is route and proxy drift: backend routes are split across `/api/*`, `/auth/*`, `/admin/*`, and `/backup/*`, so Docker Caddy, the frontend PWA denylist, and API client helpers all need to stay aligned.
+The main concentration of technical debt is in [`frontend/src/App.tsx`](../frontend/src/App.tsx), which currently owns auth, settings, admin, backup, task form state, recurrence, sidebar filtering, calendar synchronization, and mobile layout behavior in one component. The other recurring theme is route and proxy drift: backend routes are split across `/api/*`, `/auth/*`, `/admin/*`, and `/backup/*`, so Docker Caddy, the frontend PWA denylist, and API client helpers all need to stay aligned.
 
 The goal of the refactors below is not to normalize routes yet or to re-architect the app. The goal is to make the current behavior easier to maintain without increasing regression risk.
 
@@ -28,7 +28,7 @@ The goal of the refactors below is not to normalize routes yet or to re-architec
 
 ## Refactor Candidates
 
-### [frontend/src/App.tsx](/home/jeff/Projects/Calendar/frontend/src/App.tsx) is oversized
+### [`frontend/src/App.tsx`](../frontend/src/App.tsx) is oversized
 - Problem: one component owns too many concerns.
 - Why it matters: small UI changes can affect auth, admin, backup, calendar, and task editing at once.
 - Suggested refactor: split out focused components and hooks in small slices.

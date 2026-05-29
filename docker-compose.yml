@@ -8,7 +8,7 @@ services:
     environment:
       POSTGRES_DB: calendar
       POSTGRES_USER: calendar
-      POSTGRES_PASSWORD: calendar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-calendar}
     expose:
       - "5432"
     volumes:
@@ -31,7 +31,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DATABASE_URL: postgresql+psycopg://calendar:calendar@postgres:5432/calendar
+      DATABASE_URL: postgresql+psycopg://calendar:${POSTGRES_PASSWORD:-calendar}@postgres:5432/calendar
     healthcheck:
       test:
         [
@@ -54,7 +54,7 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "8088:80"
+      - "${WEB_PORT:-8088}:80"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/health >/dev/null"]
       interval: 10s

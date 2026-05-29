@@ -1,29 +1,35 @@
-from fastapi import HTTPException, status
+import uuid
 from datetime import UTC, datetime
 
+from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.app_settings.schemas import AppSettingsTestRequest, AppSettingsUpdate
 from app.core.config import settings
 from app.models.app_settings import AppSettings
-from app.app_settings.schemas import AppSettingsTestRequest, AppSettingsUpdate
-
-APP_SETTINGS_SINGLETON_ID = 1
 
 
-def get_app_settings(db: Session) -> AppSettings:
-    app_settings = db.get(AppSettings, APP_SETTINGS_SINGLETON_ID)
+def get_app_settings(db: Session, user_id: uuid.UUID) -> AppSettings:
+    app_settings = db.scalar(
+        select(AppSettings).where(AppSettings.user_id == user_id),
+    )
     if app_settings is not None:
         return app_settings
 
-    app_settings = AppSettings(id=APP_SETTINGS_SINGLETON_ID)
+    app_settings = AppSettings(user_id=user_id)
     db.add(app_settings)
     db.commit()
     db.refresh(app_settings)
     return app_settings
 
 
-def update_app_settings(db: Session, data: AppSettingsUpdate) -> AppSettings:
-    app_settings = get_app_settings(db)
+def update_app_settings(
+    db: Session,
+    data: AppSettingsUpdate,
+    user_id: uuid.UUID,
+) -> AppSettings:
+    app_settings = get_app_settings(db, user_id)
     updates = data.model_dump(exclude_unset=True)
 
     if "discord_webhook_url" in updates:
@@ -46,12 +52,13 @@ def update_app_settings(db: Session, data: AppSettingsUpdate) -> AppSettings:
 def send_test_notification(
     db: Session,
     data: AppSettingsTestRequest,
+    user_id: uuid.UUID,
     *,
     sender=None,
 ) -> str:
     from app.tasks.notifications import send_discord_notification
 
-    app_settings = get_app_settings(db)
+    app_settings = get_app_settings(db, user_id)
     webhook_url = normalize_text(
         data.discord_webhook_url,
     ) or app_settings.discord_webhook_url

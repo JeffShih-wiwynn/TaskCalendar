@@ -6,7 +6,7 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 
 COPY frontend ./
-# Force same-origin API paths for the VPN-only deployment.
+# Force same-origin API paths for the Docker/Caddy deployment.
 RUN VITE_API_BASE_URL= npm run build
 
 FROM caddy:2-alpine

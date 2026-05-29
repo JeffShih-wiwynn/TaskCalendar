@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.app_settings import AppSettings
     from app.models.scheduled_task import ScheduledTask
     from app.models.task_list import TaskList
 
@@ -34,3 +35,4 @@ class User(Base):
 
     task_lists: Mapped[list["TaskList"]] = relationship(back_populates="user")
     scheduled_tasks: Mapped[list["ScheduledTask"]] = relationship(back_populates="user")
+    app_settings: Mapped["AppSettings | None"] = relationship(back_populates="user")

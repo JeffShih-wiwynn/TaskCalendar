@@ -39,16 +39,11 @@ def run_notification_worker(stop_event: threading.Event) -> None:
     while not stop_event.is_set():
         try:
             with SessionLocal() as db:
-                app_settings = get_app_settings(db)
                 send_due_notifications(
                     db,
                     now=now_in_app_timezone(),
-                    webhook_url=(
-                        app_settings.discord_webhook_url
-                        or settings.discord_webhook_url
-                    ),
+                    webhook_url=None,
                     app_base_url=settings.app_base_url,
-                    message_template=app_settings.discord_message_template,
                 )
         except Exception:
             logger.exception("Notification worker loop failed")
@@ -64,9 +59,6 @@ def send_due_notifications(
     message_template: str | None = None,
     sender: Callable[[str, str], None] | None = None,
 ) -> int:
-    if not webhook_url:
-        return 0
-
     if sender is None:
         sender = send_discord_notification
 
@@ -90,11 +82,23 @@ def send_due_notifications(
         notify_at = get_notify_at(task)
         if notify_at is None or notify_at > now:
             continue
+        task_settings = get_app_settings(db, task.user_id)
+        effective_webhook_url = (
+            webhook_url
+            or task_settings.discord_webhook_url
+            or settings.discord_webhook_url
+        )
+        if not effective_webhook_url:
+            continue
 
         try:
             sender(
-                webhook_url,
-                build_discord_message(task, app_base_url, message_template),
+                effective_webhook_url,
+                build_discord_message(
+                    task,
+                    app_base_url,
+                    message_template or task_settings.discord_message_template,
+                ),
             )
         except Exception:
             logger.exception("Failed to send Discord notification for task %s", task.id)

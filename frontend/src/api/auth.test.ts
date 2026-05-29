@@ -1,17 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-    changePassword,
-    clearStoredAuthToken,
-    deleteAccount,
-    getAuthHeaders,
-    login,
-} from "./auth";
+let authApi: typeof import("./auth");
 
 describe("auth api", () => {
-    beforeEach(() => {
+    beforeEach(async () => {
         vi.restoreAllMocks();
+        vi.unstubAllEnvs();
+        vi.stubEnv("VITE_API_BASE_URL", "");
+        vi.resetModules();
         window.localStorage.clear();
+        authApi = await import("./auth");
     });
 
     it("sends a password change request with the bearer token", async () => {
@@ -29,7 +27,7 @@ describe("auth api", () => {
         );
 
         await expect(
-            changePassword({
+            authApi.changePassword({
                 current_password: "old-pass",
                 new_password: "new-pass",
                 confirm_new_password: "new-pass",
@@ -37,7 +35,7 @@ describe("auth api", () => {
         ).resolves.toEqual({ message: "Password updated" });
 
         expect(fetch).toHaveBeenCalledWith(
-            `${import.meta.env.VITE_API_BASE_URL}/auth/password`,
+            "/auth/password",
             expect.objectContaining({
                 method: "PATCH",
                 headers: expect.objectContaining({
@@ -67,14 +65,14 @@ describe("auth api", () => {
             ) as typeof fetch,
         );
 
-        await expect(deleteAccount({ confirmation: "DELETE" })).resolves.toEqual(
+        await expect(authApi.deleteAccount({ confirmation: "DELETE" })).resolves.toEqual(
             {
                 message: "Account deleted",
             },
         );
 
         expect(fetch).toHaveBeenCalledWith(
-            `${import.meta.env.VITE_API_BASE_URL}/auth/me`,
+            "/auth/me",
             expect.objectContaining({
                 method: "DELETE",
                 headers: expect.objectContaining({
@@ -106,15 +104,15 @@ describe("auth api", () => {
         );
 
         await expect(
-            login({ username: "alice", password: "secret" }),
+            authApi.login({ username: "alice", password: "secret" }),
         ).resolves.toBe("test-token");
         expect(window.localStorage.getItem("calendar-auth-token")).toBe(
             "test-token",
         );
-        expect(getAuthHeaders()).toEqual({
+        expect(authApi.getAuthHeaders()).toEqual({
             Authorization: "Bearer test-token",
         });
-        clearStoredAuthToken();
+        authApi.clearStoredAuthToken();
         expect(window.localStorage.getItem("calendar-auth-token")).toBeNull();
     });
 });
