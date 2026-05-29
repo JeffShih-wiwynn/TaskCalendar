@@ -11,10 +11,10 @@ Current progress for the Playwright end-to-end suite in `frontend/e2e/`.
 - Recurring task creation with daily recurrence, repeat-until date, materialized occurrence persistence, and calendar rendering after reload.
 - Backup export JSON shape.
 - Backup import/restore for an isolated account, including replacement semantics after local task deletion/mutation.
+- Settings persistence for local Working hours start/end values across reload.
 
 ## Pending High-Value Flows
 
-- Settings persistence.
 - Category/list management.
 - Completed-task visibility toggle.
 - Multi-session behavior.

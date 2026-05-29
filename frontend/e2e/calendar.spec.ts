@@ -512,4 +512,28 @@ test.describe('Calendar E2E', () => {
       };
     }).toEqual({ restored: restoredNotes, replacement: false });
   });
+
+  test('persists working hours settings after reload', async ({ page, request }) => {
+    const user = await registerUser(request, 'settings');
+    await openAuthenticatedApp(page, user);
+
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Working hours' }).click();
+    const workingHoursForm = page.locator('.working-hours-form');
+
+    await workingHoursForm.getByLabel('Start time').fill('08:00');
+    await workingHoursForm.getByLabel('End time').fill('17:00');
+    await expect.poll(async () => page.evaluate(() => (
+      window.localStorage.getItem('calendar-working-hours')
+    ))).toBe(JSON.stringify({ start: '08:00', end: '17:00' }));
+    await workingHoursForm.getByRole('button', { name: 'Done' }).click();
+
+    await page.reload();
+    await expect(page.getByText(`Hello, ${user.username}`)).toBeVisible();
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Working hours' }).click();
+
+    await expect(page.locator('.working-hours-form').getByLabel('Start time')).toHaveValue('08:00');
+    await expect(page.locator('.working-hours-form').getByLabel('End time')).toHaveValue('17:00');
+  });
 });
