@@ -12,6 +12,8 @@ type ScheduledTask = {
   completed: boolean;
   scheduled_start: string | null;
   scheduled_end: string | null;
+  recurrence_rule: string | null;
+  recurrence_series_id: string | null;
 };
 
 type BackupPayload = {
@@ -101,6 +103,15 @@ async function switchTaskView(page: Page, label: string): Promise<void> {
     .getByRole('button', { name: label })
     .click();
   await expect(page.getByRole('button', { name: 'Task view' })).toContainText(label);
+}
+
+async function selectTaskFormDropdown(form: Locator, label: string, option: string): Promise<void> {
+  await form.getByRole('button', { name: label }).click();
+  await form
+    .getByRole('listbox', { name: `${label} options` })
+    .getByRole('option', { name: option })
+    .click();
+  await expect(form.getByRole('button', { name: label })).toContainText(option);
 }
 
 function taskRow(page: Page, title: string): Locator {
@@ -313,6 +324,56 @@ test.describe('Calendar E2E', () => {
     const afterReload = (await listTasks(request, user)).find((task) => task.id === createdTask.id);
     expect(afterReload?.scheduled_start).toBe(afterResize?.scheduled_start);
     expect(afterReload?.scheduled_end).toBe(afterResize?.scheduled_end);
+  });
+
+  test('creates a daily recurring task and persists generated occurrences', async ({ page, request }) => {
+    const user = await registerUser(request, 'recurrence');
+    await openAuthenticatedApp(page, user);
+    await switchTaskView(page, 'Inbox');
+
+    const title = uniqueName('recurring');
+    const startDate = dateInputValue(localDate());
+    const untilDate = dateInputValue(localDate(1));
+    const form = page.locator('#task-create-form');
+
+    await page.getByRole('button', { name: 'Create task' }).click();
+    await expect(page.getByRole('heading', { name: 'Create task' })).toBeVisible();
+    await form.getByLabel('Title').fill(title);
+    await form.getByLabel('Start date').fill(startDate);
+    await form.getByLabel('Start time').fill('09:00');
+    await form.getByLabel('End date').fill(startDate);
+    await form.getByLabel('End time').fill('10:00');
+    await selectTaskFormDropdown(form, 'Repeat', 'Daily');
+    await selectTaskFormDropdown(form, 'Until', 'On date');
+    await form.getByLabel('Repeat end date').fill(untilDate);
+    await page.getByRole('button', { name: 'Create' }).click();
+
+    await expect(calendarEvent(page, title)).toBeVisible();
+
+    await expect.poll(async () => {
+      const tasks = await listTasks(request, user);
+      return tasks.filter((task) => task.title === title).length;
+    }).toBe(2);
+
+    const occurrences = (await listTasks(request, user))
+      .filter((task) => task.title === title)
+      .sort((first, second) => (
+        String(first.scheduled_start).localeCompare(String(second.scheduled_start))
+      ));
+    const seriesIds = new Set(occurrences.map((task) => task.recurrence_series_id));
+
+    expect(seriesIds.size).toBe(1);
+    expect(seriesIds.has(null)).toBe(false);
+    expect(occurrences.every((task) => (
+      task.recurrence_rule?.startsWith('FREQ=DAILY;INTERVAL=1;UNTIL=')
+    ))).toBe(true);
+    expect(occurrences.map((task) => (
+      task.scheduled_start ? dateInputValue(new Date(task.scheduled_start)) : null
+    ))).toEqual([startDate, untilDate]);
+
+    await page.reload();
+    await expect(page.getByText(`Hello, ${user.username}`)).toBeVisible();
+    await expect(calendarEvent(page, title)).toBeVisible();
   });
 
   test('exports backup JSON with the expected shape', async ({ page, request }) => {
