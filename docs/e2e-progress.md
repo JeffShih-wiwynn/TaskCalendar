@@ -14,10 +14,10 @@ Current progress for the Playwright end-to-end suite in `frontend/e2e/`.
 - Settings persistence for local Working hours start/end values across reload.
 - Completed-task visibility toggle for scheduled tasks in the Today list and calendar, including reload persistence.
 - Category/list management for creating a category, assigning a task, filtering by category, and reload persistence.
+- Multi-session consistency for one account across independent browser contexts after reload, covering create, edit, and delete.
 
 ## Pending High-Value Flows
 
-- Multi-session behavior.
 - Production Docker E2E.
 
 ## Guardrails

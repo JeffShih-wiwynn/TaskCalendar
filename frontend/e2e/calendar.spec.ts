@@ -670,4 +670,64 @@ test.describe('Calendar E2E', () => {
     await expect(taskRow(page, categorizedTitle)).toBeVisible();
     await expect(taskRow(page, uncategorizedTitle)).toHaveCount(0);
   });
+
+  test('persists task changes across independent sessions after reload', async ({ browser, request }) => {
+    const user = await registerUser(request, 'multi-session');
+    const contextA = await browser.newContext();
+    const contextB = await browser.newContext();
+    const pageA = await contextA.newPage();
+    const pageB = await contextB.newPage();
+    const title = uniqueName('shared-task');
+    const editedTitle = uniqueName('shared-task-edited');
+
+    try {
+      await openAuthenticatedApp(pageA, user);
+      await openAuthenticatedApp(pageB, user);
+      await switchTaskView(pageA, 'Inbox');
+      await switchTaskView(pageB, 'Inbox');
+
+      await createUnscheduledTask(pageA, title);
+      await expect.poll(async () => {
+        const tasks = await listTasks(request, user);
+        return tasks.some((task) => task.title === title);
+      }).toBe(true);
+
+      await pageB.reload();
+      await expect(pageB.getByText(`Hello, ${user.username}`)).toBeVisible();
+      await switchTaskView(pageB, 'Inbox');
+      await expect(taskRow(pageB, title)).toBeVisible();
+
+      await taskRow(pageA, title).click();
+      await expect(pageA.getByRole('heading', { name: 'Edit task' })).toBeVisible();
+      await pageA.locator('#task-edit-form').getByLabel('Title').fill(editedTitle);
+      await pageA.getByRole('button', { name: 'Done' }).click();
+      await expect(taskRow(pageA, editedTitle)).toBeVisible();
+      await expect.poll(async () => {
+        const tasks = await listTasks(request, user);
+        return tasks.some((task) => task.title === editedTitle);
+      }).toBe(true);
+
+      await pageB.reload();
+      await expect(pageB.getByText(`Hello, ${user.username}`)).toBeVisible();
+      await switchTaskView(pageB, 'Inbox');
+      await expect(taskRow(pageB, editedTitle)).toBeVisible();
+      await expect(taskRow(pageB, title)).toHaveCount(0);
+
+      await taskRow(pageA, editedTitle).click();
+      await pageA.getByRole('button', { name: 'Delete' }).click();
+      await expect(taskRow(pageA, editedTitle)).toHaveCount(0);
+      await expect.poll(async () => {
+        const tasks = await listTasks(request, user);
+        return tasks.some((task) => task.title === editedTitle);
+      }).toBe(false);
+
+      await pageB.reload();
+      await expect(pageB.getByText(`Hello, ${user.username}`)).toBeVisible();
+      await switchTaskView(pageB, 'Inbox');
+      await expect(taskRow(pageB, editedTitle)).toHaveCount(0);
+    } finally {
+      await contextA.close();
+      await contextB.close();
+    }
+  });
 });
