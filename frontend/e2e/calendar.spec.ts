@@ -9,6 +9,7 @@ type E2EUser = {
 type ScheduledTask = {
   id: string;
   title: string;
+  notes: string | null;
   completed: boolean;
   scheduled_start: string | null;
   scheduled_end: string | null;
@@ -152,6 +153,17 @@ async function listTasks(request: APIRequestContext, user: E2EUser): Promise<Sch
   });
   expect(response.ok()).toBeTruthy();
   return response.json() as Promise<ScheduledTask[]>;
+}
+
+async function deleteTaskViaApi(
+  request: APIRequestContext,
+  user: E2EUser,
+  taskId: string,
+): Promise<void> {
+  const response = await request.delete(`${API_BASE_URL}/api/tasks/${taskId}`, {
+    headers: { Authorization: `Bearer ${user.token}` },
+  });
+  expect(response.ok()).toBeTruthy();
 }
 
 async function waitForTaskPatch(page: Page): Promise<void> {
@@ -417,5 +429,87 @@ test.describe('Calendar E2E', () => {
     expect(Array.isArray(payload.task_lists)).toBe(true);
     expect(payload.tasks.some((task) => task.title === title)).toBe(true);
     await expect(page.getByText('Schema version: 1')).toBeVisible();
+  });
+
+  test('restores a downloaded backup for the current account', async ({ page, request }) => {
+    const user = await registerUser(request, 'restore');
+    const restoredTitle = uniqueName('restore-task');
+    const replacementTitle = uniqueName('replacement-task');
+    const restoredNotes = 'Restored from E2E backup';
+    const createdTask = await createTaskViaApi(request, user, {
+      title: restoredTitle,
+      notes: restoredNotes,
+      notification_enabled: false,
+      notification_offset_minutes: 0,
+      notification_channel: null,
+    });
+
+    await openAuthenticatedApp(page, user);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Backup & Restore', exact: true }).click();
+
+    const downloadPromise = page.waitForEvent('download');
+    await page
+      .locator('.backup-settings-form')
+      .getByRole('button', { name: 'Backup', exact: true })
+      .click();
+    const download = await downloadPromise;
+    const stream = await download.createReadStream();
+    expect(stream).not.toBeNull();
+    if (!stream) {
+      return;
+    }
+
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    const backupJson = Buffer.concat(chunks).toString('utf8');
+    const backupPayload = JSON.parse(backupJson) as BackupPayload;
+    expect(backupPayload.tasks.some((task) => task.title === restoredTitle)).toBe(true);
+
+    await deleteTaskViaApi(request, user, createdTask.id);
+    await createTaskViaApi(request, user, {
+      title: replacementTitle,
+      notes: 'Created after backup export',
+      notification_enabled: false,
+      notification_offset_minutes: 0,
+      notification_channel: null,
+    });
+    await expect.poll(async () => {
+      const tasks = await listTasks(request, user);
+      return {
+        restored: tasks.some((task) => task.title === restoredTitle),
+        replacement: tasks.some((task) => task.title === replacementTitle),
+      };
+    }).toEqual({ restored: false, replacement: true });
+
+    await page
+      .getByLabel('Import backup (.json)')
+      .setInputFiles({
+        name: 'calendar-e2e-restore.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(backupJson, 'utf8'),
+      });
+    await expect(page.getByText('Selected: calendar-e2e-restore.json')).toBeVisible();
+
+    const importResponse = page.waitForResponse((response) => (
+      response.url().includes('/backup/import') &&
+      response.request().method() === 'POST' &&
+      response.ok()
+    ));
+    await page.getByRole('button', { name: 'Confirm restore' }).click();
+    await importResponse;
+
+    await expect(page.getByText(
+      `Imported ${backupPayload.tasks.length} tasks and ${backupPayload.task_lists.length} categories.`,
+    )).toBeVisible();
+    await expect.poll(async () => {
+      const tasks = await listTasks(request, user);
+      return {
+        restored: tasks.find((task) => task.title === restoredTitle)?.notes ?? null,
+        replacement: tasks.some((task) => task.title === replacementTitle),
+      };
+    }).toEqual({ restored: restoredNotes, replacement: false });
   });
 });
