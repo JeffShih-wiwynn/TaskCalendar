@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { exportBackup, fetchBackupExport, importBackup } from "./backup";
+let backupApi: typeof import("./backup");
 
 describe("exportBackup", () => {
-    beforeEach(() => {
+    beforeEach(async () => {
         vi.restoreAllMocks();
+        vi.unstubAllEnvs();
+        vi.stubEnv("VITE_API_BASE_URL", "");
+        vi.resetModules();
+        window.localStorage.clear();
+        backupApi = await import("./backup");
     });
 
     it("downloads the exported backup as a dated json file", async () => {
@@ -39,10 +44,10 @@ describe("exportBackup", () => {
         vi.useFakeTimers();
         vi.setSystemTime(new Date("2026-05-14T12:00:00Z"));
 
-        await exportBackup();
+        await backupApi.exportBackup();
 
         expect(fetch).toHaveBeenCalledWith(
-            `${import.meta.env.VITE_API_BASE_URL}/backup/export`,
+            "/backup/export",
             expect.objectContaining({
                 headers: expect.objectContaining({
                     Authorization: "Bearer test-token",
@@ -76,10 +81,10 @@ describe("exportBackup", () => {
             ) as typeof fetch,
         );
 
-        await expect(fetchBackupExport()).resolves.toEqual(payload);
+        await expect(backupApi.fetchBackupExport()).resolves.toEqual(payload);
 
         expect(fetch).toHaveBeenCalledWith(
-            `${import.meta.env.VITE_API_BASE_URL}/backup/export`,
+            "/backup/export",
             expect.objectContaining({
                 method: "GET",
                 headers: expect.objectContaining({
@@ -115,13 +120,13 @@ describe("exportBackup", () => {
             task_lists: [],
         };
 
-        await expect(importBackup(payload)).resolves.toEqual({
+        await expect(backupApi.importBackup(payload)).resolves.toEqual({
             imported_task_lists: 1,
             imported_tasks: 2,
         });
 
         expect(fetch).toHaveBeenCalledWith(
-            `${import.meta.env.VITE_API_BASE_URL}/backup/import`,
+            "/backup/import",
             expect.objectContaining({
                 method: "POST",
                 headers: expect.objectContaining({

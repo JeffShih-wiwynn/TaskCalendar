@@ -1,9 +1,24 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { API_ROUTES, parseJsonResponse, requestJson } from "./base";
+let baseApi: typeof import("./base");
+
+async function loadBaseApiWithUrl(baseUrl: string) {
+    vi.unstubAllEnvs();
+    vi.stubEnv("VITE_API_BASE_URL", baseUrl);
+    vi.resetModules();
+    baseApi = await import("./base");
+    return baseApi;
+}
+
+beforeEach(async () => {
+    vi.restoreAllMocks();
+    await loadBaseApiWithUrl("");
+});
 
 describe("API_ROUTES", () => {
     it("keeps top-level route families explicit", () => {
+        const { API_ROUTES } = baseApi;
+
         expect(API_ROUTES.auth.login).toBe("/auth/login");
         expect(API_ROUTES.admin.users).toBe("/admin/users");
         expect(API_ROUTES.backup.export).toBe("/backup/export");
@@ -22,7 +37,9 @@ describe("parseJsonResponse", () => {
             },
         });
 
-        await expect(parseJsonResponse<{ ok: boolean }>(response)).resolves.toEqual({
+        await expect(
+            baseApi.parseJsonResponse<{ ok: boolean }>(response),
+        ).resolves.toEqual({
             ok: true,
         });
     });
@@ -34,7 +51,7 @@ describe("parseJsonResponse", () => {
             },
         });
 
-        await expect(parseJsonResponse(response)).rejects.toThrow(
+        await expect(baseApi.parseJsonResponse(response)).rejects.toThrow(
             "Expected JSON response from backend, received text/html",
         );
     });
@@ -51,11 +68,13 @@ describe("requestJson", () => {
         );
         vi.stubGlobal("fetch", fetchMock);
 
-        await expect(requestJson<{ ok: boolean }>("/api/test")).resolves.toEqual({
+        await expect(
+            baseApi.requestJson<{ ok: boolean }>("/api/test"),
+        ).resolves.toEqual({
             ok: true,
         });
         expect(fetchMock).toHaveBeenCalledWith(
-            `${import.meta.env.VITE_API_BASE_URL}/api/test`,
+            "/api/test",
             expect.objectContaining({
                 headers: expect.objectContaining({
                     "Content-Type": "application/json",
@@ -67,7 +86,9 @@ describe("requestJson", () => {
     it("returns undefined for empty 204 responses", async () => {
         vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
 
-        await expect(requestJson<void>("/api/test")).resolves.toBeUndefined();
+        await expect(
+            baseApi.requestJson<void>("/api/test"),
+        ).resolves.toBeUndefined();
     });
 
     it("uses the provided unauthorized error factory", async () => {
@@ -85,7 +106,7 @@ describe("requestJson", () => {
         );
 
         await expect(
-            requestJson("/api/test", {}, {
+            baseApi.requestJson("/api/test", {}, {
                 createUnauthorizedError: (message) =>
                     new TestAuthError(message),
             }),
@@ -102,13 +123,34 @@ describe("requestJson", () => {
         );
         vi.stubGlobal("fetch", fetchMock);
 
-        await requestJson("/health", {}, { includeContentType: false });
+        await baseApi.requestJson("/health", {}, { includeContentType: false });
 
         expect(fetchMock).toHaveBeenCalledWith(
-            `${import.meta.env.VITE_API_BASE_URL}/health`,
+            "/health",
             expect.objectContaining({
                 headers: {},
             }),
+        );
+    });
+
+    it("prefixes requests when a base URL is configured", async () => {
+        const { requestJson } = await loadBaseApiWithUrl(
+            "https://calendar.example.com",
+        );
+        const fetchMock = vi.fn(async () =>
+            new Response(JSON.stringify({ ok: true }), {
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            }),
+        );
+        vi.stubGlobal("fetch", fetchMock);
+
+        await requestJson("/api/test");
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            "https://calendar.example.com/api/test",
+            expect.any(Object),
         );
     });
 });
