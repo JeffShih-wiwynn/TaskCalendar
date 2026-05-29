@@ -1,5 +1,15 @@
 .DS_Store
+
+# Environment files
 .env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
 
 # Python
 __pycache__/
@@ -17,17 +27,31 @@ coverage/
 
 # Local database and editor files
 *.sqlite3
+*.sqlite
+*.db
+*.dump
+*.sql
 *.log
 .idea/
 .vscode/
 .calendar-dev/
 
 # Test
-./nohup.out
+nohup.out
 
 # docs
 docs/TODO.md
 
 # playwright
+playwright-report/
+test-results/
 frontend/playwright-report/
 frontend/test-results/
+*.trace.zip
+*.webm
+
+# Backup/export artifacts
+calendar-backup-*.json
+*.bak
+*.backup
+*.json.backup

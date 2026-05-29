@@ -156,10 +156,10 @@ Status:
 ```
 
 `scripts/dev.sh` is the public dispatcher for local development commands. Its implementation is split under `scripts/dev/` into config, Compose, env, process, database, backend, and frontend helpers.
-The tooling writes logs and PID files to `.calendar-dev/` and prints frontend/backend URLs using `100.64.0.2:5173` and `100.64.0.2:8000` by default.
-`100.64.0.2` is the default `DEV_HOST`; override it with `DEV_HOST=<reachable-ip> ./scripts/dev.sh start` when testing from another device.
+The tooling writes logs and PID files to `.calendar-dev/` and prints frontend/backend URLs using `127.0.0.1:5173` and `127.0.0.1:8000` by default.
+`127.0.0.1` is the default `DEV_HOST`; override it with `DEV_HOST=<reachable-ip> ./scripts/dev.sh start` when testing from another device.
 
-Local development uses `backend/.env` and `frontend/.env.local`; the dev script injects the host-specific backend overrides directly, so there is no backend `.env.local` file.
+Local development uses `backend/.env` and generated `frontend/.env.local`; both are ignored local files. The dev script injects the host-specific backend overrides directly, so there is no backend `.env.local` file.
 It starts or verifies the local PostgreSQL service in the `calendar-dev` Compose project, publishes database `calendar` on `127.0.0.1:5432` for the host backend, waits for it to accept connections, and runs Alembic migrations from the local backend checkout before backend startup.
 Docker deployment uses the `calendar` Compose project, `docker-compose.yml`, and the dedicated production Dockerfiles, but local development stays on `scripts/dev.sh`.
 The two stacks use separate PostgreSQL containers and volumes: dev uses `calendar-dev-postgres` with `calendar-dev_postgres_data`; Docker deployment uses `calendar-postgres` with `calendar_postgres_data`.
@@ -174,15 +174,15 @@ DATABASE_URL=postgresql+psycopg://calendar:calendar@127.0.0.1:5432/calendar .ven
 Expected development endpoints:
 
 ```text
-Frontend: http://100.64.0.2:5173
-Backend:  http://100.64.0.2:8000
-Health:   http://100.64.0.2:8000/health
+Frontend: http://127.0.0.1:5173
+Backend:  http://127.0.0.1:8000
+Health:   http://127.0.0.1:8000/health
 ```
 
 The expected login API URL is:
 
 ```text
-http://100.64.0.2:8000/auth/login
+http://127.0.0.1:8000/auth/login
 ```
 
 Troubleshooting:

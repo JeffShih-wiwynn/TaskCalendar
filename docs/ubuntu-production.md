@@ -56,10 +56,12 @@ JWT_ACCESS_TOKEN_EXPIRE_MINUTES=1440
 ```
 
 For the Docker deployment path in this repository, there is no repo-root `.env` requirement. The Docker Compose stack reads `backend/.env` directly.
+For the Docker deployment path, create both `backend/.env` and the repo-root `.env` from their examples.
 
 ## Initial Admin Account
 
 The app does not seed a default user or a default `root`/`111111` account. When the users table is empty, the first registered user becomes an admin. Admin user management is available in Settings -> Admin, and the last admin account cannot be deleted.
+Registration is open to anyone who can reach the app, so register the first admin account before exposing the service broadly.
 
 ## Backend Setup
 
@@ -185,9 +187,19 @@ The backend route layout is currently mixed across `/api/*`, `/auth/*`, `/admin/
 5. Restart the backend `systemd` service.
 6. Reload Caddy if the site config changed.
 
+## Before Exposing Publicly
+
+- Replace every example secret in the backend environment file.
+- Use a strong database password and strong `JWT_SECRET_KEY`.
+- Set `APP_BASE_URL` and `FRONTEND_ORIGINS` to the deployed HTTPS origin.
+- Serve the app over HTTPS.
+- Register the first admin account yourself.
+- Decide whether open registration is acceptable for your deployment.
+- Back up PostgreSQL before upgrades.
+
 ## Notes
 
 - Docker is not the primary production path yet.
 - This guide does not change the local development workflow.
-- Keep backend and frontend environment values separate from `backend/.env.local` and `frontend/.env.local`, which are for local development only.
+- Keep backend and frontend environment values in ignored env files only; use `.env.example`, `backend/.env.example`, and `frontend/.env.example` as public templates.
 - JSON backup/restore is user-scoped calendar data backup. It is separate from future ICS/VTODO export and does not include password hashes, JWT secrets, or user accounts.

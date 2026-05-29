@@ -75,12 +75,12 @@ DATABASE_URL=postgresql+psycopg://calendar:calendar@127.0.0.1:5432/calendar .ven
 Default dev URLs:
 
 ```text
-Frontend: http://100.64.0.2:5173
-Backend:  http://100.64.0.2:8000
-Health:   http://100.64.0.2:8000/health
+Frontend: http://127.0.0.1:5173
+Backend:  http://127.0.0.1:8000
+Health:   http://127.0.0.1:8000/health
 ```
 
-`100.64.0.2` is the default `DEV_HOST`. Override it with `DEV_HOST=<reachable-ip> ./scripts/dev.sh start` if needed.
+`127.0.0.1` is the default `DEV_HOST`. Override it with `DEV_HOST=<reachable-ip> ./scripts/dev.sh start` when testing from another device.
 
 If port `5173` or `8000` is busy, stop the old process or run `./scripts/dev.sh stop` before restarting.
 
@@ -106,5 +106,5 @@ For production, use [docs/ubuntu-production.md](docs/ubuntu-production.md) for t
 - `docker: command not found`: install Docker and the Compose plugin, then ensure your user can run Docker or use `sudo docker compose ...`.
 - `permission denied` when using Docker: add your user to the `docker` group, log out and back in, or run Docker commands with `sudo`.
 - Backend cannot connect to PostgreSQL: confirm `./scripts/dev.sh start` has started `calendar-dev-postgres`; if you are launching the backend manually, make sure `backend/.env` points at `127.0.0.1:5432`.
-- Frontend API requests fail: confirm the backend is running on `http://100.64.0.2:8000`, or override `DEV_HOST` before starting the dev stack.
+- Frontend API requests fail: confirm the backend is running on `http://127.0.0.1:8000`, or override `DEV_HOST` before starting the dev stack.
 - npm cache/log write errors in sandboxed automation: use normal terminal execution or set a project-local cache with `npm install --cache .npm-cache`.

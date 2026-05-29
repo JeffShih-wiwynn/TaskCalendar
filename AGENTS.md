@@ -69,7 +69,7 @@ Background stack helpers:
 ./scripts/dev.sh status
 ```
 
-For remote testing, use `DEV_HOST=<reachable-ip> ./scripts/dev.sh start`. The default `DEV_HOST` is `100.64.0.2`.
+For remote testing, use `DEV_HOST=<reachable-ip> ./scripts/dev.sh start`. The default `DEV_HOST` is `127.0.0.1`.
 Local development uses Compose project `calendar-dev`, container `calendar-dev-postgres`, database `calendar`, and host port `127.0.0.1:5432`. Docker deployment uses Compose project `calendar`.
 `./scripts/dev.sh reset-db` drops and recreates only the local dev `calendar` database, then runs migrations from the local backend checkout. `./scripts/dev.sh destroy-db` requires typing `DESTROY` and removes the local dev PostgreSQL volume.
 
