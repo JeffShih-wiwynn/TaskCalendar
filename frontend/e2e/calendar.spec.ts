@@ -11,10 +11,17 @@ type ScheduledTask = {
   title: string;
   notes: string | null;
   completed: boolean;
+  list_id: string | null;
   scheduled_start: string | null;
   scheduled_end: string | null;
   recurrence_rule: string | null;
   recurrence_series_id: string | null;
+};
+
+type TaskList = {
+  id: string;
+  name: string;
+  color: string;
 };
 
 type BackupPayload = {
@@ -155,6 +162,14 @@ async function listTasks(request: APIRequestContext, user: E2EUser): Promise<Sch
   return response.json() as Promise<ScheduledTask[]>;
 }
 
+async function listTaskLists(request: APIRequestContext, user: E2EUser): Promise<TaskList[]> {
+  const response = await request.get(`${API_BASE_URL}/api/task-lists`, {
+    headers: { Authorization: `Bearer ${user.token}` },
+  });
+  expect(response.ok()).toBeTruthy();
+  return response.json() as Promise<TaskList[]>;
+}
+
 async function deleteTaskViaApi(
   request: APIRequestContext,
   user: E2EUser,
@@ -186,6 +201,21 @@ async function dragLocatorTo(locator: Locator, x: number, y: number): Promise<vo
   await page.mouse.down();
   await page.mouse.move(x, y, { steps: 12 });
   await page.mouse.up();
+}
+
+async function createCategoryViaUi(page: Page, name: string): Promise<void> {
+  await page.getByRole('button', { name: 'Task category' }).click();
+  await page.getByRole('button', { name: 'Add category' }).click();
+  await page.getByLabel('New category', { exact: true }).fill(name);
+
+  const createResponse = page.waitForResponse((response) => (
+    response.url().includes('/api/task-lists') &&
+    response.request().method() === 'POST' &&
+    response.ok()
+  ));
+  await page.getByRole('button', { name: 'Add category' }).click();
+  await createResponse;
+  await expect(page.getByRole('button', { name: 'Task category' })).toBeVisible();
 }
 
 test.describe('Calendar E2E', () => {
@@ -584,5 +614,60 @@ test.describe('Calendar E2E', () => {
 
     await expect(taskRow(page, title)).toBeVisible();
     await expect(calendarEvent(page, title)).toBeVisible();
+  });
+
+  test('creates a category and filters assigned tasks', async ({ page, request }) => {
+    const user = await registerUser(request, 'category');
+    const categoryName = uniqueName('category');
+    const uncategorizedTitle = uniqueName('uncategorized');
+    const categorizedTitle = uniqueName('categorized');
+
+    await openAuthenticatedApp(page, user);
+    await createUnscheduledTask(page, uncategorizedTitle);
+    await createCategoryViaUi(page, categoryName);
+
+    await expect.poll(async () => {
+      const taskLists = await listTaskLists(request, user);
+      return taskLists.some((taskList) => taskList.name === categoryName);
+    }).toBe(true);
+
+    await createUnscheduledTask(page, categorizedTitle);
+    await expect.poll(async () => {
+      const [taskLists, tasks] = await Promise.all([
+        listTaskLists(request, user),
+        listTasks(request, user),
+      ]);
+      const category = taskLists.find((taskList) => taskList.name === categoryName);
+      const categorizedTask = tasks.find((task) => task.title === categorizedTitle);
+      return Boolean(category && categorizedTask?.list_id === category.id);
+    }).toBe(true);
+
+    await page.getByRole('button', { name: 'Task category' }).click();
+    await page.getByRole('switch', { name: 'All' }).click();
+    await page.getByRole('switch', { name: 'None' }).click();
+    await page.getByRole('button', { name: 'Task category' }).click();
+
+    await expect(taskRow(page, categorizedTitle)).toBeVisible();
+    await expect(taskRow(page, uncategorizedTitle)).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Task category' }).click();
+    await page.getByRole('switch', { name: categoryName }).click();
+    await page.getByRole('switch', { name: 'None' }).click();
+    await page.getByRole('button', { name: 'Task category' }).click();
+
+    await expect(taskRow(page, categorizedTitle)).toHaveCount(0);
+    await expect(taskRow(page, uncategorizedTitle)).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByText(`Hello, ${user.username}`)).toBeVisible();
+    await switchTaskView(page, 'Inbox');
+    await page.getByRole('button', { name: 'Task category' }).click();
+    await expect(page.getByRole('switch', { name: categoryName })).toBeVisible();
+    await page.getByRole('switch', { name: 'All' }).click();
+    await page.getByRole('switch', { name: 'None' }).click();
+    await page.getByRole('button', { name: 'Task category' }).click();
+
+    await expect(taskRow(page, categorizedTitle)).toBeVisible();
+    await expect(taskRow(page, uncategorizedTitle)).toHaveCount(0);
   });
 });
