@@ -524,7 +524,9 @@ export function App() {
     const [activeView, setActiveView] = useState<TaskView>("today");
     const [mobileScreen, setMobileScreen] = useState<MobileScreen>("today");
     const [upcomingDays, setUpcomingDays] = useState(7);
-    const [showCompletedTasks, setShowCompletedTasks] = useState(true);
+    const [showCompletedTasks, setShowCompletedTasks] = useState(
+        getInitialShowCompletedTasks,
+    );
     const [activeListId, setActiveListId] = useState<string | null>(null);
     const [areAllCategoriesVisible, setAreAllCategoriesVisible] =
         useState(true);
@@ -1366,6 +1368,10 @@ export function App() {
     useEffect(() => {
         saveWorkingHours(workingHours);
     }, [workingHours]);
+
+    useEffect(() => {
+        saveShowCompletedTasks(showCompletedTasks);
+    }, [showCompletedTasks]);
 
     useEffect(() => {
         setCategoryVisibility((current) =>
@@ -9180,6 +9186,33 @@ function saveWorkingHours(workingHours: WorkingHoursSettings): void {
     }
 }
 
+function getInitialShowCompletedTasks(): boolean {
+    try {
+        const stored = window.localStorage?.getItem(
+            "calendar-show-completed-tasks",
+        );
+        if (stored === null) {
+            return true;
+        }
+
+        const parsed = JSON.parse(stored);
+        return typeof parsed === "boolean" ? parsed : true;
+    } catch {
+        return true;
+    }
+}
+
+function saveShowCompletedTasks(showCompletedTasks: boolean): void {
+    try {
+        window.localStorage?.setItem(
+            "calendar-show-completed-tasks",
+            JSON.stringify(showCompletedTasks),
+        );
+    } catch {
+        // Completed-task visibility persistence is optional.
+    }
+}
+
 function getInitialUnscheduledOrder(): string[] {
     try {
         const storedOrder = window.localStorage?.getItem(
@@ -9215,6 +9248,7 @@ function clearStoredUserPreferences(): void {
         window.localStorage?.removeItem("calendar-sidebar");
         window.localStorage?.removeItem("calendar-sidebar-width");
         window.localStorage?.removeItem("calendar-working-hours");
+        window.localStorage?.removeItem("calendar-show-completed-tasks");
         window.localStorage?.removeItem("calendar-unscheduled-order");
     } catch {
         // Preference clearing is optional.

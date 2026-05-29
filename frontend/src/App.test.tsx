@@ -1163,6 +1163,49 @@ describe("App", () => {
 
         expect(showCompletedSwitch).toHaveAttribute("aria-checked", "true");
         expect(showCompletedSwitch).toHaveClass("sidebar-switch-on");
+        await waitFor(() =>
+            expect(
+                window.localStorage.getItem(
+                    "calendar-show-completed-tasks",
+                ),
+            ).toBe("true"),
+        );
+    });
+
+    it("loads persisted completed tasks visibility from localStorage", async () => {
+        window.localStorage.setItem("calendar-show-completed-tasks", "false");
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        const showCompletedSwitch = screen.getByRole("switch", {
+            name: "Show completed tasks",
+        });
+
+        expect(showCompletedSwitch).toHaveAttribute("aria-checked", "false");
+        expect(showCompletedSwitch).not.toHaveClass("sidebar-switch-on");
+    });
+
+    it("stores completed tasks visibility changes in localStorage", async () => {
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(
+            screen.getByRole("switch", { name: "Show completed tasks" }),
+        );
+
+        await waitFor(() =>
+            expect(
+                screen.getByRole("switch", { name: "Show completed tasks" }),
+            ).toHaveAttribute("aria-checked", "false"),
+        );
+        await waitFor(() =>
+            expect(
+                window.localStorage.getItem(
+                    "calendar-show-completed-tasks",
+                ),
+            ).toBe("false"),
+        );
     });
 
     it("shows working hours settings with default values", async () => {

@@ -571,5 +571,18 @@ test.describe('Calendar E2E', () => {
     await expect(page.getByRole('switch', { name: 'Show completed tasks' })).toHaveAttribute('aria-checked', 'false');
     await expect(taskRow(page, title)).toHaveCount(0);
     await expect(calendarEvent(page, title)).toHaveCount(0);
+
+    await page.reload();
+    await expect(page.getByText(`Hello, ${user.username}`)).toBeVisible();
+    await expect(taskRow(page, title)).toHaveCount(0);
+    await expect(calendarEvent(page, title)).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await expect(page.getByRole('switch', { name: 'Show completed tasks' })).toHaveAttribute('aria-checked', 'false');
+    await page.getByRole('switch', { name: 'Show completed tasks' }).click();
+    await page.getByRole('button', { name: 'Return to sidebar' }).click();
+
+    await expect(taskRow(page, title)).toBeVisible();
+    await expect(calendarEvent(page, title)).toBeVisible();
   });
 });

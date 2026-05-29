@@ -12,7 +12,7 @@ Current progress for the Playwright end-to-end suite in `frontend/e2e/`.
 - Backup export JSON shape.
 - Backup import/restore for an isolated account, including replacement semantics after local task deletion/mutation.
 - Settings persistence for local Working hours start/end values across reload.
-- Completed-task visibility toggle for scheduled tasks in the Today list and calendar.
+- Completed-task visibility toggle for scheduled tasks in the Today list and calendar, including reload persistence.
 
 ## Pending High-Value Flows
 
