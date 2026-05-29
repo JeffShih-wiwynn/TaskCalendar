@@ -1,4 +1,4 @@
-# Calendar MVP
+# TaskCalendar
 
 Self-hosted scheduled task calendar app. The MVP is web-first with a React + TypeScript frontend, a FastAPI backend, and PostgreSQL for local development and production.
 
