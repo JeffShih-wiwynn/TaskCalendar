@@ -536,4 +536,40 @@ test.describe('Calendar E2E', () => {
     await expect(page.locator('.working-hours-form').getByLabel('Start time')).toHaveValue('08:00');
     await expect(page.locator('.working-hours-form').getByLabel('End time')).toHaveValue('17:00');
   });
+
+  test('toggles completed task visibility', async ({ page, request }) => {
+    const user = await registerUser(request, 'completed-visibility');
+    const title = uniqueName('completed-visible');
+    const { start, end } = localIsoForHour(11);
+
+    await createTaskViaApi(request, user, {
+      title,
+      scheduled_start: start,
+      scheduled_end: end,
+      notification_enabled: false,
+      notification_offset_minutes: 0,
+      notification_channel: null,
+    });
+
+    await openAuthenticatedApp(page, user);
+    await expect(taskRow(page, title)).toBeVisible();
+    await expect(calendarEvent(page, title)).toBeVisible();
+
+    await taskRow(page, title).click();
+    await expect(page.getByRole('heading', { name: 'Edit task' })).toBeVisible();
+    await page.locator('#task-edit-form').getByLabel('Completed').check();
+    await page.getByRole('button', { name: 'Done' }).click();
+    await expect.poll(async () => {
+      const tasks = await listTasks(request, user);
+      return tasks.find((task) => task.title === title)?.completed;
+    }).toBe(true);
+    await expect(taskRow(page, title)).toBeVisible();
+    await expect(calendarEvent(page, title)).toBeVisible();
+
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('switch', { name: 'Show completed tasks' }).click();
+    await expect(page.getByRole('switch', { name: 'Show completed tasks' })).toHaveAttribute('aria-checked', 'false');
+    await expect(taskRow(page, title)).toHaveCount(0);
+    await expect(calendarEvent(page, title)).toHaveCount(0);
+  });
 });
