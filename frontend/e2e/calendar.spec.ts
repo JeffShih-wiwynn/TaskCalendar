@@ -9,9 +9,19 @@ type E2EUser = {
 type ScheduledTask = {
   id: string;
   title: string;
+  notes: string | null;
   completed: boolean;
+  list_id: string | null;
   scheduled_start: string | null;
   scheduled_end: string | null;
+  recurrence_rule: string | null;
+  recurrence_series_id: string | null;
+};
+
+type TaskList = {
+  id: string;
+  name: string;
+  color: string;
 };
 
 type BackupPayload = {
@@ -103,6 +113,15 @@ async function switchTaskView(page: Page, label: string): Promise<void> {
   await expect(page.getByRole('button', { name: 'Task view' })).toContainText(label);
 }
 
+async function selectTaskFormDropdown(form: Locator, label: string, option: string): Promise<void> {
+  await form.getByRole('button', { name: label }).click();
+  await form
+    .getByRole('listbox', { name: `${label} options` })
+    .getByRole('option', { name: option })
+    .click();
+  await expect(form.getByRole('button', { name: label })).toContainText(option);
+}
+
 function taskRow(page: Page, title: string): Locator {
   return page.getByTestId('task-row').filter({ hasText: title }).first();
 }
@@ -143,6 +162,25 @@ async function listTasks(request: APIRequestContext, user: E2EUser): Promise<Sch
   return response.json() as Promise<ScheduledTask[]>;
 }
 
+async function listTaskLists(request: APIRequestContext, user: E2EUser): Promise<TaskList[]> {
+  const response = await request.get(`${API_BASE_URL}/api/task-lists`, {
+    headers: { Authorization: `Bearer ${user.token}` },
+  });
+  expect(response.ok()).toBeTruthy();
+  return response.json() as Promise<TaskList[]>;
+}
+
+async function deleteTaskViaApi(
+  request: APIRequestContext,
+  user: E2EUser,
+  taskId: string,
+): Promise<void> {
+  const response = await request.delete(`${API_BASE_URL}/api/tasks/${taskId}`, {
+    headers: { Authorization: `Bearer ${user.token}` },
+  });
+  expect(response.ok()).toBeTruthy();
+}
+
 async function waitForTaskPatch(page: Page): Promise<void> {
   await page.waitForResponse((response) => (
     response.url().includes('/api/tasks/') &&
@@ -163,6 +201,21 @@ async function dragLocatorTo(locator: Locator, x: number, y: number): Promise<vo
   await page.mouse.down();
   await page.mouse.move(x, y, { steps: 12 });
   await page.mouse.up();
+}
+
+async function createCategoryViaUi(page: Page, name: string): Promise<void> {
+  await page.getByRole('button', { name: 'Task category' }).click();
+  await page.getByRole('button', { name: 'Add category' }).click();
+  await page.getByLabel('New category', { exact: true }).fill(name);
+
+  const createResponse = page.waitForResponse((response) => (
+    response.url().includes('/api/task-lists') &&
+    response.request().method() === 'POST' &&
+    response.ok()
+  ));
+  await page.getByRole('button', { name: 'Add category' }).click();
+  await createResponse;
+  await expect(page.getByRole('button', { name: 'Task category' })).toBeVisible();
 }
 
 test.describe('Calendar E2E', () => {
@@ -315,6 +368,56 @@ test.describe('Calendar E2E', () => {
     expect(afterReload?.scheduled_end).toBe(afterResize?.scheduled_end);
   });
 
+  test('creates a daily recurring task and persists generated occurrences', async ({ page, request }) => {
+    const user = await registerUser(request, 'recurrence');
+    await openAuthenticatedApp(page, user);
+    await switchTaskView(page, 'Inbox');
+
+    const title = uniqueName('recurring');
+    const startDate = dateInputValue(localDate());
+    const untilDate = dateInputValue(localDate(1));
+    const form = page.locator('#task-create-form');
+
+    await page.getByRole('button', { name: 'Create task' }).click();
+    await expect(page.getByRole('heading', { name: 'Create task' })).toBeVisible();
+    await form.getByLabel('Title').fill(title);
+    await form.getByLabel('Start date').fill(startDate);
+    await form.getByLabel('Start time').fill('09:00');
+    await form.getByLabel('End date').fill(startDate);
+    await form.getByLabel('End time').fill('10:00');
+    await selectTaskFormDropdown(form, 'Repeat', 'Daily');
+    await selectTaskFormDropdown(form, 'Until', 'On date');
+    await form.getByLabel('Repeat end date').fill(untilDate);
+    await page.getByRole('button', { name: 'Create' }).click();
+
+    await expect(calendarEvent(page, title)).toBeVisible();
+
+    await expect.poll(async () => {
+      const tasks = await listTasks(request, user);
+      return tasks.filter((task) => task.title === title).length;
+    }).toBe(2);
+
+    const occurrences = (await listTasks(request, user))
+      .filter((task) => task.title === title)
+      .sort((first, second) => (
+        String(first.scheduled_start).localeCompare(String(second.scheduled_start))
+      ));
+    const seriesIds = new Set(occurrences.map((task) => task.recurrence_series_id));
+
+    expect(seriesIds.size).toBe(1);
+    expect(seriesIds.has(null)).toBe(false);
+    expect(occurrences.every((task) => (
+      task.recurrence_rule?.startsWith('FREQ=DAILY;INTERVAL=1;UNTIL=')
+    ))).toBe(true);
+    expect(occurrences.map((task) => (
+      task.scheduled_start ? dateInputValue(new Date(task.scheduled_start)) : null
+    ))).toEqual([startDate, untilDate]);
+
+    await page.reload();
+    await expect(page.getByText(`Hello, ${user.username}`)).toBeVisible();
+    await expect(calendarEvent(page, title)).toBeVisible();
+  });
+
   test('exports backup JSON with the expected shape', async ({ page, request }) => {
     const user = await registerUser(request, 'backup');
     const title = uniqueName('backup-task');
@@ -356,5 +459,215 @@ test.describe('Calendar E2E', () => {
     expect(Array.isArray(payload.task_lists)).toBe(true);
     expect(payload.tasks.some((task) => task.title === title)).toBe(true);
     await expect(page.getByText('Schema version: 1')).toBeVisible();
+  });
+
+  test('restores a downloaded backup for the current account', async ({ page, request }) => {
+    const user = await registerUser(request, 'restore');
+    const restoredTitle = uniqueName('restore-task');
+    const replacementTitle = uniqueName('replacement-task');
+    const restoredNotes = 'Restored from E2E backup';
+    const createdTask = await createTaskViaApi(request, user, {
+      title: restoredTitle,
+      notes: restoredNotes,
+      notification_enabled: false,
+      notification_offset_minutes: 0,
+      notification_channel: null,
+    });
+
+    await openAuthenticatedApp(page, user);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Backup & Restore', exact: true }).click();
+
+    const downloadPromise = page.waitForEvent('download');
+    await page
+      .locator('.backup-settings-form')
+      .getByRole('button', { name: 'Backup', exact: true })
+      .click();
+    const download = await downloadPromise;
+    const stream = await download.createReadStream();
+    expect(stream).not.toBeNull();
+    if (!stream) {
+      return;
+    }
+
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    const backupJson = Buffer.concat(chunks).toString('utf8');
+    const backupPayload = JSON.parse(backupJson) as BackupPayload;
+    expect(backupPayload.tasks.some((task) => task.title === restoredTitle)).toBe(true);
+
+    await deleteTaskViaApi(request, user, createdTask.id);
+    await createTaskViaApi(request, user, {
+      title: replacementTitle,
+      notes: 'Created after backup export',
+      notification_enabled: false,
+      notification_offset_minutes: 0,
+      notification_channel: null,
+    });
+    await expect.poll(async () => {
+      const tasks = await listTasks(request, user);
+      return {
+        restored: tasks.some((task) => task.title === restoredTitle),
+        replacement: tasks.some((task) => task.title === replacementTitle),
+      };
+    }).toEqual({ restored: false, replacement: true });
+
+    await page
+      .getByLabel('Import backup (.json)')
+      .setInputFiles({
+        name: 'calendar-e2e-restore.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(backupJson, 'utf8'),
+      });
+    await expect(page.getByText('Selected: calendar-e2e-restore.json')).toBeVisible();
+
+    const importResponse = page.waitForResponse((response) => (
+      response.url().includes('/backup/import') &&
+      response.request().method() === 'POST' &&
+      response.ok()
+    ));
+    await page.getByRole('button', { name: 'Confirm restore' }).click();
+    await importResponse;
+
+    await expect(page.getByText(
+      `Imported ${backupPayload.tasks.length} tasks and ${backupPayload.task_lists.length} categories.`,
+    )).toBeVisible();
+    await expect.poll(async () => {
+      const tasks = await listTasks(request, user);
+      return {
+        restored: tasks.find((task) => task.title === restoredTitle)?.notes ?? null,
+        replacement: tasks.some((task) => task.title === replacementTitle),
+      };
+    }).toEqual({ restored: restoredNotes, replacement: false });
+  });
+
+  test('persists working hours settings after reload', async ({ page, request }) => {
+    const user = await registerUser(request, 'settings');
+    await openAuthenticatedApp(page, user);
+
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Working hours' }).click();
+    const workingHoursForm = page.locator('.working-hours-form');
+
+    await workingHoursForm.getByLabel('Start time').fill('08:00');
+    await workingHoursForm.getByLabel('End time').fill('17:00');
+    await expect.poll(async () => page.evaluate(() => (
+      window.localStorage.getItem('calendar-working-hours')
+    ))).toBe(JSON.stringify({ start: '08:00', end: '17:00' }));
+    await workingHoursForm.getByRole('button', { name: 'Done' }).click();
+
+    await page.reload();
+    await expect(page.getByText(`Hello, ${user.username}`)).toBeVisible();
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Working hours' }).click();
+
+    await expect(page.locator('.working-hours-form').getByLabel('Start time')).toHaveValue('08:00');
+    await expect(page.locator('.working-hours-form').getByLabel('End time')).toHaveValue('17:00');
+  });
+
+  test('toggles completed task visibility', async ({ page, request }) => {
+    const user = await registerUser(request, 'completed-visibility');
+    const title = uniqueName('completed-visible');
+    const { start, end } = localIsoForHour(11);
+
+    await createTaskViaApi(request, user, {
+      title,
+      scheduled_start: start,
+      scheduled_end: end,
+      notification_enabled: false,
+      notification_offset_minutes: 0,
+      notification_channel: null,
+    });
+
+    await openAuthenticatedApp(page, user);
+    await expect(taskRow(page, title)).toBeVisible();
+    await expect(calendarEvent(page, title)).toBeVisible();
+
+    await taskRow(page, title).click();
+    await expect(page.getByRole('heading', { name: 'Edit task' })).toBeVisible();
+    await page.locator('#task-edit-form').getByLabel('Completed').check();
+    await page.getByRole('button', { name: 'Done' }).click();
+    await expect.poll(async () => {
+      const tasks = await listTasks(request, user);
+      return tasks.find((task) => task.title === title)?.completed;
+    }).toBe(true);
+    await expect(taskRow(page, title)).toBeVisible();
+    await expect(calendarEvent(page, title)).toBeVisible();
+
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('switch', { name: 'Show completed tasks' }).click();
+    await expect(page.getByRole('switch', { name: 'Show completed tasks' })).toHaveAttribute('aria-checked', 'false');
+    await expect(taskRow(page, title)).toHaveCount(0);
+    await expect(calendarEvent(page, title)).toHaveCount(0);
+
+    await page.reload();
+    await expect(page.getByText(`Hello, ${user.username}`)).toBeVisible();
+    await expect(taskRow(page, title)).toHaveCount(0);
+    await expect(calendarEvent(page, title)).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await expect(page.getByRole('switch', { name: 'Show completed tasks' })).toHaveAttribute('aria-checked', 'false');
+    await page.getByRole('switch', { name: 'Show completed tasks' }).click();
+    await page.getByRole('button', { name: 'Return to sidebar' }).click();
+
+    await expect(taskRow(page, title)).toBeVisible();
+    await expect(calendarEvent(page, title)).toBeVisible();
+  });
+
+  test('creates a category and filters assigned tasks', async ({ page, request }) => {
+    const user = await registerUser(request, 'category');
+    const categoryName = uniqueName('category');
+    const uncategorizedTitle = uniqueName('uncategorized');
+    const categorizedTitle = uniqueName('categorized');
+
+    await openAuthenticatedApp(page, user);
+    await createUnscheduledTask(page, uncategorizedTitle);
+    await createCategoryViaUi(page, categoryName);
+
+    await expect.poll(async () => {
+      const taskLists = await listTaskLists(request, user);
+      return taskLists.some((taskList) => taskList.name === categoryName);
+    }).toBe(true);
+
+    await createUnscheduledTask(page, categorizedTitle);
+    await expect.poll(async () => {
+      const [taskLists, tasks] = await Promise.all([
+        listTaskLists(request, user),
+        listTasks(request, user),
+      ]);
+      const category = taskLists.find((taskList) => taskList.name === categoryName);
+      const categorizedTask = tasks.find((task) => task.title === categorizedTitle);
+      return Boolean(category && categorizedTask?.list_id === category.id);
+    }).toBe(true);
+
+    await page.getByRole('button', { name: 'Task category' }).click();
+    await page.getByRole('switch', { name: 'All' }).click();
+    await page.getByRole('switch', { name: 'None' }).click();
+    await page.getByRole('button', { name: 'Task category' }).click();
+
+    await expect(taskRow(page, categorizedTitle)).toBeVisible();
+    await expect(taskRow(page, uncategorizedTitle)).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Task category' }).click();
+    await page.getByRole('switch', { name: categoryName }).click();
+    await page.getByRole('switch', { name: 'None' }).click();
+    await page.getByRole('button', { name: 'Task category' }).click();
+
+    await expect(taskRow(page, categorizedTitle)).toHaveCount(0);
+    await expect(taskRow(page, uncategorizedTitle)).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByText(`Hello, ${user.username}`)).toBeVisible();
+    await switchTaskView(page, 'Inbox');
+    await page.getByRole('button', { name: 'Task category' }).click();
+    await expect(page.getByRole('switch', { name: categoryName })).toBeVisible();
+    await page.getByRole('switch', { name: 'All' }).click();
+    await page.getByRole('switch', { name: 'None' }).click();
+    await page.getByRole('button', { name: 'Task category' }).click();
+
+    await expect(taskRow(page, categorizedTitle)).toBeVisible();
+    await expect(taskRow(page, uncategorizedTitle)).toHaveCount(0);
   });
 });
