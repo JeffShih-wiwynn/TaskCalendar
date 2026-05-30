@@ -12,13 +12,14 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base
-from app.models import User
+from app.models import AppSettings, User
 from app.models.scheduled_task import ScheduledTask
 from app.core.config import settings
 from app.tasks.notifications import (
     DISCORD_WEBHOOK_USER_AGENT,
     apply_message_template,
     format_discord_webhook_error,
+    get_notify_at,
     read_discord_error_detail,
     send_discord_notification,
     send_due_notifications,
@@ -1599,7 +1600,7 @@ def test_send_due_notifications_preserves_all_day_notification_format(
 
     sent_count = send_due_notifications(
         db_session,
-        now=parse_dt("2026-05-27T00:00:00"),
+        now=parse_dt("2026-05-27T08:00:00"),
         webhook_url="https://discord.example/webhook",
         app_base_url=None,
         sender=lambda _url, message: sent_messages.append(message),
@@ -1607,6 +1608,194 @@ def test_send_due_notifications_preserves_all_day_notification_format(
 
     assert sent_count == 1
     assert sent_messages == ["Task due: All-day notify\nWhen: 2026-05-27 00:00"]
+
+
+def test_timed_task_on_time_reminder_uses_start_time(
+    db_session: Session,
+    user_id: uuid.UUID,
+) -> None:
+    task = create_task(
+        db_session,
+        user_id,
+        title="Timed on time",
+        scheduled_start=parse_dt("2026-05-08T10:00:00+00:00"),
+        scheduled_end=parse_dt("2026-05-08T11:00:00+00:00"),
+        notification_enabled=True,
+        notification_offset_minutes=0,
+        notification_channel="discord",
+    )
+
+    assert get_notify_at(task) == parse_dt("2026-05-08T10:00:00+00:00")
+
+
+@pytest.mark.parametrize(
+    ("offset_minutes", "expected"),
+    [
+        (15, "2026-05-08T09:45:00+00:00"),
+        (120, "2026-05-08T08:00:00+00:00"),
+        (2_880, "2026-05-06T10:00:00+00:00"),
+    ],
+)
+def test_timed_task_before_reminder_offsets_from_start_time(
+    db_session: Session,
+    user_id: uuid.UUID,
+    offset_minutes: int,
+    expected: str,
+) -> None:
+    task = create_task(
+        db_session,
+        user_id,
+        title="Timed before",
+        scheduled_start=parse_dt("2026-05-08T10:00:00+00:00"),
+        scheduled_end=parse_dt("2026-05-08T11:00:00+00:00"),
+        notification_enabled=True,
+        notification_offset_minutes=offset_minutes,
+        notification_channel="discord",
+    )
+
+    assert get_notify_at(task) == parse_dt(expected)
+
+
+def test_all_day_on_time_reminder_uses_working_hours_start(
+    db_session: Session,
+    user_id: uuid.UUID,
+) -> None:
+    db_session.add(AppSettings(user_id=user_id, working_hours_start="09:00"))
+    db_session.commit()
+    task = create_task(
+        db_session,
+        user_id,
+        title="All-day on time",
+        scheduled_start=parse_dt("2026-05-08T00:00:00+00:00"),
+        all_day=True,
+        notification_enabled=True,
+        notification_offset_minutes=0,
+        notification_channel="discord",
+    )
+
+    sent_messages: list[str] = []
+    sent_count = send_due_notifications(
+        db_session,
+        now=parse_dt("2026-05-08T09:00:00+00:00"),
+        webhook_url="https://discord.example/webhook",
+        app_base_url=None,
+        sender=lambda _url, message: sent_messages.append(message),
+    )
+
+    assert get_notify_at(task, working_hours_start="09:00") == parse_dt(
+        "2026-05-08T09:00:00+00:00",
+    )
+    assert sent_count == 1
+    assert sent_messages == ["Task due: All-day on time\nWhen: 2026-05-08 00:00"]
+
+
+def test_all_day_before_days_reminder_uses_working_hours_start(
+    db_session: Session,
+    user_id: uuid.UUID,
+) -> None:
+    db_session.add(AppSettings(user_id=user_id, working_hours_start="09:00"))
+    db_session.commit()
+    task = create_task(
+        db_session,
+        user_id,
+        title="All-day before",
+        scheduled_start=parse_dt("2026-05-08T00:00:00+00:00"),
+        all_day=True,
+        notification_enabled=True,
+        notification_offset_minutes=2_880,
+        notification_channel="discord",
+    )
+
+    assert get_notify_at(task, working_hours_start="09:00") == parse_dt(
+        "2026-05-06T09:00:00+00:00",
+    )
+
+
+def test_all_day_before_minutes_or_hours_is_rejected(
+    db_session: Session,
+    user_id: uuid.UUID,
+) -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        create_task(
+            db_session,
+            user_id,
+            title="Invalid all-day reminder",
+            scheduled_start=parse_dt("2026-05-08T00:00:00+00:00"),
+            all_day=True,
+            notification_enabled=True,
+            notification_offset_minutes=60,
+            notification_channel="discord",
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "All-day reminders only support day offsets"
+
+
+def test_recurring_timed_reminders_apply_per_occurrence(
+    db_session: Session,
+    user_id: uuid.UUID,
+) -> None:
+    first = create_task(
+        db_session,
+        user_id,
+        title="Recurring timed notify",
+        scheduled_start=parse_dt("2026-05-08T10:00:00+00:00"),
+        scheduled_end=parse_dt("2026-05-08T11:00:00+00:00"),
+        recurrence_rule="FREQ=DAILY;INTERVAL=1;UNTIL=2026-05-09T10:00:00+00:00",
+        notification_enabled=True,
+        notification_offset_minutes=60,
+        notification_channel="discord",
+    )
+    occurrences = service.list_tasks(db_session, user_id=user_id)
+    occurrences[0].notification_sent_at = parse_dt("2026-05-08T09:00:00+00:00")
+    db_session.add(occurrences[0])
+    db_session.commit()
+
+    sent_titles: list[str] = []
+    sent_count = send_due_notifications(
+        db_session,
+        now=parse_dt("2026-05-09T09:00:00+00:00"),
+        webhook_url="https://discord.example/webhook",
+        app_base_url=None,
+        sender=lambda _url, message: sent_titles.append(message.splitlines()[0]),
+    )
+
+    assert first.recurrence_series_id is not None
+    assert sent_count == 1
+    assert sent_titles == ["Task due: Recurring timed notify"]
+
+
+def test_recurring_all_day_reminders_use_occurrence_date_and_working_hours(
+    db_session: Session,
+    user_id: uuid.UUID,
+) -> None:
+    db_session.add(AppSettings(user_id=user_id, working_hours_start="09:00"))
+    db_session.commit()
+    create_task(
+        db_session,
+        user_id,
+        title="Recurring all-day notify",
+        scheduled_start=parse_dt("2026-05-08T00:00:00+00:00"),
+        all_day=True,
+        recurrence_rule="FREQ=DAILY;INTERVAL=1;UNTIL=2026-05-09T00:00:00+00:00",
+        notification_enabled=True,
+        notification_offset_minutes=1_440,
+        notification_channel="discord",
+    )
+    occurrences = service.list_tasks(db_session, user_id=user_id)
+    occurrences[0].notification_sent_at = parse_dt("2026-05-07T09:00:00+00:00")
+    db_session.add(occurrences[0])
+    db_session.commit()
+
+    sent_count = send_due_notifications(
+        db_session,
+        now=parse_dt("2026-05-08T09:00:00+00:00"),
+        webhook_url="https://discord.example/webhook",
+        app_base_url=None,
+        sender=lambda _url, _message: None,
+    )
+
+    assert sent_count == 1
 
 
 def test_apply_message_template_preserves_unknown_placeholders() -> None:

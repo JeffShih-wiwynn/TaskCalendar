@@ -204,6 +204,7 @@ const mocks = vi.hoisted(() => ({
         id: 1,
         discord_webhook_url: null,
         discord_message_template: null,
+        working_hours_start: "08:00",
         created_at: "",
         updated_at: "",
     },
@@ -214,6 +215,8 @@ const mocks = vi.hoisted(() => ({
         discord_message_template:
             (input.discord_message_template as string | null | undefined) ??
             null,
+        working_hours_start:
+            (input.working_hours_start as string | undefined) ?? "08:00",
         created_at: "",
         updated_at: "",
     })),
@@ -1804,6 +1807,54 @@ describe("App", () => {
 
         fireEvent.click(notesButton);
         expect(getNotesTextbox()).toHaveValue("Accordion note");
+    });
+
+    it("shows only simplified reminder choices", async () => {
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Open create task" }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Reminder" }));
+
+        const listbox = await screen.findByRole("listbox", {
+            name: "Reminder options",
+        });
+        expect(
+            within(listbox).getByRole("option", { name: "Does not remind" }),
+        ).toBeInTheDocument();
+        expect(
+            within(listbox).getByRole("option", { name: "On time" }),
+        ).toBeInTheDocument();
+        expect(
+            within(listbox).getByRole("option", { name: "Before" }),
+        ).toBeInTheDocument();
+        expect(within(listbox).queryByRole("option", { name: "Custom" })).toBeNull();
+        expect(
+            within(listbox).queryByRole("option", { name: "At time of event" }),
+        ).toBeNull();
+    });
+
+    it("limits all-day reminder before units to days and shows helper text", async () => {
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: "Open all-day create task",
+            }),
+        );
+        await selectTaskDropdownOption("Reminder", "Before");
+
+        expect(
+            screen.getByText(
+                "All-day reminders use the start of your working hours.",
+            ),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Reminder unit" }),
+        ).toBeNull();
+        expect(screen.getByText("days")).toBeInTheDocument();
+        expect(screen.queryByText("days before")).not.toBeInTheDocument();
     });
 
     it("renders the task form category dropdown outside the clipping panel", async () => {
@@ -4109,22 +4160,42 @@ describe("App", () => {
         fireEvent.change(screen.getByLabelText("Title"), {
             target: { value: "New task" },
         });
-        await selectTaskDropdownOption("Repeat", "Daily");
-        fireEvent.change(screen.getByLabelText("Every"), {
+        await selectTaskDropdownOption("Repeat", "day");
+        expect(screen.getByText("Repeats every")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Repeat" })).toHaveTextContent(
+            "day",
+        );
+        fireEvent.change(screen.getByLabelText("Repeats every"), {
             target: { value: "3" },
         });
-        expect(screen.getByText("Every")).toBeInTheDocument();
-        await selectTaskDropdownOption("Until", "On date");
-        expect(screen.getByText("Until")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Repeat" })).toHaveTextContent(
+            "days",
+        );
+        await selectTaskDropdownOption("Until", "Until");
+        expect(screen.getByRole("button", { name: "Until" })).toHaveTextContent(
+            "Until",
+        );
         fireEvent.change(screen.getByLabelText("Repeat end date"), {
             target: { value: "2026-06-08" },
         });
-        await selectTaskDropdownOption("Reminder", "Custom");
+        await selectTaskDropdownOption("Reminder", "Before");
         expect(screen.getByText("Remind")).toBeInTheDocument();
-        await selectTaskDropdownOption("Reminder unit", "Hours");
+        expect(
+            screen.getByRole("button", { name: "Reminder unit" }),
+        ).toHaveTextContent("Minutes");
+        fireEvent.change(screen.getByLabelText("Reminder amount"), {
+            target: { value: "1" },
+        });
+        expect(
+            screen.getByRole("button", { name: "Reminder unit" }),
+        ).toHaveTextContent("Minute");
+        await selectTaskDropdownOption("Reminder unit", "Hour");
         fireEvent.change(screen.getByLabelText("Reminder amount"), {
             target: { value: "4" },
         });
+        expect(
+            screen.getByRole("button", { name: "Reminder unit" }),
+        ).toHaveTextContent("Hours");
         fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
         await waitFor(() =>
@@ -4158,8 +4229,8 @@ describe("App", () => {
         fireEvent.change(screen.getByLabelText("Title"), {
             target: { value: "New task" },
         });
-        await selectTaskDropdownOption("Repeat", "Daily");
-        await selectTaskDropdownOption("Until", "On date");
+        await selectTaskDropdownOption("Repeat", "day");
+        await selectTaskDropdownOption("Until", "Until");
         fireEvent.change(screen.getByLabelText("Repeat end date"), {
             target: { value: "2026-05-07" },
         });
@@ -4370,7 +4441,7 @@ describe("App", () => {
             }),
         );
         await screen.findByRole("heading", { name: "Edit task" });
-        await selectTaskDropdownOption("Until", "On date");
+        await selectTaskDropdownOption("Until", "Until");
         fireEvent.change(screen.getByLabelText("Repeat end date"), {
             target: { value: "2026-05-07" },
         });
@@ -4493,16 +4564,25 @@ describe("App", () => {
         expect(screen.getByText("Remind")).toBeInTheDocument();
         expect(
             screen.getByRole("button", { name: "Reminder" }),
-        ).toHaveTextContent("Custom");
+        ).toHaveTextContent("Before");
         expect(
             screen.getByRole("button", { name: "Reminder unit" }),
         ).toHaveTextContent("Minutes");
         expect(screen.getByLabelText("Reminder amount")).toHaveValue(15);
 
-        await selectTaskDropdownOption("Reminder unit", "Days");
+        fireEvent.change(screen.getByLabelText("Reminder amount"), {
+            target: { value: "1" },
+        });
+        expect(
+            screen.getByRole("button", { name: "Reminder unit" }),
+        ).toHaveTextContent("Minute");
+        await selectTaskDropdownOption("Reminder unit", "Day");
         fireEvent.change(screen.getByLabelText("Reminder amount"), {
             target: { value: "2" },
         });
+        expect(
+            screen.getByRole("button", { name: "Reminder unit" }),
+        ).toHaveTextContent("Days");
         fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
         await waitFor(() =>
@@ -5865,7 +5945,7 @@ describe("App", () => {
         fireEvent.change(screen.getByLabelText("Title"), {
             target: { value: "All-day recurring task" },
         });
-        await selectTaskDropdownOption("Repeat", "Daily");
+        await selectTaskDropdownOption("Repeat", "day");
         fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
         await waitFor(() =>
@@ -5900,7 +5980,7 @@ describe("App", () => {
         fireEvent.change(screen.getByLabelText("Start time"), {
             target: { value: "" },
         });
-        await selectTaskDropdownOption("Repeat", "Daily");
+        await selectTaskDropdownOption("Repeat", "day");
         fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
         expect(

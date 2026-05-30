@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from typing import Callable
 from urllib import error, request
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -79,10 +79,13 @@ def send_due_notifications(
     sent_count = 0
 
     for task in tasks:
-        notify_at = get_notify_at(task)
+        task_settings = get_app_settings(db, task.user_id)
+        notify_at = get_notify_at(
+            task,
+            working_hours_start=task_settings.working_hours_start,
+        )
         if notify_at is None or notify_at > now:
             continue
-        task_settings = get_app_settings(db, task.user_id)
         effective_webhook_url = (
             webhook_url
             or task_settings.discord_webhook_url
@@ -112,14 +115,52 @@ def send_due_notifications(
     return sent_count
 
 
-def get_notify_at(task: ScheduledTask) -> datetime | None:
+def get_notify_at(
+    task: ScheduledTask,
+    *,
+    working_hours_start: str | None = None,
+) -> datetime | None:
     if task.scheduled_start is None:
         return None
 
     offset = max(0, task.notification_offset_minutes or 0)
-    start = task.scheduled_start
-    start = ensure_aware_datetime(start)
+    start = get_notification_start(task, working_hours_start=working_hours_start)
     return start - timedelta(minutes=offset)
+
+
+def get_notification_start(
+    task: ScheduledTask,
+    *,
+    working_hours_start: str | None = None,
+) -> datetime:
+    start = ensure_aware_datetime(task.scheduled_start)
+    if not task.all_day:
+        return start
+
+    local_start = start.astimezone(get_app_timezone())
+    reminder_time = parse_working_hours_start(working_hours_start)
+    return datetime.combine(
+        local_start.date(),
+        reminder_time,
+        tzinfo=get_app_timezone(),
+    )
+
+
+def parse_working_hours_start(value: str | None) -> time:
+    if not value:
+        return time(hour=8)
+
+    try:
+        hour_text, minute_text = value.split(":", 1)
+        hour = int(hour_text)
+        minute = int(minute_text)
+    except ValueError:
+        return time(hour=8)
+
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        return time(hour=8)
+
+    return time(hour=hour, minute=minute)
 
 
 def build_discord_message(

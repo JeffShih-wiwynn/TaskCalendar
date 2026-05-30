@@ -195,6 +195,7 @@ type AuthFormState = {
 
 type RecurrenceFrequency = "" | "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
 type NotificationUnit = "" | "MINUTES" | "HOURS" | "DAYS";
+type ReminderMode = "NONE" | "ON_TIME" | "BEFORE";
 type NotificationChannel = "" | "DISCORD";
 
 type ContextMenuState = {
@@ -324,87 +325,30 @@ function TaskFormAccordionSection({
     );
 }
 
-const notificationUnits: Array<{ id: NotificationUnit; label: string }> = [
-    { id: "", label: "None" },
+const notificationUnits: Array<{ id: Exclude<NotificationUnit, "">; label: string }> = [
     { id: "MINUTES", label: "Minutes" },
     { id: "HOURS", label: "Hours" },
     { id: "DAYS", label: "Days" },
 ];
 
-const reminderPresets = [
-    {
-        id: "",
-        label: "Does not remind",
-        unit: "" as NotificationUnit,
-        value: "0",
-    },
-    {
-        id: "0:MINUTES",
-        label: "At time of event",
-        unit: "MINUTES" as const,
-        value: "0",
-    },
-    {
-        id: "5:MINUTES",
-        label: "5 minutes before",
-        unit: "MINUTES" as const,
-        value: "5",
-    },
-    {
-        id: "10:MINUTES",
-        label: "10 minutes before",
-        unit: "MINUTES" as const,
-        value: "10",
-    },
-    {
-        id: "30:MINUTES",
-        label: "30 minutes before",
-        unit: "MINUTES" as const,
-        value: "30",
-    },
-    {
-        id: "1:HOURS",
-        label: "1 hour before",
-        unit: "HOURS" as const,
-        value: "1",
-    },
-    {
-        id: "1:DAYS",
-        label: "1 day before",
-        unit: "DAYS" as const,
-        value: "1",
-    },
-];
-
-const reminderCustomValue = "CUSTOM";
-
 const recurrenceFrequencyOptions: TaskComposerDropdownOption[] = [
     { value: "", label: "Does not repeat" },
-    { value: "DAILY", label: "Daily" },
-    { value: "WEEKLY", label: "Weekly" },
-    { value: "MONTHLY", label: "Monthly" },
-    { value: "YEARLY", label: "Yearly" },
+    { value: "DAILY", label: "day" },
+    { value: "WEEKLY", label: "week" },
+    { value: "MONTHLY", label: "month" },
+    { value: "YEARLY", label: "year" },
 ];
 
 const recurrenceEndsOptions: TaskComposerDropdownOption[] = [
-    { value: "NEVER", label: "Never" },
-    { value: "ON_DATE", label: "On date" },
+    { value: "NEVER", label: "Forever" },
+    { value: "ON_DATE", label: "Until" },
 ];
 
 const reminderOptions: TaskComposerDropdownOption[] = [
-    ...reminderPresets.map((preset) => ({
-        value: preset.id,
-        label: preset.label,
-    })),
-    { value: reminderCustomValue, label: "Custom" },
+    { value: "NONE", label: "Does not remind" },
+    { value: "ON_TIME", label: "On time" },
+    { value: "BEFORE", label: "Before" },
 ];
-
-const reminderUnitOptions: TaskComposerDropdownOption[] = notificationUnits
-    .filter((unit) => unit.id)
-    .map((unit) => ({
-        value: unit.id,
-        label: unit.label,
-    }));
 
 const defaultCategoryColor = "#176b58";
 
@@ -814,8 +758,13 @@ export function App() {
                 ...current,
                 ...updates,
             }));
+            if (authToken && updates.start) {
+                void updateSettings({
+                    working_hours_start: updates.start,
+                }).catch(() => undefined);
+            }
         },
-        [],
+        [authToken],
     );
     const toggleCreateAccordionSection = useCallback(
         (section: TaskFormAccordionSectionId) => {
@@ -1250,6 +1199,15 @@ export function App() {
                 discord_message_template:
                     loadedSettings.discord_message_template ?? "",
             });
+            if (!hasStoredWorkingHours()) {
+                setWorkingHours((current) => ({
+                    ...current,
+                    start: normalizeWorkingHour(
+                        loadedSettings.working_hours_start,
+                        current.start,
+                    ),
+                }));
+            }
         } catch (error) {
             if (isAuthError(error)) {
                 handleAuthExpired();
@@ -3274,8 +3232,10 @@ export function App() {
         setIsSaving(true);
 
         try {
-            const notificationSettings =
-                getNotificationSettings(formState);
+            const notificationSettings = getNotificationSettings(
+                formState,
+                isDateOnlyTask,
+            );
             await createTask({
                 title: formState.title.trim(),
                 list_id: formState.list_id || null,
@@ -3283,7 +3243,9 @@ export function App() {
                 scheduled_start: isDateOnlyTask
                     ? dateOnlyScheduledStart
                     : toIsoOrNull(formState.scheduled_start),
-                scheduled_end: isDateOnlyTask ? null : toIsoOrNull(formState.scheduled_end),
+                scheduled_end: isDateOnlyTask
+                    ? null
+                    : toIsoOrNull(formState.scheduled_end),
                 all_day: isDateOnlyTask,
                 due_at: null,
                 recurrence_rule: buildRecurrenceRule(formState),
@@ -5626,6 +5588,7 @@ export function App() {
                                         />
                                         <ReminderComposer
                                             state={formState}
+                                            allDay={isAllDayFormTask(formState)}
                                             onChange={(updates) =>
                                                 setFormState({
                                                     ...formState,
@@ -5781,6 +5744,7 @@ export function App() {
                                         />
                                         <ReminderComposer
                                             state={editState}
+                                            allDay={isAllDayFormTask(editState)}
                                             onChange={(updates) =>
                                                 setEditState({
                                                     ...editState,
@@ -7578,11 +7542,20 @@ type RecurrenceComposerProps = {
 
 function RecurrenceComposer({ state, onChange }: RecurrenceComposerProps) {
     const endsMode = state.recurrence_until ? "ON_DATE" : "NEVER";
+    const intervalValue = parsePositiveIntegerOrZero(
+        state.recurrence_interval,
+    );
+    const recurrenceFrequencyDisplayOptions = recurrenceFrequencyOptions.map(
+        (option) =>
+            option.value && intervalValue > 1
+                ? { ...option, label: `${option.label}s` }
+                : option,
+    );
 
     return (
         <div className="task-composer-control-group task-recurrence-composer">
             {state.recurrence_frequency ? (
-                <div className="task-schedule-field-label">Every</div>
+                <div className="task-schedule-field-label">Repeats every</div>
             ) : null}
             <div className="task-recurrence-controls">
                 {state.recurrence_frequency ? (
@@ -7597,15 +7570,15 @@ function RecurrenceComposer({ state, onChange }: RecurrenceComposerProps) {
                                     recurrence_interval: event.target.value,
                                 })
                             }
-                            aria-label="Every"
-                            className="task-recurrence-count"
+                            aria-label="Repeats every"
+                            className="task-form-control task-recurrence-count"
                         />
                     </>
                 ) : null}
                 <TaskComposerDropdown
                     label="Repeat"
                     value={state.recurrence_frequency}
-                    options={recurrenceFrequencyOptions}
+                    options={recurrenceFrequencyDisplayOptions}
                     onChange={(value) =>
                         onChange({
                             recurrence_frequency: value as RecurrenceFrequency,
@@ -7623,7 +7596,6 @@ function RecurrenceComposer({ state, onChange }: RecurrenceComposerProps) {
 
             {state.recurrence_frequency ? (
                 <div className="task-schedule-field-group task-recurrence-until">
-                    <div className="task-schedule-field-label">Until</div>
                     <div className="task-recurrence-until-controls">
                         <TaskComposerDropdown
                             label="Until"
@@ -7644,6 +7616,7 @@ function RecurrenceComposer({ state, onChange }: RecurrenceComposerProps) {
                         {endsMode === "ON_DATE" ? (
                             <label className="task-date-only-input">
                                 <input
+                                    className="task-form-control"
                                     type="date"
                                     value={state.recurrence_until}
                                     onChange={(event) =>
@@ -7671,64 +7644,95 @@ type ReminderComposerState = Pick<
 type ReminderComposerProps = {
     state: ReminderComposerState;
     onChange: (updates: Partial<ReminderComposerState>) => void;
+    allDay: boolean;
 };
 
-function getReminderPresetValue(state: ReminderComposerState): string {
+function getReminderMode(state: ReminderComposerState): ReminderMode {
     if (!state.notification_unit) {
-        return "";
+        return "NONE";
     }
 
-    const matchingPreset = reminderPresets.find(
-        (preset) =>
-            preset.unit === state.notification_unit &&
-            preset.value === state.notification_offset_value,
+    const offsetValue = parsePositiveIntegerOrZero(
+        state.notification_offset_value,
     );
-
-    return matchingPreset?.id ?? reminderCustomValue;
+    return offsetValue === 0 ? "ON_TIME" : "BEFORE";
 }
 
-function ReminderComposer({ state, onChange }: ReminderComposerProps) {
-    const presetValue = getReminderPresetValue(state);
-    const isCustomReminder = presetValue === reminderCustomValue;
+function getReminderUnit(state: ReminderComposerState, allDay: boolean): NotificationUnit {
+    if (allDay) {
+        return "DAYS";
+    }
+
+    return state.notification_unit || "MINUTES";
+}
+
+function ReminderComposer({ state, onChange, allDay }: ReminderComposerProps) {
+    const reminderMode = getReminderMode(state);
+    const isBeforeReminder = reminderMode === "BEFORE";
+    const reminderUnit = getReminderUnit(state, allDay);
+    const reminderAmount = parsePositiveIntegerOrZero(
+        state.notification_offset_value,
+    );
+    const reminderUnitOptions = notificationUnits.map((unit) => {
+        if (allDay) {
+            return { value: unit.id, label: unit.label };
+        }
+
+        return {
+            value: unit.id,
+            label: reminderAmount === 1 ? unit.label.slice(0, -1) : unit.label,
+        };
+    });
 
     return (
         <div className="task-composer-control-group task-reminder-composer">
-            {presetValue ? (
+            {reminderMode !== "NONE" ? (
                 <div className="task-schedule-field-label">Remind</div>
             ) : null}
             <div className="task-reminder-select-label">
                 <TaskComposerDropdown
                     label="Reminder"
-                    value={presetValue}
+                    value={reminderMode}
                     options={reminderOptions}
                     onChange={(selectedValue) => {
-                        if (selectedValue === reminderCustomValue) {
+                        if (selectedValue === "ON_TIME") {
                             onChange({
-                                notification_unit:
-                                    state.notification_unit || "MINUTES",
-                                notification_offset_value:
-                                    state.notification_unit
-                                        ? state.notification_offset_value
-                                        : "15",
+                                notification_unit: allDay ? "DAYS" : "MINUTES",
+                                notification_offset_value: "0",
                             });
                             return;
                         }
 
-                        const preset = reminderPresets.find(
-                            (option) => option.id === selectedValue,
-                        );
+                        if (selectedValue === "BEFORE") {
+                            onChange({
+                                notification_unit: allDay ? "DAYS" : "MINUTES",
+                                notification_offset_value:
+                                    state.notification_offset_value !== "0"
+                                        ? state.notification_offset_value
+                                        : allDay
+                                          ? "1"
+                                          : "15",
+                            });
+                            return;
+                        }
+
                         onChange({
-                            notification_unit: preset?.unit ?? "",
-                            notification_offset_value: preset?.value ?? "0",
+                            notification_unit: "",
+                            notification_offset_value: "0",
                         });
                     }}
                 />
             </div>
-            {isCustomReminder ? (
+            {allDay ? (
+                <p className="task-reminder-helper">
+                    All-day reminders use the start of your working hours.
+                </p>
+            ) : null}
+            {isBeforeReminder ? (
                 <div className="task-reminder-custom">
                     <label>
-                        <span>Before</span>
                         <input
+                            className="task-form-control"
                             type="number"
                             min={0}
                             step={1}
@@ -7742,19 +7746,23 @@ function ReminderComposer({ state, onChange }: ReminderComposerProps) {
                             aria-label="Reminder amount"
                         />
                     </label>
-                    <div className="task-form-field">
-                        <span>Unit</span>
-                        <TaskComposerDropdown
-                            label="Reminder unit"
-                            value={state.notification_unit || "MINUTES"}
-                            options={reminderUnitOptions}
-                            onChange={(value) =>
-                                onChange({
-                                    notification_unit: value as NotificationUnit,
-                                })
-                            }
-                        />
-                    </div>
+                    {allDay ? (
+                        <span className="task-reminder-fixed-unit">days</span>
+                    ) : (
+                        <div className="task-form-field">
+                            <TaskComposerDropdown
+                                label="Reminder unit"
+                                value={reminderUnit}
+                                options={reminderUnitOptions}
+                                onChange={(value) =>
+                                    onChange({
+                                        notification_unit:
+                                            value as NotificationUnit,
+                                    })
+                                }
+                            />
+                        </div>
+                    )}
                 </div>
             ) : null}
         </div>
@@ -7810,8 +7818,7 @@ function buildTaskUpdates(
     const dateOnlyScheduledStart = getDateOnlyScheduledStartIso(
         editState.scheduled_start,
     );
-    const isDateOnlyTask =
-        Boolean(dateOnlyScheduledStart) && !editState.scheduled_end;
+    const isDateOnlyTask = isAllDayFormTask(editState);
     const scheduledStart = isDateOnlyTask
         ? dateOnlyScheduledStart
         : toIsoOrNull(editState.scheduled_start);
@@ -7820,7 +7827,7 @@ function buildTaskUpdates(
         : toIsoOrNull(editState.scheduled_end);
     const allDay = isDateOnlyTask;
     const recurrenceRule = buildRecurrenceRule(editState);
-    const notificationSettings = getNotificationSettings(editState);
+    const notificationSettings = getNotificationSettings(editState, allDay);
     const notificationEnabled = notificationSettings.enabled;
     const notificationOffsetMinutes = notificationSettings.offsetMinutes;
     const notificationChannel = notificationSettings.channel;
@@ -7863,6 +7870,15 @@ function buildTaskUpdates(
     }
 
     return updates;
+}
+
+function isAllDayFormTask(
+    state: Pick<TaskFormState, "scheduled_start" | "scheduled_end">,
+): boolean {
+    return (
+        Boolean(getDateOnlyScheduledStartIso(state.scheduled_start)) &&
+        !state.scheduled_end
+    );
 }
 
 function getInitialEditAccordionSection(
@@ -8166,6 +8182,7 @@ function getNotificationSettings(
         TaskFormState,
         "notification_unit" | "notification_offset_value"
     >,
+    allDay = false,
 ): {
     enabled: boolean;
     offsetMinutes: number;
@@ -8182,6 +8199,17 @@ function getNotificationSettings(
     const notificationValue = parsePositiveIntegerOrZero(
         state.notification_offset_value,
     );
+    if (allDay) {
+        return {
+            enabled: true,
+            offsetMinutes:
+                state.notification_unit && notificationValue > 0
+                    ? notificationValue * 1_440
+                    : 0,
+            channel: "discord",
+        };
+    }
+
     const notificationOffsetMinutes =
         state.notification_unit === "DAYS"
             ? notificationValue * 1_440
@@ -9172,6 +9200,14 @@ function getInitialWorkingHours(): WorkingHoursSettings {
         };
     } catch {
         return defaultWorkingHours;
+    }
+}
+
+function hasStoredWorkingHours(): boolean {
+    try {
+        return window.localStorage?.getItem("calendar-working-hours") !== null;
+    } catch {
+        return false;
     }
 }
 

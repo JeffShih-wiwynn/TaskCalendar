@@ -14,6 +14,7 @@ from app.tasks.recurrence import parse_recurrence_rule
 from app.tasks.recurrence import build_recurrence_payloads
 from app.tasks.recurrence import ensure_aware_datetime
 from app.tasks.recurrence import validate_recurrence_until_not_before_start
+from app.tasks.notifications import get_notification_start
 from app.tasks.schemas import ScheduledTaskCreate, ScheduledTaskUpdate
 
 DEFAULT_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
@@ -136,6 +137,7 @@ def create_task(
         task_data["notification_offset_minutes"] = 0
     if task_data.get("notification_enabled") and task_data.get("notification_channel") is None:
         task_data["notification_channel"] = "discord"
+    validate_notification_settings(task_data)
     validate_recurrence_until_not_before_start(
         task_data.get("recurrence_rule"),
         task_data.get("scheduled_start"),
@@ -444,6 +446,14 @@ def apply_rebuilt_payload(task: ScheduledTask, payload: dict) -> None:
             continue
         setattr(task, field, value)
 
+    validate_notification_settings(
+        {
+            "all_day": task.all_day,
+            "notification_enabled": task.notification_enabled,
+            "notification_offset_minutes": task.notification_offset_minutes,
+        },
+    )
+
     reset_notification_sent_at_if_rescheduled(
         task,
         old_notify_at=old_notify_at,
@@ -465,6 +475,17 @@ def apply_task_updates(task: ScheduledTask, updates: dict) -> None:
             task.completed_at = now
         elif not updates["completed"]:
             task.completed_at = None
+
+    validation_values = {
+        "scheduled_start": task.scheduled_start,
+        "scheduled_end": task.scheduled_end,
+        "all_day": task.all_day,
+        "notification_enabled": task.notification_enabled,
+        "notification_offset_minutes": task.notification_offset_minutes,
+    }
+    validation_values.update(updates)
+    normalize_all_day_schedule(validation_values)
+    validate_notification_settings(validation_values)
 
     normalize_all_day_schedule(updates)
 
@@ -521,7 +542,19 @@ def get_task_notify_at(task: ScheduledTask) -> datetime | None:
         return None
 
     offset = max(0, task.notification_offset_minutes or 0)
-    return ensure_aware_datetime(task.scheduled_start) - timedelta(minutes=offset)
+    return get_notification_start(task) - timedelta(minutes=offset)
+
+
+def validate_notification_settings(values: dict) -> None:
+    if not values.get("notification_enabled") or not values.get("all_day"):
+        return
+
+    offset = values.get("notification_offset_minutes") or 0
+    if offset % 1_440 != 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="All-day reminders only support day offsets",
+        )
 
 
 def normalize_all_day_schedule(values: dict) -> None:

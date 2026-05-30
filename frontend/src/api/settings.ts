@@ -5,6 +5,7 @@ export type AppSettings = {
     id: number;
     discord_webhook_url: string | null;
     discord_message_template: string | null;
+    working_hours_start: string;
     created_at: string;
     updated_at: string;
 };
@@ -12,6 +13,7 @@ export type AppSettings = {
 export type UpdateAppSettingsInput = {
     discord_webhook_url?: string | null;
     discord_message_template?: string | null;
+    working_hours_start?: string;
 };
 
 export type TestAppSettingsInput = {
