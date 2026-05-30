@@ -385,8 +385,8 @@ test.describe('Calendar E2E', () => {
     await form.getByLabel('Start time').fill('09:00');
     await form.getByLabel('End date').fill(startDate);
     await form.getByLabel('End time').fill('10:00');
-    await selectTaskFormDropdown(form, 'Repeat', 'Daily');
-    await selectTaskFormDropdown(form, 'Until', 'On date');
+    await selectTaskFormDropdown(form, 'Repeat', 'day');
+    await selectTaskFormDropdown(form, 'Until', 'Until');
     await form.getByLabel('Repeat end date').fill(untilDate);
     await page.getByRole('button', { name: 'Create' }).click();
 

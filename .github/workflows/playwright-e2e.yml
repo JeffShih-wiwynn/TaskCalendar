@@ -5,6 +5,11 @@ on:
   push:
     branches:
       - main
+  pull_request:
+
+concurrency:
+  group: playwright-e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   playwright:
