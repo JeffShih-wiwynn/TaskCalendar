@@ -6429,12 +6429,16 @@ describe("App", () => {
         expect(
             await screen.findByRole("button", { name: "Task view" }),
         ).toHaveTextContent("Today");
-        expect(screen.getByText("Overdue task")).toBeInTheDocument();
-        expect(screen.getByText("Due task")).toBeInTheDocument();
+        expect(
+            await screen.findByText("Overdue task"),
+        ).toBeInTheDocument();
+        expect(await screen.findByText("Due task")).toBeInTheDocument();
         expect(
             await screen.findByText("Overdue all-day task"),
         ).toBeInTheDocument();
-        expect(screen.getByText("Today all-day task")).toBeInTheDocument();
+        expect(
+            await screen.findByText("Today all-day task"),
+        ).toBeInTheDocument();
         expect(
             screen.queryByText("Completed overdue task"),
         ).not.toBeInTheDocument();
