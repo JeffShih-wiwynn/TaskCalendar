@@ -166,6 +166,7 @@ type TaskFormState = {
     recurrence_frequency: RecurrenceFrequency;
     recurrence_interval: string;
     recurrence_until: string;
+    reminder_mode: ReminderMode;
     notification_unit: NotificationUnit;
     notification_offset_value: string;
     notification_channel: NotificationChannel;
@@ -266,6 +267,7 @@ const initialFormState: TaskFormState = {
     recurrence_frequency: "",
     recurrence_interval: "1",
     recurrence_until: "",
+    reminder_mode: "NONE",
     notification_unit: "",
     notification_offset_value: "0",
     notification_channel: "",
@@ -3276,6 +3278,7 @@ export function App() {
             | "recurrence_frequency"
             | "recurrence_interval"
             | "recurrence_until"
+            | "reminder_mode"
             | "notification_unit"
             | "notification_offset_value"
             | "notification_channel"
@@ -3285,6 +3288,7 @@ export function App() {
             recurrence_frequency: "",
             recurrence_interval: "1",
             recurrence_until: "",
+            reminder_mode: "NONE",
             notification_unit: "",
             notification_offset_value: "0",
             notification_channel: "",
@@ -7638,7 +7642,7 @@ function RecurrenceComposer({ state, onChange }: RecurrenceComposerProps) {
 
 type ReminderComposerState = Pick<
     TaskFormState,
-    "notification_unit" | "notification_offset_value"
+    "reminder_mode" | "notification_unit" | "notification_offset_value"
 >;
 
 type ReminderComposerProps = {
@@ -7648,14 +7652,7 @@ type ReminderComposerProps = {
 };
 
 function getReminderMode(state: ReminderComposerState): ReminderMode {
-    if (!state.notification_unit) {
-        return "NONE";
-    }
-
-    const offsetValue = parsePositiveIntegerOrZero(
-        state.notification_offset_value,
-    );
-    return offsetValue === 0 ? "ON_TIME" : "BEFORE";
+    return state.reminder_mode;
 }
 
 function getReminderUnit(state: ReminderComposerState, allDay: boolean): NotificationUnit {
@@ -7664,6 +7661,10 @@ function getReminderUnit(state: ReminderComposerState, allDay: boolean): Notific
     }
 
     return state.notification_unit || "MINUTES";
+}
+
+function getDefaultReminderAmount(allDay: boolean): string {
+    return allDay ? "1" : "15";
 }
 
 function ReminderComposer({ state, onChange, allDay }: ReminderComposerProps) {
@@ -7697,6 +7698,7 @@ function ReminderComposer({ state, onChange, allDay }: ReminderComposerProps) {
                     onChange={(selectedValue) => {
                         if (selectedValue === "ON_TIME") {
                             onChange({
+                                reminder_mode: "ON_TIME",
                                 notification_unit: allDay ? "DAYS" : "MINUTES",
                                 notification_offset_value: "0",
                             });
@@ -7704,19 +7706,22 @@ function ReminderComposer({ state, onChange, allDay }: ReminderComposerProps) {
                         }
 
                         if (selectedValue === "BEFORE") {
+                            const nextAmount =
+                                parsePositiveIntegerOrZero(
+                                    state.notification_offset_value,
+                                ) > 0
+                                    ? state.notification_offset_value
+                                    : getDefaultReminderAmount(allDay);
                             onChange({
+                                reminder_mode: "BEFORE",
                                 notification_unit: allDay ? "DAYS" : "MINUTES",
-                                notification_offset_value:
-                                    state.notification_offset_value !== "0"
-                                        ? state.notification_offset_value
-                                        : allDay
-                                          ? "1"
-                                          : "15",
+                                notification_offset_value: nextAmount,
                             });
                             return;
                         }
 
                         onChange({
+                            reminder_mode: "NONE",
                             notification_unit: "",
                             notification_offset_value: "0",
                         });
@@ -7743,6 +7748,18 @@ function ReminderComposer({ state, onChange, allDay }: ReminderComposerProps) {
                                         event.target.value,
                                 })
                             }
+                            onBlur={() => {
+                                if (
+                                    parsePositiveIntegerOrZero(
+                                        state.notification_offset_value,
+                                    ) < 1
+                                ) {
+                                    onChange({
+                                        notification_offset_value:
+                                            getDefaultReminderAmount(allDay),
+                                    });
+                                }
+                            }}
                             aria-label="Reminder amount"
                         />
                     </label>
@@ -7919,6 +7936,7 @@ function hasScheduleClearableData(
               | "recurrence_frequency"
               | "recurrence_interval"
               | "recurrence_until"
+              | "reminder_mode"
               | "notification_unit"
               | "notification_offset_value"
               | "notification_channel"
@@ -7929,6 +7947,7 @@ function hasScheduleClearableData(
             state.scheduled_end ||
             state.recurrence_frequency ||
             state.recurrence_until ||
+            state.reminder_mode !== "NONE" ||
             state.notification_unit ||
             state.notification_offset_value !== "0" ||
             state.notification_channel,
@@ -8146,18 +8165,22 @@ function buildDuplicateTaskInput(
 
 function notificationFormStateFromTask(task: ScheduledTask): Pick<
     TaskFormState,
-    "notification_unit" | "notification_offset_value"
+    "reminder_mode" | "notification_unit" | "notification_offset_value"
 > {
     if (!task.notification_enabled) {
         return {
+            reminder_mode: "NONE",
             notification_unit: "",
             notification_offset_value: "0",
         };
     }
 
     const notificationOffsetMinutes = task.notification_offset_minutes ?? 0;
+    const reminderMode: ReminderMode =
+        notificationOffsetMinutes === 0 ? "ON_TIME" : "BEFORE";
     if (notificationOffsetMinutes > 0 && notificationOffsetMinutes % 1_440 === 0) {
         return {
+            reminder_mode: reminderMode,
             notification_unit: "DAYS",
             notification_offset_value: String(
                 notificationOffsetMinutes / 1_440,
@@ -8166,12 +8189,14 @@ function notificationFormStateFromTask(task: ScheduledTask): Pick<
     }
     if (notificationOffsetMinutes > 0 && notificationOffsetMinutes % 60 === 0) {
         return {
+            reminder_mode: reminderMode,
             notification_unit: "HOURS",
             notification_offset_value: String(notificationOffsetMinutes / 60),
         };
     }
 
     return {
+        reminder_mode: reminderMode,
         notification_unit: "MINUTES",
         notification_offset_value: String(notificationOffsetMinutes),
     };
@@ -8180,7 +8205,7 @@ function notificationFormStateFromTask(task: ScheduledTask): Pick<
 function getNotificationSettings(
     state: Pick<
         TaskFormState,
-        "notification_unit" | "notification_offset_value"
+        "reminder_mode" | "notification_unit" | "notification_offset_value"
     >,
     allDay = false,
 ): {
@@ -8188,7 +8213,7 @@ function getNotificationSettings(
     offsetMinutes: number;
     channel: "discord" | null;
 } {
-    if (!state.notification_unit) {
+    if (state.reminder_mode === "NONE") {
         return {
             enabled: false,
             offsetMinutes: 0,
@@ -8196,16 +8221,25 @@ function getNotificationSettings(
         };
     }
 
-    const notificationValue = parsePositiveIntegerOrZero(
+    if (state.reminder_mode === "ON_TIME") {
+        return {
+            enabled: true,
+            offsetMinutes: 0,
+            channel: "discord",
+        };
+    }
+
+    const parsedNotificationValue = parsePositiveIntegerOrZero(
         state.notification_offset_value,
     );
+    const notificationValue =
+        parsedNotificationValue > 0
+            ? parsedNotificationValue
+            : Number.parseInt(getDefaultReminderAmount(allDay), 10);
     if (allDay) {
         return {
             enabled: true,
-            offsetMinutes:
-                state.notification_unit && notificationValue > 0
-                    ? notificationValue * 1_440
-                    : 0,
+            offsetMinutes: notificationValue * 1_440,
             channel: "discord",
         };
     }
