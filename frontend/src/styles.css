@@ -411,6 +411,51 @@ body {
   border-top: 1px solid var(--border);
 }
 
+.settings-value-card {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 14%, transparent);
+  border-radius: 7px;
+  padding: 10px 13px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel-bg) 66%, transparent);
+  box-shadow: none;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition:
+    background-color var(--micro-duration-fast) ease,
+    border-color var(--micro-duration-fast) ease,
+    box-shadow var(--micro-duration-fast) ease;
+}
+
+.settings-value-card:hover,
+.settings-value-card:focus-visible {
+  background: color-mix(in srgb, var(--accent-soft) 48%, var(--panel-bg));
+}
+
+.settings-value-card:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 54%, #ffffff 46%);
+  outline-offset: 2px;
+}
+
+.settings-value-card strong {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--accent);
+  font-size: 0.84rem;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sidebar-settings-group {
   display: grid;
   gap: 10px;
@@ -443,11 +488,13 @@ body {
   font: inherit;
 }
 
-.working-hours-form {
+.working-hours-form,
+.calendar-display-form {
   gap: 14px;
 }
 
-.working-hours-form input[type="time"] {
+.working-hours-form input[type="time"],
+.calendar-display-form input[type="time"] {
   width: 100%;
   min-width: 0;
   border: 1px solid var(--field-border);
@@ -458,8 +505,62 @@ body {
   font: inherit;
 }
 
-.working-hours-form input[type="time"]::-webkit-calendar-picker-indicator {
+.working-hours-form input[type="time"]::-webkit-calendar-picker-indicator,
+.calendar-display-form input[type="time"]::-webkit-calendar-picker-indicator {
   opacity: 0.85;
+}
+
+.week-start-form {
+  gap: 14px;
+}
+
+.calendar-display-section {
+  display: grid;
+  gap: 10px;
+}
+
+.calendar-display-section-title {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.week-start-options {
+  display: grid;
+  gap: 8px;
+}
+
+.week-start-option {
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--field-border) 72%, var(--text) 28%);
+  border-radius: 7px;
+  padding: 11px 13px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel-bg) 78%, var(--field-border) 22%);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--micro-duration-fast) ease,
+    border-color var(--micro-duration-fast) ease,
+    box-shadow var(--micro-duration-fast) ease;
+}
+
+.week-start-option:hover,
+.week-start-option:focus-visible {
+  background: color-mix(in srgb, var(--accent-soft) 48%, var(--panel-bg));
+}
+
+.week-start-option:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 54%, #ffffff 46%);
+  outline-offset: 2px;
+}
+
+.week-start-option-active {
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+  color: color-mix(in srgb, var(--accent) 92%, #000 8%);
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel-bg));
 }
 
 .working-hours-title {
@@ -2445,6 +2546,39 @@ input[type="checkbox"].task-checkbox:checked {
   max-height: min(340px, 48vh);
   overflow-y: auto;
   padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(110, 127, 144, 0.38) transparent;
+}
+
+.admin-user-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.admin-user-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.admin-user-list::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: rgba(110, 127, 144, 0.38);
+}
+
+.admin-user-list::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(110, 127, 144, 0.54);
+}
+
+.app-shell.dark .admin-user-list {
+  scrollbar-color: rgba(148, 163, 184, 0.34) transparent;
+}
+
+.app-shell.dark .admin-user-list::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.34);
+}
+
+.app-shell.dark .admin-user-list::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(148, 163, 184, 0.5);
 }
 
 .admin-user-row {

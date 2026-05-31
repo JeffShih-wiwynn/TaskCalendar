@@ -6,6 +6,7 @@ export type AppSettings = {
     discord_webhook_url: string | null;
     discord_message_template: string | null;
     working_hours_start: string;
+    week_start: "sunday" | "monday";
     created_at: string;
     updated_at: string;
 };
@@ -14,6 +15,7 @@ export type UpdateAppSettingsInput = {
     discord_webhook_url?: string | null;
     discord_message_template?: string | null;
     working_hours_start?: string;
+    week_start?: "sunday" | "monday";
 };
 
 export type TestAppSettingsInput = {

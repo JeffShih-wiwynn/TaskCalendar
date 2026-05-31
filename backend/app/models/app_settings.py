@@ -28,6 +28,7 @@ class AppSettings(Base):
         nullable=True,
     )
     working_hours_start: Mapped[str] = mapped_column(String(5), default="08:00")
+    week_start: Mapped[str] = mapped_column(String(6), default="sunday")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

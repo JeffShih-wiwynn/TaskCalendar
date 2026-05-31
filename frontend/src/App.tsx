@@ -117,6 +117,7 @@ type TaskView =
     | "all";
 type ThemeMode = "light" | "dark";
 type CalendarView = "dayGridMonth" | "timeGridWeek" | "timeGridDay";
+type WeekStart = "sunday" | "monday";
 type MobileScreen = "today" | "upcoming" | "unscheduled" | "calendar" | "settings";
 type CalendarTransitionKind = "neutral" | "view" | "prev" | "next" | "today";
 type DragTargetMode = "reorder" | "schedule" | null;
@@ -231,7 +232,7 @@ type TaskUndoState = {
 type DetailPanelMode = "create" | "edit" | null;
 type SettingsView =
     | "menu"
-    | "working-hours"
+    | "calendar-display"
     | "account"
     | "change-password"
     | "delete-account"
@@ -461,6 +462,7 @@ export function App() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(getInitialSidebarOpen);
     const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
     const [workingHours, setWorkingHours] = useState(getInitialWorkingHours);
+    const [weekStart, setWeekStart] = useState<WeekStart>("sunday");
     const [isFullDayTimelineVisible, setIsFullDayTimelineVisible] =
         useState(false);
     const [taskState, setTaskState] = useState<TaskState>({
@@ -754,6 +756,7 @@ export function App() {
             : calendarView === "timeGridDay"
               ? "Day"
               : "Month";
+    const calendarFirstDay = weekStart === "monday" ? 1 : 0;
     const updateWorkingHours = useCallback(
         (updates: Partial<WorkingHoursSettings>) => {
             setWorkingHours((current) => ({
@@ -763,6 +766,17 @@ export function App() {
             if (authToken && updates.start) {
                 void updateSettings({
                     working_hours_start: updates.start,
+                }).catch(() => undefined);
+            }
+        },
+        [authToken],
+    );
+    const updateWeekStart = useCallback(
+        (value: WeekStart) => {
+            setWeekStart(value);
+            if (authToken) {
+                void updateSettings({
+                    week_start: value,
                 }).catch(() => undefined);
             }
         },
@@ -1210,6 +1224,7 @@ export function App() {
                     ),
                 }));
             }
+            setWeekStart(normalizeWeekStart(loadedSettings.week_start));
         } catch (error) {
             if (isAuthError(error)) {
                 handleAuthExpired();
@@ -1218,7 +1233,7 @@ export function App() {
             setFormError(
                 error instanceof Error
                     ? error.message
-                    : "Unable to load webhook settings",
+                    : "Unable to load settings",
             );
         }
     }, [handleAuthExpired]);
@@ -3718,10 +3733,10 @@ export function App() {
         });
     };
 
-    const openWorkingHoursSettings = () => {
+    const openCalendarDisplaySettings = () => {
         closeDetailPanel();
         closeSettingsPanels();
-        setSettingsView("working-hours");
+        setSettingsView("calendar-display");
     };
 
     const openBackupSettings = () => {
@@ -3971,7 +3986,8 @@ export function App() {
         "--sidebar-resizer-width": `${isSidebarOpen ? 12 : 0}px`,
     } as CSSProperties;
     const isSettingsMenuOpen = settingsView === "menu";
-    const isWorkingHoursSettingsOpen = settingsView === "working-hours";
+    const isCalendarDisplaySettingsOpen =
+        settingsView === "calendar-display";
     const isAccountSettingsOpen = settingsView === "account";
     const isChangePasswordSettingsOpen = settingsView === "change-password";
     const isDeleteAccountSettingsOpen = settingsView === "delete-account";
@@ -4240,9 +4256,9 @@ export function App() {
                                     <button
                                         type="button"
                                         className="settings-action-button settings-action-button-neutral"
-                                        onClick={openWorkingHoursSettings}
+                                        onClick={openCalendarDisplaySettings}
                                     >
-                                        Working hours
+                                        Calendar display
                                     </button>
                                     <button
                                         type="button"
@@ -4534,9 +4550,9 @@ export function App() {
                                 </form>
                             </motion.section>
                         )}
-                        {!detailPanelMode && isWorkingHoursSettingsOpen && (
+                        {!detailPanelMode && isCalendarDisplaySettingsOpen && (
                             <motion.section
-                                key="working-hours-settings"
+                                key="calendar-display-settings"
                                 className="filter-section"
                                 onClick={(event) => event.stopPropagation()}
                                 variants={panelVariants}
@@ -4546,51 +4562,95 @@ export function App() {
                                 transition={panelTransition}
                             >
                                 <form
-                                    className="task-form working-hours-form"
+                                    className="task-form calendar-display-form"
                                     onClick={(event) => event.stopPropagation()}
                                 >
-                                    <h3 className="working-hours-title">
-                                        Working hours
-                                    </h3>
-                                    <label>
-                                        <span>Start time</span>
-                                        <input
-                                            type="time"
-                                            lang="en-GB"
-                                            min="00:00"
-                                            max="23:00"
-                                            step="3600"
-                                            value={workingHours.start}
-                                            onChange={(event) =>
-                                                updateWorkingHours({
-                                                    start: event.target.value,
-                                                })
-                                            }
-                                        />
-                                    </label>
-                                    <label>
-                                        <span>End time</span>
-                                        <input
-                                            type="time"
-                                            lang="en-GB"
-                                            min="00:00"
-                                            max="23:00"
-                                            step="3600"
-                                            value={workingHours.end}
-                                            onChange={(event) =>
-                                                updateWorkingHours({
-                                                    end: event.target.value,
-                                                })
-                                            }
-                                        />
-                                    </label>
+                                    <div className="calendar-display-section">
+                                        <span className="calendar-display-section-title">
+                                            Week starts on
+                                        </span>
+                                        <div
+                                            className="week-start-options"
+                                            role="group"
+                                            aria-label="Week start"
+                                        >
+                                            <button
+                                                type="button"
+                                                className={`week-start-option ${
+                                                    weekStart === "sunday"
+                                                        ? "week-start-option-active"
+                                                        : ""
+                                                }`}
+                                                aria-pressed={
+                                                    weekStart === "sunday"
+                                                }
+                                                onClick={() =>
+                                                    updateWeekStart("sunday")
+                                                }
+                                            >
+                                                Sunday
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={`week-start-option ${
+                                                    weekStart === "monday"
+                                                        ? "week-start-option-active"
+                                                        : ""
+                                                }`}
+                                                aria-pressed={
+                                                    weekStart === "monday"
+                                                }
+                                                onClick={() =>
+                                                    updateWeekStart("monday")
+                                                }
+                                            >
+                                                Monday
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="calendar-display-section">
+                                        <span className="calendar-display-section-title">
+                                            Working hours
+                                        </span>
+                                        <label>
+                                            <span>Start time</span>
+                                            <input
+                                                type="time"
+                                                lang="en-GB"
+                                                min="00:00"
+                                                max="23:00"
+                                                step="3600"
+                                                value={workingHours.start}
+                                                onChange={(event) =>
+                                                    updateWorkingHours({
+                                                        start: event.target
+                                                            .value,
+                                                    })
+                                                }
+                                            />
+                                        </label>
+                                        <label>
+                                            <span>End time</span>
+                                            <input
+                                                type="time"
+                                                lang="en-GB"
+                                                min="00:00"
+                                                max="23:00"
+                                                step="3600"
+                                                value={workingHours.end}
+                                                onChange={(event) =>
+                                                    updateWorkingHours({
+                                                        end: event.target.value,
+                                                    })
+                                                }
+                                            />
+                                        </label>
+                                    </div>
                                     <div className="task-form-actions">
                                         <button
                                             type="button"
                                             className="settings-action-button settings-action-button-primary"
-                                            onClick={() => {
-                                                openSettingsMenu();
-                                            }}
+                                            onClick={openSettingsMenu}
                                         >
                                             Done
                                         </button>
@@ -6511,6 +6571,7 @@ export function App() {
                         initialDate={calendarDate}
                         fixedMirrorParent={document.body}
                         headerToolbar={false}
+                        firstDay={calendarFirstDay}
                         events={events}
                         eventTimeFormat={{
                             hour: "2-digit",
@@ -9327,6 +9388,10 @@ function clearStoredUserPreferences(): void {
 
 function normalizeWorkingHour(value: string | undefined, fallback: string): string {
     return value && workingHourOptions.includes(value) ? value : fallback;
+}
+
+function normalizeWeekStart(value: string | null | undefined): WeekStart {
+    return value === "monday" ? "monday" : "sunday";
 }
 
 function clampNumber(value: number, min: number, max: number): number {

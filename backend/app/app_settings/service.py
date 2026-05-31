@@ -45,6 +45,9 @@ def update_app_settings(
     if "working_hours_start" in updates and updates["working_hours_start"] is not None:
         app_settings.working_hours_start = updates["working_hours_start"]
 
+    if "week_start" in updates and updates["week_start"] is not None:
+        app_settings.week_start = updates["week_start"]
+
     app_settings.updated_at = datetime.now(UTC)
     db.add(app_settings)
     db.commit()

@@ -51,6 +51,7 @@ def test_get_app_settings_creates_user_scoped_settings(db_session: Session) -> N
     assert settings.discord_webhook_url is None
     assert settings.discord_message_template is None
     assert settings.working_hours_start == "08:00"
+    assert settings.week_start == "sunday"
 
 
 def test_update_app_settings_trims_blank_values(db_session: Session) -> None:
@@ -62,6 +63,7 @@ def test_update_app_settings_trims_blank_values(db_session: Session) -> None:
             discord_webhook_url=" https://discord.example/webhook ",
             discord_message_template=" Task due: {title} ",
             working_hours_start="09:00",
+            week_start="monday",
         ),
         user.id,
     )
@@ -69,6 +71,7 @@ def test_update_app_settings_trims_blank_values(db_session: Session) -> None:
     assert updated.discord_webhook_url == "https://discord.example/webhook"
     assert updated.discord_message_template == "Task due: {title}"
     assert updated.working_hours_start == "09:00"
+    assert updated.week_start == "monday"
 
     reset = service.update_app_settings(
         db_session,
