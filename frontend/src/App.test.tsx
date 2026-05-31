@@ -77,6 +77,7 @@ const mocks = vi.hoisted(() => ({
         scrollTimeReset: undefined as boolean | undefined,
         slotMinTime: undefined as string | undefined,
         slotMaxTime: undefined as string | undefined,
+        firstDay: undefined as number | undefined,
         expandRows: undefined as boolean | undefined,
         dayMaxEventRows: undefined as number | boolean | undefined,
         longPressDelay: undefined as number | undefined,
@@ -205,21 +206,18 @@ const mocks = vi.hoisted(() => ({
         discord_webhook_url: null,
         discord_message_template: null,
         working_hours_start: "08:00",
+        week_start: "sunday",
         created_at: "",
         updated_at: "",
     },
-    updateSettings: vi.fn(async (input: Record<string, unknown>) => ({
-        id: 1,
-        discord_webhook_url:
-            (input.discord_webhook_url as string | null | undefined) ?? null,
-        discord_message_template:
-            (input.discord_message_template as string | null | undefined) ??
-            null,
-        working_hours_start:
-            (input.working_hours_start as string | undefined) ?? "08:00",
-        created_at: "",
-        updated_at: "",
-    })),
+    updateSettings: vi.fn(async (input: Record<string, unknown>) => {
+        const nextSettings = {
+            ...mocks.settings,
+            ...input,
+        };
+        mocks.settings = nextSettings;
+        return nextSettings;
+    }),
     testSettings: vi.fn(async () => ({
         message: "Test webhook sent",
     })),
@@ -270,6 +268,7 @@ vi.mock("@fullcalendar/react", () => ({
             scrollTimeReset,
             slotMinTime,
             slotMaxTime,
+            firstDay,
             expandRows,
             dayMaxEventRows,
             longPressDelay,
@@ -349,6 +348,7 @@ vi.mock("@fullcalendar/react", () => ({
             scrollTimeReset?: boolean;
             slotMinTime?: string;
             slotMaxTime?: string;
+            firstDay?: number;
             expandRows?: boolean;
             dayMaxEventRows?: number | boolean;
             longPressDelay?: number;
@@ -447,6 +447,7 @@ vi.mock("@fullcalendar/react", () => ({
         mocks.fullCalendarProps.scrollTimeReset = scrollTimeReset;
         mocks.fullCalendarProps.slotMinTime = slotMinTime;
         mocks.fullCalendarProps.slotMaxTime = slotMaxTime;
+        mocks.fullCalendarProps.firstDay = firstDay;
         mocks.fullCalendarProps.expandRows = expandRows;
         mocks.fullCalendarProps.dayMaxEventRows = dayMaxEventRows;
         mocks.fullCalendarProps.longPressDelay = longPressDelay;
@@ -1009,6 +1010,7 @@ describe("App", () => {
         mocks.fullCalendarProps.eventDrop = undefined;
         mocks.fullCalendarProps.eventClick = undefined;
         mocks.fullCalendarProps.eventResize = undefined;
+        mocks.fullCalendarProps.firstDay = undefined;
         mocks.fullCalendarProps.dayMaxEventRows = undefined;
         mocks.fullCalendarProps.longPressDelay = undefined;
         mocks.fullCalendarProps.selectLongPressDelay = undefined;
@@ -1021,6 +1023,15 @@ describe("App", () => {
         mocks.draggableConstruct.mockClear();
         mocks.draggableDestroy.mockClear();
         mocks.updateTask.mockClear();
+        mocks.settings = {
+            id: 1,
+            discord_webhook_url: null,
+            discord_message_template: null,
+            working_hours_start: "08:00",
+            week_start: "sunday",
+            created_at: "",
+            updated_at: "",
+        };
         mocks.updateSettings.mockClear();
         mocks.testSettings.mockClear();
         mocks.changePassword.mockClear();
@@ -1211,17 +1222,15 @@ describe("App", () => {
         );
     });
 
-    it("shows working hours settings with default values", async () => {
+    it("shows calendar display settings with default working hours", async () => {
         render(<App />);
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
         fireEvent.click(
-            screen.getByRole("button", { name: "Working hours" }),
+            screen.getByRole("button", { name: /Calendar display/i }),
         );
 
-        expect(
-            await screen.findByRole("heading", { name: "Working hours" }),
-        ).toBeInTheDocument();
+        expect(await screen.findByText("Week starts on")).toBeInTheDocument();
         expect(screen.getByLabelText("Start time")).toHaveValue("08:00");
         expect(screen.getByLabelText("End time")).toHaveValue("22:00");
         expect(screen.getByLabelText("Start time")).toHaveAttribute(
@@ -1255,26 +1264,26 @@ describe("App", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
         fireEvent.click(
-            screen.getByRole("button", { name: "Working hours" }),
+            screen.getByRole("button", { name: /Calendar display/i }),
         );
 
-        await screen.findByRole("heading", { name: "Working hours" });
+        await screen.findByText("Week starts on");
         expect(screen.getByLabelText("Start time")).toHaveValue("09:00");
         expect(screen.getByLabelText("End time")).toHaveValue("18:00");
     });
 
-    it("returns from working hours to the settings menu and sidebar", async () => {
+    it("returns from calendar display to the settings menu and sidebar", async () => {
         render(<App />);
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
         fireEvent.click(
-            screen.getByRole("button", { name: "Working hours" }),
+            screen.getByRole("button", { name: /Calendar display/i }),
         );
 
-        await screen.findByRole("heading", { name: "Working hours" });
+        await screen.findByText("Week starts on");
         fireEvent.click(screen.getByRole("button", { name: "Done" }));
         expect(
-            await screen.findByRole("button", { name: "Working hours" }),
+            await screen.findByRole("button", { name: /Calendar display/i }),
         ).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole("button", { name: "Return to sidebar" }));
@@ -1301,10 +1310,10 @@ describe("App", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
         fireEvent.click(
-            screen.getByRole("button", { name: "Working hours" }),
+            screen.getByRole("button", { name: /Calendar display/i }),
         );
 
-        await screen.findByRole("heading", { name: "Working hours" });
+        await screen.findByText("Week starts on");
         fireEvent.change(screen.getByLabelText("Start time"), {
             target: { value: "09:00" },
         });
@@ -1312,6 +1321,39 @@ describe("App", () => {
         await waitFor(() =>
             expect(mocks.fullCalendarProps.scrollTime).toBe("09:00:00"),
         );
+    });
+
+    it("loads the persisted week start setting into FullCalendar", async () => {
+        mocks.settings = {
+            ...mocks.settings,
+            week_start: "monday",
+        };
+
+        render(<App />);
+
+        await waitFor(() => expect(mocks.fullCalendarProps.firstDay).toBe(1));
+    });
+
+    it("updates the persisted week start setting from the settings subview", async () => {
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        expect(
+            await screen.findByRole("button", { name: /Calendar display/i }),
+        ).toHaveTextContent("Calendar display");
+        fireEvent.click(
+            screen.getByRole("button", { name: /Calendar display/i }),
+        );
+
+        expect(await screen.findByText("Week starts on")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Monday" }));
+
+        await waitFor(() =>
+            expect(mocks.updateSettings).toHaveBeenCalledWith({
+                week_start: "monday",
+            }),
+        );
+        expect(mocks.fullCalendarProps.firstDay).toBe(1);
     });
 
     it("uses the configured working-hours range as the default calendar viewport", async () => {
@@ -4154,7 +4196,7 @@ describe("App", () => {
             ).not.toBeInTheDocument(),
         );
         expect(
-            await screen.findByRole("button", { name: "Working hours" }),
+            await screen.findByRole("button", { name: /Calendar display/i }),
         ).toBeInTheDocument();
     });
 

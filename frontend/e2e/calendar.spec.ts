@@ -548,8 +548,9 @@ test.describe('Calendar E2E', () => {
     await openAuthenticatedApp(page, user);
 
     await page.getByRole('button', { name: 'Settings' }).click();
-    await page.getByRole('button', { name: 'Working hours' }).click();
-    const workingHoursForm = page.locator('.working-hours-form');
+    await page.getByRole('button', { name: 'Calendar display' }).click();
+    const workingHoursForm = page.locator('.calendar-display-form');
+    await expect(workingHoursForm.getByText('Working hours')).toBeVisible();
 
     await workingHoursForm.getByLabel('Start time').fill('08:00');
     await workingHoursForm.getByLabel('End time').fill('17:00');
@@ -561,10 +562,10 @@ test.describe('Calendar E2E', () => {
     await page.reload();
     await expect(page.getByText(`Hello, ${user.username}`)).toBeVisible();
     await page.getByRole('button', { name: 'Settings' }).click();
-    await page.getByRole('button', { name: 'Working hours' }).click();
+    await page.getByRole('button', { name: 'Calendar display' }).click();
 
-    await expect(page.locator('.working-hours-form').getByLabel('Start time')).toHaveValue('08:00');
-    await expect(page.locator('.working-hours-form').getByLabel('End time')).toHaveValue('17:00');
+    await expect(page.locator('.calendar-display-form').getByLabel('Start time')).toHaveValue('08:00');
+    await expect(page.locator('.calendar-display-form').getByLabel('End time')).toHaveValue('17:00');
   });
 
   test('toggles completed task visibility', async ({ page, request }) => {

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -8,6 +9,7 @@ class AppSettingsRead(BaseModel):
     discord_webhook_url: str | None
     discord_message_template: str | None
     working_hours_start: str
+    week_start: Literal["sunday", "monday"]
     created_at: datetime
     updated_at: datetime
 
@@ -18,6 +20,7 @@ class AppSettingsUpdate(BaseModel):
     discord_webhook_url: str | None = Field(default=None, max_length=4000)
     discord_message_template: str | None = Field(default=None, max_length=4000)
     working_hours_start: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    week_start: Literal["sunday", "monday"] | None = None
 
     @field_validator("working_hours_start")
     @classmethod
