@@ -4485,6 +4485,55 @@ describe("App", () => {
         );
     });
 
+    it("does not show undo for recurring series edits", async () => {
+        setMobileLayout(true);
+        mocks.tasks = [
+            makeTask({
+                id: "task-external",
+                title: "Mobile recurring edit",
+                scheduled_start: "2026-05-08T09:00:00.000Z",
+                scheduled_end: "2026-05-08T10:00:00.000Z",
+                recurrence_rule: "FREQ=DAILY;INTERVAL=1",
+                recurrence_series_id: "series-no-undo",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Mobile Calendar" }));
+        fireEvent.click(screen.getByTestId("calendar-event-task-external"));
+        fireEvent.click(await screen.findByRole("button", { name: "Edit details" }));
+        await screen.findByLabelText("Edit task panel");
+
+        fireEvent.change(screen.getByLabelText("Title"), {
+            target: { value: "Recurring task updated" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+        await screen.findByRole("dialog", { name: "Edit recurring task" });
+        fireEvent.click(
+            screen.getByRole("button", { name: "Edit all recurring tasks" }),
+        );
+
+        expect(
+            await screen.findByText(
+                "Task updated. Undo is not available for recurring series edits.",
+            ),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Undo task change" }),
+        ).not.toBeInTheDocument();
+        await waitFor(() =>
+            expect(mocks.updateTask).toHaveBeenCalledWith(
+                "task-external",
+                expect.objectContaining({
+                    title: "Recurring task updated",
+                }),
+                { updateScope: "series" },
+            ),
+        );
+    });
+
     it("blocks saving an edit when repeat until is before the start date", async () => {
         const now = new Date();
         const todayAtTen = new Date(
@@ -4989,9 +5038,9 @@ describe("App", () => {
         );
 
         expect(
-            await screen.findByRole("button", {
-                name: "Dismiss undo message",
-            }),
+            await screen.findByText(
+                "Task deleted. Undo is not available for recurring occurrence deletes.",
+            ),
         ).toBeInTheDocument();
         expect(
             screen.queryByRole("button", { name: "Undo task change" }),
@@ -5305,9 +5354,9 @@ describe("App", () => {
         );
 
         expect(
-            await screen.findByRole("button", {
-                name: "Dismiss undo message",
-            }),
+            await screen.findByText(
+                "Task updated. Undo is not available after detaching a recurring occurrence.",
+            ),
         ).toBeInTheDocument();
         expect(
             screen.queryByRole("button", { name: "Undo task change" }),
