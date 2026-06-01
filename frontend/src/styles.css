@@ -544,12 +544,22 @@ body {
   transition:
     background-color var(--micro-duration-fast) ease,
     border-color var(--micro-duration-fast) ease,
-    box-shadow var(--micro-duration-fast) ease;
+    box-shadow var(--micro-duration-fast) ease,
+    color var(--micro-duration-fast) ease;
 }
 
-.week-start-option:hover,
-.week-start-option:focus-visible {
-  background: color-mix(in srgb, var(--accent-soft) 48%, var(--panel-bg));
+.week-start-option:not(.week-start-option-active):hover {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--field-border) 76%);
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent-soft) 40%, var(--panel-bg) 60%);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 8%);
+}
+
+.week-start-option:not(.week-start-option-active):focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--field-border) 76%);
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent-soft) 40%, var(--panel-bg) 60%);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 8%);
 }
 
 .week-start-option:focus-visible {
