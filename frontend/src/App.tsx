@@ -516,6 +516,9 @@ export function App() {
     const [pendingTaskEdit, setPendingTaskEdit] =
         useState<PendingTaskEditState | null>(null);
     const [taskUndo, setTaskUndo] = useState<TaskUndoState | null>(null);
+    const [taskSnackbarMessage, setTaskSnackbarMessage] = useState<
+        string | null
+    >(null);
     const [isUndoingTask, setIsUndoingTask] = useState(false);
     const [detailPanelMode, setDetailPanelMode] =
         useState<DetailPanelMode>(null);
@@ -826,6 +829,7 @@ export function App() {
         setDetailPanelMode(null);
         setFormError(null);
         setTaskUndo(null);
+        setTaskSnackbarMessage(null);
         setWebhookSettings(null);
         setWebhookSettingsDraft({
             discord_webhook_url: "",
@@ -1724,10 +1728,17 @@ export function App() {
 
     const clearUndoState = useCallback(() => {
         setTaskUndo(null);
+        setTaskSnackbarMessage(null);
     }, []);
 
     const showTaskUndo = useCallback((undo: TaskUndoState) => {
         setTaskUndo(undo);
+        setTaskSnackbarMessage(null);
+    }, []);
+
+    const showTaskSnackbarMessage = useCallback((message: string) => {
+        setTaskUndo(null);
+        setTaskSnackbarMessage(message);
     }, []);
 
     const handleUndoTaskChange = useCallback(async () => {
@@ -1798,7 +1809,15 @@ export function App() {
                 locallyUpdatedTasksRef.current.delete(taskId);
                 setPendingTaskDelete(null);
                 if (previousTask) {
-                    showTaskUndo(buildDeleteTaskUndo(previousTask, deleteScope));
+                    const undoState = buildDeleteTaskUndo(
+                        previousTask,
+                        deleteScope,
+                    );
+                    if (undoState.kind === "unavailable") {
+                        showTaskSnackbarMessage(undoState.message);
+                    } else {
+                        showTaskUndo(undoState);
+                    }
                 }
 
                 if (source === "detail") {
@@ -1825,7 +1844,14 @@ export function App() {
                 setIsDeleting(false);
             }
         },
-        [clearUndoState, closeDetailPanel, reloadTasks, selectedTaskId, showTaskUndo],
+        [
+            clearUndoState,
+            closeDetailPanel,
+            reloadTasks,
+            selectedTaskId,
+            showTaskSnackbarMessage,
+            showTaskUndo,
+        ],
     );
 
     const runTaskUpdate = useCallback(
@@ -1850,9 +1876,16 @@ export function App() {
                     updatedTask = await updateTask(taskId, updates);
                 }
                 if (previousTask) {
-                    showTaskUndo(
-                        buildUpdateTaskUndo(previousTask, updates, updateScope),
+                    const undoState = buildUpdateTaskUndo(
+                        previousTask,
+                        updates,
+                        updateScope,
                     );
+                    if (undoState.kind === "unavailable") {
+                        showTaskSnackbarMessage(undoState.message);
+                    } else {
+                        showTaskUndo(undoState);
+                    }
                 }
                 setPendingTaskEdit(null);
                 if (source === "calendar") {
@@ -1882,6 +1915,7 @@ export function App() {
             pendingTaskEdit,
             reloadTasks,
             replaceTaskInState,
+            showTaskSnackbarMessage,
             showTaskUndo,
         ],
     );
@@ -2114,9 +2148,17 @@ export function App() {
             try {
                 await updateTask(dropInfo.event.id, updates);
                 if (task) {
-                    showTaskUndo(
-                        buildUpdateTaskUndo(task, updates, "single", "Task moved."),
+                    const undoState = buildUpdateTaskUndo(
+                        task,
+                        updates,
+                        "single",
+                        "Task moved.",
                     );
+                    if (undoState.kind === "unavailable") {
+                        showTaskSnackbarMessage(undoState.message);
+                    } else {
+                        showTaskUndo(undoState);
+                    }
                 }
                 reloadTasks();
             } catch (error) {
@@ -2128,7 +2170,13 @@ export function App() {
                 );
             }
         },
-        [clearUndoState, isMobileLayout, reloadTasks, showTaskUndo],
+        [
+            clearUndoState,
+            isMobileLayout,
+            reloadTasks,
+            showTaskSnackbarMessage,
+            showTaskUndo,
+        ],
     );
 
     const handleEventResize = useCallback(
@@ -2157,14 +2205,17 @@ export function App() {
             try {
                 await updateTask(resizeInfo.event.id, updates);
                 if (task) {
-                    showTaskUndo(
-                        buildUpdateTaskUndo(
-                            task,
-                            updates,
-                            "single",
-                            "Task resized.",
-                        ),
+                    const undoState = buildUpdateTaskUndo(
+                        task,
+                        updates,
+                        "single",
+                        "Task resized.",
                     );
+                    if (undoState.kind === "unavailable") {
+                        showTaskSnackbarMessage(undoState.message);
+                    } else {
+                        showTaskUndo(undoState);
+                    }
                 }
                 reloadTasks();
             } catch (error) {
@@ -2176,7 +2227,13 @@ export function App() {
                 );
             }
         },
-        [clearUndoState, isMobileLayout, reloadTasks, showTaskUndo],
+        [
+            clearUndoState,
+            isMobileLayout,
+            reloadTasks,
+            showTaskSnackbarMessage,
+            showTaskUndo,
+        ],
     );
 
     const openCreatePanel = useCallback(
@@ -3039,9 +3096,17 @@ export function App() {
 
             try {
                 const updatedTask = await updateTask(task.id, updates);
-                showTaskUndo(
-                    buildUpdateTaskUndo(task, updates, "single", "Task moved."),
+                const undoState = buildUpdateTaskUndo(
+                    task,
+                    updates,
+                    "single",
+                    "Task moved.",
                 );
+                if (undoState.kind === "unavailable") {
+                    showTaskSnackbarMessage(undoState.message);
+                } else {
+                    showTaskUndo(undoState);
+                }
                 replaceTaskInState(updatedTask);
                 void refreshTasks();
             } catch (error) {
@@ -3059,6 +3124,7 @@ export function App() {
             isMobileLayout,
             refreshTasks,
             replaceTaskInState,
+            showTaskSnackbarMessage,
             showTaskUndo,
         ],
     );
@@ -6370,6 +6436,34 @@ export function App() {
                         >
                             <span aria-hidden="true">↶</span>
                         </button>
+                    </motion.div>
+                )}
+                {taskSnackbarMessage && (
+                    <motion.div
+                        key="task-snackbar-message"
+                        className="undo-snackbar undo-snackbar--message"
+                        role="status"
+                        aria-live="polite"
+                        initial={{
+                            opacity: 0,
+                            y: 20,
+                            x: 18,
+                            scale: 0.96,
+                        }}
+                        animate={{
+                            opacity: 1,
+                            y: 0,
+                            x: 0,
+                            scale: 1,
+                        }}
+                        transition={{
+                            duration: prefersReducedMotion ? 0 : 0.24,
+                            ease: [0.22, 1, 0.36, 1],
+                        }}
+                    >
+                        <span className="undo-snackbar-message">
+                            {taskSnackbarMessage}
+                        </span>
                     </motion.div>
                 )}
 
