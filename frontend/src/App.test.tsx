@@ -4485,7 +4485,7 @@ describe("App", () => {
         );
     });
 
-    it("does not show undo for recurring series edits", async () => {
+    it("warns in the modal and does not show undo or a warning toast for recurring series edits", async () => {
         setMobileLayout(true);
         mocks.tasks = [
             makeTask({
@@ -4510,19 +4510,41 @@ describe("App", () => {
         });
         fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
-        await screen.findByRole("dialog", { name: "Edit recurring task" });
+        const dialog = await screen.findByRole("dialog", {
+            name: "Edit recurring task",
+        });
+        expect(
+            within(dialog).getByText(
+                "Undo is not available for recurring series edits.",
+            ),
+        ).toBeInTheDocument();
+        expect(
+            within(dialog).queryByText(
+                "Choose whether to edit only this task or all recurring tasks.",
+            ),
+        ).not.toBeInTheDocument();
+        const editOnlyButton = within(dialog).getByRole("button", {
+            name: "Edit only this",
+        });
+        const editSeriesButton = within(dialog).getByRole("button", {
+            name: "Edit all recurring tasks",
+        });
+        expect(editOnlyButton).toHaveClass("recurring-edit-action");
+        expect(editOnlyButton).toHaveStyle({
+            backgroundColor: "rgb(69 181 143 / 52%)",
+        });
+        expect(editSeriesButton).toHaveClass("recurring-edit-action");
+        expect(editSeriesButton).toHaveStyle({
+            backgroundColor: "rgb(69 181 143 / 52%)",
+        });
+        expect(
+            within(dialog).getByRole("button", { name: "Cancel" }),
+        ).toHaveClass("secondary-button");
+
         fireEvent.click(
             screen.getByRole("button", { name: "Edit all recurring tasks" }),
         );
 
-        expect(
-            await screen.findByText(
-                "Task updated. Undo is not available for recurring series edits.",
-            ),
-        ).toBeInTheDocument();
-        expect(
-            screen.queryByRole("button", { name: "Undo task change" }),
-        ).not.toBeInTheDocument();
         await waitFor(() =>
             expect(mocks.updateTask).toHaveBeenCalledWith(
                 "task-external",
@@ -4532,6 +4554,10 @@ describe("App", () => {
                 { updateScope: "series" },
             ),
         );
+        expect(document.querySelector(".undo-snackbar--message")).toBeNull();
+        expect(
+            screen.queryByRole("button", { name: "Undo task change" }),
+        ).not.toBeInTheDocument();
     });
 
     it("blocks saving an edit when repeat until is before the start date", async () => {
@@ -5353,11 +5379,8 @@ describe("App", () => {
             await screen.findByRole("button", { name: "Edit only this" }),
         );
 
-        expect(
-            await screen.findByText(
-                "Task updated. Undo is not available after detaching a recurring occurrence.",
-            ),
-        ).toBeInTheDocument();
+        await waitFor(() => expect(mocks.updateTask).toHaveBeenCalled());
+        expect(document.querySelector(".undo-snackbar--message")).toBeNull();
         expect(
             screen.queryByRole("button", { name: "Undo task change" }),
         ).not.toBeInTheDocument();
