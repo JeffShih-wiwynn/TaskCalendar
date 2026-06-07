@@ -185,6 +185,12 @@ type WebhookSettingsFormState = {
 const DEFAULT_WEBHOOK_MESSAGE_TEMPLATE =
     "Task due: {title}\nWhen: {when}\nNotes: {notes}\nOpen app: {app_url}";
 
+const recurringEditActionStyle: CSSProperties = {
+    backgroundColor: "rgb(69 181 143 / 52%)",
+    border: "1px solid rgb(69 181 143 / 38%)",
+    color: "#ffffff",
+};
+
 type CategoryVisibilityState = {
     none: boolean;
     lists: Record<string, boolean>;
@@ -1881,9 +1887,9 @@ export function App() {
                         updates,
                         updateScope,
                     );
-                    if (undoState.kind === "unavailable") {
+                    if (undoState?.kind === "unavailable") {
                         showTaskSnackbarMessage(undoState.message);
-                    } else {
+                    } else if (undoState) {
                         showTaskUndo(undoState);
                     }
                 }
@@ -2154,9 +2160,9 @@ export function App() {
                         "single",
                         "Task moved.",
                     );
-                    if (undoState.kind === "unavailable") {
+                    if (undoState?.kind === "unavailable") {
                         showTaskSnackbarMessage(undoState.message);
-                    } else {
+                    } else if (undoState) {
                         showTaskUndo(undoState);
                     }
                 }
@@ -2211,9 +2217,9 @@ export function App() {
                         "single",
                         "Task resized.",
                     );
-                    if (undoState.kind === "unavailable") {
+                    if (undoState?.kind === "unavailable") {
                         showTaskSnackbarMessage(undoState.message);
-                    } else {
+                    } else if (undoState) {
                         showTaskUndo(undoState);
                     }
                 }
@@ -3102,9 +3108,9 @@ export function App() {
                     "single",
                     "Task moved.",
                 );
-                if (undoState.kind === "unavailable") {
+                if (undoState?.kind === "unavailable") {
                     showTaskSnackbarMessage(undoState.message);
-                } else {
+                } else if (undoState) {
                     showTaskUndo(undoState);
                 }
                 replaceTaskInState(updatedTask);
@@ -7138,13 +7144,14 @@ export function App() {
                         <h2 id="edit-recurring-task-title">
                             Edit recurring task
                         </h2>
-                        <p className="muted">
-                            Choose whether to edit only this task or all
-                            recurring tasks.
+                        <p className="choice-dialog-warning">
+                            Undo is not available for recurring series edits.
                         </p>
                         <div className="choice-dialog-actions">
                             <button
                                 type="button"
+                                className="recurring-edit-action"
+                                style={recurringEditActionStyle}
                                 disabled={isEditSaving}
                                 onClick={() =>
                                     void runTaskUpdate(
@@ -7159,6 +7166,8 @@ export function App() {
                             </button>
                             <button
                                 type="button"
+                                className="recurring-edit-action"
+                                style={recurringEditActionStyle}
                                 disabled={isEditSaving}
                                 onClick={() =>
                                     void runTaskUpdate(
@@ -8195,30 +8204,13 @@ function buildUpdateTaskUndo(
     updates: Parameters<typeof updateTask>[1],
     updateScope: "single" | "series",
     message = "Task updated.",
-): TaskUndoState {
-    if (updateScope === "series") {
-        return {
-            kind: "unavailable",
-            message: "Task updated. Undo is not available for recurring series edits.",
-        };
-    }
-
-    if (updates.recurrence_rule !== undefined) {
-        return {
-            kind: "unavailable",
-            message: "Task updated. Undo is not available for recurrence changes.",
-        };
-    }
-
+): TaskUndoState | null {
     if (
-        task.recurrence_series_id &&
-        hasRecurringDetachUpdate(updates)
+        updateScope === "series" ||
+        updates.recurrence_rule !== undefined ||
+        (task.recurrence_series_id && hasRecurringDetachUpdate(updates))
     ) {
-        return {
-            kind: "unavailable",
-            message:
-                "Task updated. Undo is not available after detaching a recurring occurrence.",
-        };
+        return null;
     }
 
     return {
