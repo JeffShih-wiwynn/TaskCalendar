@@ -4965,7 +4965,7 @@ describe("App", () => {
         );
     });
 
-    it("asks how to delete a recurring task before removing it", async () => {
+    it("warns in the modal before deleting a recurring task", async () => {
         const now = new Date();
         const todayAtTen = new Date(
             now.getFullYear(),
@@ -5009,30 +5009,39 @@ describe("App", () => {
         );
         fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
 
-        expect(
-            await screen.findByRole("dialog", {
-                name: "Delete recurring task",
-            }),
-        ).toBeInTheDocument();
+        const dialog = await screen.findByRole("dialog", {
+            name: "Delete recurring task",
+        });
+        expect(dialog).toBeInTheDocument();
         expect(mocks.deleteTask).not.toHaveBeenCalled();
 
         expect(
-            screen.getByRole("button", { name: "Delete only this" }),
-        ).toBeInTheDocument();
+            within(dialog).queryByText("Choose how to delete this recurring task."),
+        ).not.toBeInTheDocument();
         expect(
-            screen.getByRole("button", { name: "Delete the recurrsive" }),
-        ).toBeInTheDocument();
+            within(dialog).getByText(
+                "Undo is not available for recurring series deletes.",
+            ),
+        ).toHaveClass("choice-dialog-warning");
+        const deleteOnlyButton = within(dialog).getByRole("button", {
+            name: "Delete only this",
+        });
+        const deleteSeriesButton = within(dialog).getByRole("button", {
+            name: "Delete all recurring tasks",
+        });
+        expect(deleteOnlyButton).toHaveClass("recurring-delete-action");
+        expect(deleteOnlyButton).toHaveStyle({
+            backgroundColor: "rgb(69 181 143 / 52%)",
+        });
+        expect(deleteSeriesButton).toHaveClass("recurring-delete-action");
+        expect(deleteSeriesButton).toHaveStyle({
+            backgroundColor: "rgb(69 181 143 / 52%)",
+        });
         expect(
-            within(
-                screen.getByRole("dialog", {
-                    name: "Delete recurring task",
-                }),
-            ).getByRole("button", { name: "Cancel" }),
-        ).toBeInTheDocument();
+            within(dialog).getByRole("button", { name: "Cancel" }),
+        ).toHaveClass("secondary-button");
 
-        fireEvent.click(
-            screen.getByRole("button", { name: "Delete the recurrsive" }),
-        );
+        fireEvent.click(deleteSeriesButton);
 
         await waitFor(() =>
             expect(mocks.deleteTask).toHaveBeenCalledWith("task-recurring", {
@@ -5041,7 +5050,7 @@ describe("App", () => {
         );
     });
 
-    it("does not offer undo after deleting a recurring occurrence", async () => {
+    it("does not show an undo warning after deleting a recurring occurrence", async () => {
         mocks.tasks = [
             makeTask({
                 id: "task-recurring-delete-undo",
@@ -5063,11 +5072,50 @@ describe("App", () => {
             await screen.findByRole("button", { name: "Delete only this" }),
         );
 
+        await waitFor(() => expect(mocks.deleteTask).toHaveBeenCalled());
+        expect(document.querySelector(".undo-snackbar--message")).toBeNull();
         expect(
-            await screen.findByText(
-                "Task deleted. Undo is not available for recurring occurrence deletes.",
+            screen.queryByText(/Undo is not available for recurring/i),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Undo task change" }),
+        ).not.toBeInTheDocument();
+    });
+
+    it("does not show an undo warning after deleting a recurring series", async () => {
+        mocks.tasks = [
+            makeTask({
+                id: "task-recurring-delete-series-no-toast",
+                title: "Recurring delete series no toast",
+                recurrence_rule: "FREQ=DAILY;INTERVAL=1",
+                recurrence_series_id: "series-delete-no-toast",
+            }),
+        ];
+
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: /^Toggle Recurring delete series no toast/i,
+            }),
+        );
+        fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: "Delete all recurring tasks",
+            }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.deleteTask).toHaveBeenCalledWith(
+                "task-recurring-delete-series-no-toast",
+                { deleteScope: "following" },
             ),
-        ).toBeInTheDocument();
+        );
+        expect(document.querySelector(".undo-snackbar--message")).toBeNull();
+        expect(
+            screen.queryByText(/Undo is not available for recurring/i),
+        ).not.toBeInTheDocument();
         expect(
             screen.queryByRole("button", { name: "Undo task change" }),
         ).not.toBeInTheDocument();

@@ -185,7 +185,7 @@ type WebhookSettingsFormState = {
 const DEFAULT_WEBHOOK_MESSAGE_TEMPLATE =
     "Task due: {title}\nWhen: {when}\nNotes: {notes}\nOpen app: {app_url}";
 
-const recurringEditActionStyle: CSSProperties = {
+const recurringTaskChoiceActionStyle: CSSProperties = {
     backgroundColor: "rgb(69 181 143 / 52%)",
     border: "1px solid rgb(69 181 143 / 38%)",
     color: "#ffffff",
@@ -1815,13 +1815,8 @@ export function App() {
                 locallyUpdatedTasksRef.current.delete(taskId);
                 setPendingTaskDelete(null);
                 if (previousTask) {
-                    const undoState = buildDeleteTaskUndo(
-                        previousTask,
-                        deleteScope,
-                    );
-                    if (undoState.kind === "unavailable") {
-                        showTaskSnackbarMessage(undoState.message);
-                    } else {
+                    const undoState = buildDeleteTaskUndo(previousTask, deleteScope);
+                    if (undoState) {
                         showTaskUndo(undoState);
                     }
                 }
@@ -1855,7 +1850,6 @@ export function App() {
             closeDetailPanel,
             reloadTasks,
             selectedTaskId,
-            showTaskSnackbarMessage,
             showTaskUndo,
         ],
     );
@@ -7067,13 +7061,14 @@ export function App() {
                         <h2 id="delete-recurring-task-title">
                             Delete recurring task
                         </h2>
-                        <p className="muted">
-                            Choose how to delete this recurring task.
+                        <p className="choice-dialog-warning">
+                            Undo is not available for recurring series deletes.
                         </p>
                         <div className="choice-dialog-actions">
                             <button
                                 type="button"
-                                className="danger-button"
+                                className="recurring-delete-action"
+                                style={recurringTaskChoiceActionStyle}
                                 disabled={isDeleting}
                                 onClick={() =>
                                     void runTaskDelete(
@@ -7089,7 +7084,8 @@ export function App() {
                             </button>
                             <button
                                 type="button"
-                                className="danger-button"
+                                className="recurring-delete-action"
+                                style={recurringTaskChoiceActionStyle}
                                 disabled={isDeleting}
                                 onClick={() =>
                                     void runTaskDelete(
@@ -7101,7 +7097,7 @@ export function App() {
                             >
                                 {isDeleting
                                     ? "Deleting..."
-                                    : "Delete the recurrsive"}
+                                    : "Delete all recurring tasks"}
                             </button>
                             <button
                                 type="button"
@@ -7151,7 +7147,7 @@ export function App() {
                             <button
                                 type="button"
                                 className="recurring-edit-action"
-                                style={recurringEditActionStyle}
+                                style={recurringTaskChoiceActionStyle}
                                 disabled={isEditSaving}
                                 onClick={() =>
                                     void runTaskUpdate(
@@ -7167,7 +7163,7 @@ export function App() {
                             <button
                                 type="button"
                                 className="recurring-edit-action"
-                                style={recurringEditActionStyle}
+                                style={recurringTaskChoiceActionStyle}
                                 disabled={isEditSaving}
                                 onClick={() =>
                                     void runTaskUpdate(
@@ -8226,20 +8222,13 @@ function buildUpdateTaskUndo(
 function buildDeleteTaskUndo(
     task: ScheduledTask,
     deleteScope: "single" | "following",
-): TaskUndoState {
-    if (deleteScope !== "single") {
-        return {
-            kind: "unavailable",
-            message: "Task deleted. Undo is not available for recurring series deletes.",
-        };
-    }
-
-    if (task.recurrence_series_id || task.recurrence_rule) {
-        return {
-            kind: "unavailable",
-            message:
-                "Task deleted. Undo is not available for recurring occurrence deletes.",
-        };
+): TaskUndoState | null {
+    if (
+        deleteScope !== "single" ||
+        task.recurrence_series_id ||
+        task.recurrence_rule
+    ) {
+        return null;
     }
 
     return {
