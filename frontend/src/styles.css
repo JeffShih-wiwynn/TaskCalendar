@@ -3348,7 +3348,8 @@ input[type="checkbox"].task-checkbox:checked {
   font-weight: 700;
 }
 
-.choice-dialog-actions button.recurring-edit-action:not(.secondary-button) {
+.choice-dialog-actions button.recurring-edit-action:not(.secondary-button),
+.choice-dialog-actions button.recurring-delete-action:not(.secondary-button) {
   border: 1px solid rgb(69 181 143 / 38%);
   background-color: rgb(69 181 143 / 52%);
 }
