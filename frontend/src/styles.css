@@ -209,6 +209,46 @@ body {
   --danger-soft: #3a211f;
 }
 
+.offline-status {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 90;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  max-width: min(280px, calc(100vw - 24px));
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel-bg) 92%, transparent);
+  box-shadow: 0 8px 22px var(--shadow);
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.offline-status-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.offline-status-readonly {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 34%, var(--border));
+  background: color-mix(in srgb, var(--panel-bg) 90%, var(--warning) 10%);
+}
+
+.offline-status-readonly .offline-status-dot {
+  background: var(--warning);
+}
+
 .task-sidebar {
   min-width: 0;
   min-height: 0;

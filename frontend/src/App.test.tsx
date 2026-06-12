@@ -173,6 +173,31 @@ const mocks = vi.hoisted(() => ({
     tasks: [] as Array<Record<string, unknown>>,
     listTasks: vi.fn(),
     listTaskLists: vi.fn(async () => mocks.taskLists),
+    taskCacheRecords: new Map<string, unknown>(),
+    saveTaskCache: vi.fn(
+        async (
+            userId: string,
+            data: Record<string, unknown>,
+            metadata: Record<string, unknown> = {},
+        ) => {
+            const record = {
+                ...data,
+                metadata: {
+                    user_id: userId,
+                    cached_at:
+                        (metadata.cached_at as string | undefined) ??
+                        "2026-06-12T00:00:00.000Z",
+                    schema_version:
+                        (metadata.schema_version as number | undefined) ?? 1,
+                },
+            };
+            mocks.taskCacheRecords.set(userId, record);
+            return record;
+        },
+    ),
+    loadTaskCache: vi.fn(async (userId: string) =>
+        mocks.taskCacheRecords.get(userId) ?? null,
+    ),
     createTask: vi.fn(async () => ({ id: "task-new" })),
     deleteTask: vi.fn(async () => undefined),
     completeTask: vi.fn(
@@ -666,6 +691,11 @@ vi.mock("./api/backup", () => ({
     importBackup: mocks.importBackup,
 }));
 
+vi.mock("./offline/cache", () => ({
+    loadTaskCache: mocks.loadTaskCache,
+    saveTaskCache: mocks.saveTaskCache,
+}));
+
 function mockTaskRowRects(rows: Element[]): void {
     rows.forEach((row, index) => {
         vi.spyOn(row, "getBoundingClientRect").mockReturnValue({
@@ -911,6 +941,9 @@ describe("App", () => {
         ];
         mocks.listTasks.mockClear();
         mocks.listTaskLists.mockClear();
+        mocks.saveTaskCache.mockClear();
+        mocks.loadTaskCache.mockClear();
+        mocks.taskCacheRecords.clear();
         mocks.listTasks.mockImplementation(() =>
             Promise.resolve([...mocks.tasks].sort(sortTasksForApiMock)),
         );
@@ -1118,6 +1151,130 @@ describe("App", () => {
 
         await waitFor(() => expect(mocks.fetchBackupExport).toHaveBeenCalledTimes(1));
         expect(mocks.downloadBackupPayload).toHaveBeenCalled();
+    });
+
+    it("writes successfully loaded calendar data to the user cache", async () => {
+        mocks.tasks = [
+            makeTask({
+                id: "task-cache-write",
+                title: "Cache write task",
+            }),
+        ];
+
+        render(<App />);
+
+        expect(await screen.findByText("Cache write task")).toBeInTheDocument();
+        await waitFor(() =>
+            expect(mocks.saveTaskCache).toHaveBeenCalledWith(
+                "user-1",
+                expect.objectContaining({
+                    tasks: expect.arrayContaining([
+                        expect.objectContaining({
+                            id: "task-cache-write",
+                            title: "Cache write task",
+                        }),
+                    ]),
+                    taskLists: expect.any(Array),
+                    settings: expect.anything(),
+                }),
+            ),
+        );
+    });
+
+    it("loads cached task data when the task request fails from a network error", async () => {
+        mocks.taskCacheRecords.set("user-1", {
+            tasks: [
+                makeTask({
+                    id: "task-cached",
+                    title: "Cached offline task",
+                }),
+            ],
+            taskLists: mocks.taskLists,
+            settings: mocks.settings,
+            metadata: {
+                user_id: "user-1",
+                cached_at: "2026-06-12T00:00:00.000Z",
+                schema_version: 1,
+            },
+        });
+        mocks.listTasks.mockRejectedValue(new TypeError("Failed to fetch"));
+
+        render(<App />);
+
+        expect(await screen.findByText("Cached offline task")).toBeInTheDocument();
+        expect(await screen.findByText("Online: showing cached data")).toBeInTheDocument();
+        await waitFor(() =>
+            expect(mocks.loadTaskCache).toHaveBeenCalledWith("user-1"),
+        );
+    });
+
+    it("does not load another user's cached task data", async () => {
+        mocks.getCurrentUser.mockResolvedValueOnce({
+            id: "user-2",
+            username: "bob",
+            is_admin: false,
+            created_at: "",
+            updated_at: "",
+        });
+        mocks.taskCacheRecords.set("user-1", {
+            tasks: [
+                makeTask({
+                    id: "task-other-user",
+                    title: "Other user cached task",
+                }),
+            ],
+            taskLists: mocks.taskLists,
+            settings: mocks.settings,
+            metadata: {
+                user_id: "user-1",
+                cached_at: "2026-06-12T00:00:00.000Z",
+                schema_version: 1,
+            },
+        });
+        mocks.listTasks.mockRejectedValue(new TypeError("Failed to fetch"));
+
+        render(<App />);
+
+        await screen.findByText("Hello, bob");
+        await waitFor(() =>
+            expect(mocks.loadTaskCache).toHaveBeenCalledWith("user-2"),
+        );
+        expect(screen.queryByText("Other user cached task")).not.toBeInTheDocument();
+    });
+
+    it("blocks task mutations while showing cached data", async () => {
+        mocks.taskCacheRecords.set("user-1", {
+            tasks: [
+                makeTask({
+                    id: "task-readonly-cache",
+                    title: "Read only cached task",
+                }),
+            ],
+            taskLists: mocks.taskLists,
+            settings: mocks.settings,
+            metadata: {
+                user_id: "user-1",
+                cached_at: "2026-06-12T00:00:00.000Z",
+                schema_version: 1,
+            },
+        });
+        mocks.listTasks.mockRejectedValue(new TypeError("Failed to fetch"));
+
+        render(<App />);
+
+        expect(await screen.findByText("Read only cached task")).toBeInTheDocument();
+        fireEvent.click(
+            screen.getByRole("checkbox", {
+                name: "Toggle Read only cached task",
+            }),
+        );
+
+        expect(mocks.completeTask).not.toHaveBeenCalled();
+        expect(
+            await screen.findByText(
+                "You are offline. Editing is disabled until you reconnect.",
+            ),
+        ).toBeInTheDocument();
     });
 
     it("clears an invalid token and returns to login", async () => {

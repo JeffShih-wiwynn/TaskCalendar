@@ -101,6 +101,12 @@ import {
     IconTrash,
 } from "./components/icons";
 import { AdminSettingsPanel } from "./components/AdminSettingsPanel";
+import {
+    loadTaskCache,
+    saveTaskCache,
+    type TaskCacheData,
+    type TaskCacheRecord,
+} from "./offline/cache";
 
 type TaskState =
     | { status: "loading"; tasks: ScheduledTask[] }
@@ -122,6 +128,7 @@ type MobileScreen = "today" | "upcoming" | "unscheduled" | "calendar" | "setting
 type CalendarTransitionKind = "neutral" | "view" | "prev" | "next" | "today";
 type DragTargetMode = "reorder" | "schedule" | null;
 type AuthMode = "login" | "register";
+type OfflineDataSource = "server" | "cache" | "empty";
 type WorkingHoursSettings = {
     start: string;
     end: string;
@@ -184,6 +191,8 @@ type WebhookSettingsFormState = {
 
 const DEFAULT_WEBHOOK_MESSAGE_TEMPLATE =
     "Task due: {title}\nWhen: {when}\nNotes: {notes}\nOpen app: {app_url}";
+const offlineMutationMessage =
+    "You are offline. Editing is disabled until you reconnect.";
 
 const recurringTaskChoiceActionStyle: CSSProperties = {
     backgroundColor: "rgb(69 181 143 / 52%)",
@@ -457,6 +466,12 @@ export function App() {
         getStoredAuthToken,
     );
     const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+    const [isBrowserOnline, setIsBrowserOnline] = useState(() =>
+        typeof navigator === "undefined" ? true : navigator.onLine,
+    );
+    const [offlineDataSource, setOfflineDataSource] =
+        useState<OfflineDataSource>("empty");
+    const [offlineCachedAt, setOfflineCachedAt] = useState<string | null>(null);
     const [authMode, setAuthMode] = useState<AuthMode>("login");
     const [authFormState, setAuthFormState] = useState<AuthFormState>({
         username: "",
@@ -644,8 +659,13 @@ export function App() {
     const locallyUpdatedTasksRef = useRef<Map<string, ScheduledTask>>(new Map());
     const calendarResizeRafRef = useRef<number | null>(null);
     const calendarResizeRaf2Ref = useRef<number | null>(null);
+    const taskListsRef = useRef<TaskList[]>([]);
+    const webhookSettingsRef = useRef<AppSettings | null>(null);
+    const currentUserIdRef = useRef<string | null>(null);
 
     const tasks = taskState.tasks;
+    const isUsingCachedData = offlineDataSource === "cache";
+    const isOfflineReadOnly = !isBrowserOnline || isUsingCachedData;
     const isInitialTaskLoad =
         taskState.status === "loading" && tasks.length === 0;
     const isTaskRefreshing = taskState.status === "refreshing";
@@ -768,6 +788,11 @@ export function App() {
     const calendarFirstDay = weekStart === "monday" ? 1 : 0;
     const updateWorkingHours = useCallback(
         (updates: Partial<WorkingHoursSettings>) => {
+            if (isOfflineReadOnly) {
+                setTaskUndo(null);
+                setTaskSnackbarMessage(offlineMutationMessage);
+                return;
+            }
             setWorkingHours((current) => ({
                 ...current,
                 ...updates,
@@ -778,10 +803,15 @@ export function App() {
                 }).catch(() => undefined);
             }
         },
-        [authToken],
+        [authToken, isOfflineReadOnly],
     );
     const updateWeekStart = useCallback(
         (value: WeekStart) => {
+            if (isOfflineReadOnly) {
+                setTaskUndo(null);
+                setTaskSnackbarMessage(offlineMutationMessage);
+                return;
+            }
             setWeekStart(value);
             if (authToken) {
                 void updateSettings({
@@ -789,7 +819,7 @@ export function App() {
                 }).catch(() => undefined);
             }
         },
-        [authToken],
+        [authToken, isOfflineReadOnly],
     );
     const toggleCreateAccordionSection = useCallback(
         (section: TaskFormAccordionSectionId) => {
@@ -830,6 +860,8 @@ export function App() {
     const resetAppData = useCallback(() => {
         locallyUpdatedTasksRef.current.clear();
         setTaskState({ status: "loading", tasks: [] });
+        setOfflineDataSource("empty");
+        setOfflineCachedAt(null);
         setTaskLists([]);
         setSelectedTaskId(null);
         setDetailPanelMode(null);
@@ -860,6 +892,7 @@ export function App() {
         clearStoredAuthToken();
         setAuthToken(null);
         setCurrentUser(null);
+        currentUserIdRef.current = null;
         setAuthError("Session expired. Please log in again.");
         resetAppData();
     }, [resetAppData]);
@@ -868,12 +901,18 @@ export function App() {
         clearStoredAuthToken();
         setAuthToken(null);
         setCurrentUser(null);
+        currentUserIdRef.current = null;
         setAuthError(null);
         resetAppData();
         resetAccountForms();
     }, [resetAppData, resetAccountForms]);
 
     const handleOpenBackupSummary = useCallback(async () => {
+        if (isOfflineReadOnly) {
+            setTaskUndo(null);
+            setTaskSnackbarMessage(offlineMutationMessage);
+            return;
+        }
         setIsBackupLoading(true);
         try {
             const payload = await fetchBackupExport();
@@ -888,7 +927,7 @@ export function App() {
         } finally {
             setIsBackupLoading(false);
         }
-    }, []);
+    }, [isOfflineReadOnly]);
 
     const handleAuthSubmit = useCallback(
         async (event: FormEvent<HTMLFormElement>) => {
@@ -909,7 +948,9 @@ export function App() {
                 const token = await login(credentials);
                 setAuthToken(token);
                 setAuthFormState({ username: "", password: "" });
-                setCurrentUser(await getCurrentUser());
+                const user = await getCurrentUser();
+                currentUserIdRef.current = user.id;
+                setCurrentUser(user);
             } catch (error) {
                 setAuthError(
                     error instanceof Error
@@ -930,7 +971,9 @@ export function App() {
 
         void (async () => {
             try {
-                setCurrentUser(await getCurrentUser());
+                const user = await getCurrentUser();
+                currentUserIdRef.current = user.id;
+                setCurrentUser(user);
             } catch (error) {
                 if (isAuthError(error)) {
                     handleAuthExpired();
@@ -944,6 +987,18 @@ export function App() {
             }
         })();
     }, [authToken, handleAuthExpired]);
+
+    useEffect(() => {
+        taskListsRef.current = taskLists;
+    }, [taskLists]);
+
+    useEffect(() => {
+        webhookSettingsRef.current = webhookSettings;
+    }, [webhookSettings]);
+
+    useEffect(() => {
+        currentUserIdRef.current = currentUser?.id ?? null;
+    }, [currentUser]);
 
     useEffect(() => {
         if (calendarTransitionTimeoutRef.current !== null) {
@@ -1058,25 +1113,135 @@ export function App() {
         editStateSyncTaskIdRef.current = selectedTask.id;
     }, [detailPanelMode, selectedTask]);
 
+    const applyCachedAppData = useCallback((record: TaskCacheRecord) => {
+        locallyUpdatedTasksRef.current.clear();
+        setTaskState({
+            status: "ready",
+            tasks: record.tasks,
+        });
+        setTaskLists(record.taskLists);
+        setOfflineDataSource("cache");
+        setOfflineCachedAt(record.metadata.cached_at);
+        if (record.settings) {
+            setWebhookSettings(record.settings);
+            setWebhookSettingsDraft({
+                discord_webhook_url: record.settings.discord_webhook_url ?? "",
+                discord_message_template:
+                    record.settings.discord_message_template ?? "",
+            });
+            if (!hasStoredWorkingHours()) {
+                setWorkingHours((current) => ({
+                    ...current,
+                    start: normalizeWorkingHour(
+                        record.settings?.working_hours_start,
+                        current.start,
+                    ),
+                }));
+            }
+            setWeekStart(normalizeWeekStart(record.settings.week_start));
+        }
+    }, []);
+
+    const loadCachedAppData = useCallback(
+        async (userId: string): Promise<boolean> => {
+            try {
+                const cachedRecord = await loadTaskCache(userId);
+                if (!cachedRecord) {
+                    return false;
+                }
+                applyCachedAppData(cachedRecord);
+                return true;
+            } catch {
+                return false;
+            }
+        },
+        [applyCachedAppData],
+    );
+
+    const saveCurrentTaskCache = useCallback(
+        async (overrides: Partial<TaskCacheData> = {}) => {
+            const userId = currentUserIdRef.current;
+            if (!userId) {
+                return;
+            }
+
+            try {
+                const existingRecord = await loadTaskCache(userId);
+                await saveTaskCache(userId, {
+                    tasks:
+                        overrides.tasks ??
+                        (tasksRef.current.length > 0
+                            ? tasksRef.current
+                            : (existingRecord?.tasks ?? tasksRef.current)),
+                    taskLists:
+                        overrides.taskLists ??
+                        (taskListsRef.current.length > 0
+                            ? taskListsRef.current
+                            : (existingRecord?.taskLists ??
+                              taskListsRef.current)),
+                    settings:
+                        overrides.settings === undefined
+                            ? (webhookSettingsRef.current ??
+                              existingRecord?.settings ??
+                              null)
+                            : overrides.settings,
+                });
+            } catch {
+                // Offline cache persistence should not block normal online use.
+            }
+        },
+        [],
+    );
+
     const refreshTasks = useCallback(async (options?: { silent?: boolean }) => {
+        const userId = currentUserIdRef.current;
+
         setTaskState((current) => ({
             status: current.tasks.length > 0 ? "refreshing" : "loading",
             tasks: current.tasks,
         }));
 
+        if (!isBrowserOnline && userId) {
+            const didLoadCache = await loadCachedAppData(userId);
+            if (didLoadCache) {
+                if (!options?.silent) {
+                    setTaskSnackbarMessage(
+                        "You are offline. Showing cached data.",
+                    );
+                }
+                return;
+            }
+        }
+
         try {
             const loadedTasks = await listTasks();
+            const nextTasks = mergeLocallyUpdatedTasks(
+                loadedTasks,
+                locallyUpdatedTasksRef.current,
+            );
             setTaskState({
                 status: "ready",
-                tasks: mergeLocallyUpdatedTasks(
-                    loadedTasks,
-                    locallyUpdatedTasksRef.current,
-                ),
+                tasks: nextTasks,
             });
+            setOfflineDataSource("server");
+            setOfflineCachedAt(null);
+            tasksRef.current = nextTasks;
+            void saveCurrentTaskCache({ tasks: nextTasks });
         } catch (error) {
             if (isAuthError(error)) {
                 handleAuthExpired();
                 return;
+            }
+            if (userId && (isOfflineNetworkError(error) || !isBrowserOnline)) {
+                const didLoadCache = await loadCachedAppData(userId);
+                if (didLoadCache) {
+                    if (!options?.silent) {
+                        setTaskSnackbarMessage(
+                            "You are offline. Showing cached data.",
+                        );
+                    }
+                    return;
+                }
             }
             if (options?.silent) {
                 return;
@@ -1090,7 +1255,37 @@ export function App() {
                 tasks: current.tasks,
             }));
         }
-    }, [handleAuthExpired]);
+    }, [
+        handleAuthExpired,
+        isBrowserOnline,
+        loadCachedAppData,
+        saveCurrentTaskCache,
+    ]);
+
+    useEffect(() => {
+        if (!currentUser) {
+            return;
+        }
+
+        if (taskState.status === "ready" && taskState.tasks.length > 0) {
+            void saveCurrentTaskCache({ tasks: taskState.tasks });
+            return;
+        }
+
+        if (
+            taskState.status === "error" &&
+            isOfflineNetworkError(new Error(taskState.message))
+        ) {
+            void (async () => {
+                const didLoadCache = await loadCachedAppData(currentUser.id);
+                if (didLoadCache) {
+                    setTaskSnackbarMessage(
+                        "You are offline. Showing cached data.",
+                    );
+                }
+            })();
+        }
+    }, [currentUser, loadCachedAppData, saveCurrentTaskCache, taskState]);
 
     const replaceTaskInState = useCallback((updatedTask: ScheduledTask) => {
         locallyUpdatedTasksRef.current.set(updatedTask.id, updatedTask);
@@ -1151,6 +1346,8 @@ export function App() {
             try {
                 const loadedTaskLists = await listTaskLists();
                 setTaskLists(loadedTaskLists);
+                taskListsRef.current = loadedTaskLists;
+                void saveCurrentTaskCache({ taskLists: loadedTaskLists });
             } catch (error) {
                 if (isAuthError(error)) {
                     handleAuthExpired();
@@ -1166,10 +1363,15 @@ export function App() {
                 );
             }
         },
-        [handleAuthExpired],
+        [handleAuthExpired, saveCurrentTaskCache],
     );
 
     const handleConfirmBackupImport = useCallback(async (file: File | null) => {
+        if (isOfflineReadOnly) {
+            setTaskUndo(null);
+            setTaskSnackbarMessage(offlineMutationMessage);
+            return;
+        }
         if (!file) {
             setBackupImportError("Choose a JSON backup file first.");
             return;
@@ -1199,10 +1401,16 @@ export function App() {
         } finally {
             setIsBackupImporting(false);
         }
-    }, [refreshTaskLists, refreshTasks]);
+    }, [isOfflineReadOnly, refreshTaskLists, refreshTasks]);
 
     const handleBackupImportFileChange = useCallback(
         (event: ChangeEvent<HTMLInputElement>) => {
+            if (isOfflineReadOnly) {
+                setTaskUndo(null);
+                setTaskSnackbarMessage(offlineMutationMessage);
+                event.target.value = "";
+                return;
+            }
             const file = event.target.files?.[0] ?? null;
             event.target.value = "";
             setBackupImportFile(file);
@@ -1213,13 +1421,14 @@ export function App() {
                 return;
             }
         },
-        [],
+        [isOfflineReadOnly],
     );
 
     const refreshWebhookSettings = useCallback(async () => {
         try {
             const loadedSettings = await getSettings();
             setWebhookSettings(loadedSettings);
+            webhookSettingsRef.current = loadedSettings;
             setWebhookSettingsDraft({
                 discord_webhook_url: loadedSettings.discord_webhook_url ?? "",
                 discord_message_template:
@@ -1235,6 +1444,7 @@ export function App() {
                 }));
             }
             setWeekStart(normalizeWeekStart(loadedSettings.week_start));
+            void saveCurrentTaskCache({ settings: loadedSettings });
         } catch (error) {
             if (isAuthError(error)) {
                 handleAuthExpired();
@@ -1246,7 +1456,7 @@ export function App() {
                     : "Unable to load settings",
             );
         }
-    }, [handleAuthExpired]);
+    }, [handleAuthExpired, saveCurrentTaskCache]);
 
     useEffect(() => {
         if (!authToken) {
@@ -1461,7 +1671,12 @@ export function App() {
 
     useEffect(() => {
         const taskListElement = taskListRef.current;
-        if (!taskListElement || detailPanelMode || isMobileLayout) {
+        if (
+            !taskListElement ||
+            detailPanelMode ||
+            isMobileLayout ||
+            isOfflineReadOnly
+        ) {
             return;
         }
 
@@ -1487,7 +1702,13 @@ export function App() {
         return () => {
             draggable.destroy();
         };
-    }, [activeView, detailPanelMode, isDetailPanelClosing, isMobileLayout]);
+    }, [
+        activeView,
+        detailPanelMode,
+        isDetailPanelClosing,
+        isMobileLayout,
+        isOfflineReadOnly,
+    ]);
 
     useEffect(() => {
         if (!isTimeGridView) {
@@ -1747,7 +1968,57 @@ export function App() {
         setTaskSnackbarMessage(message);
     }, []);
 
+    const guardOfflineMutation = useCallback(
+        (message = offlineMutationMessage): boolean => {
+            if (!isOfflineReadOnly) {
+                return false;
+            }
+
+            showTaskSnackbarMessage(message);
+            return true;
+        },
+        [isOfflineReadOnly, showTaskSnackbarMessage],
+    );
+
+    useEffect(() => {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        const handleOnline = () => {
+            setIsBrowserOnline(true);
+            showTaskSnackbarMessage("Back online.");
+            void refreshTasks();
+            void refreshTaskLists({ silent: true });
+            void refreshWebhookSettings();
+        };
+        const handleOffline = () => {
+            setIsBrowserOnline(false);
+            showTaskSnackbarMessage("You are offline. Showing cached data.");
+            if (currentUserIdRef.current) {
+                void loadCachedAppData(currentUserIdRef.current);
+            }
+        };
+
+        window.addEventListener("online", handleOnline);
+        window.addEventListener("offline", handleOffline);
+
+        return () => {
+            window.removeEventListener("online", handleOnline);
+            window.removeEventListener("offline", handleOffline);
+        };
+    }, [
+        loadCachedAppData,
+        refreshTaskLists,
+        refreshTasks,
+        refreshWebhookSettings,
+        showTaskSnackbarMessage,
+    ]);
+
     const handleUndoTaskChange = useCallback(async () => {
+        if (guardOfflineMutation()) {
+            return;
+        }
         if (!taskUndo) {
             return;
         }
@@ -1795,7 +2066,7 @@ export function App() {
         } finally {
             setIsUndoingTask(false);
         }
-    }, [refreshTasks, reloadTasks, replaceTaskInState, taskUndo]);
+    }, [guardOfflineMutation, refreshTasks, reloadTasks, replaceTaskInState, taskUndo]);
 
     const runTaskDelete = useCallback(
         async (
@@ -1803,6 +2074,9 @@ export function App() {
             source: "detail" | "menu",
             deleteScope: "single" | "following" = "single",
         ) => {
+            if (guardOfflineMutation()) {
+                return;
+            }
             setFormError(null);
             clearUndoState();
             setIsDeleting(true);
@@ -1851,6 +2125,7 @@ export function App() {
             reloadTasks,
             selectedTaskId,
             showTaskUndo,
+            guardOfflineMutation,
         ],
     );
 
@@ -1861,6 +2136,13 @@ export function App() {
             updateScope: "single" | "series" = "single",
             source: "form" | "calendar" = "form",
         ) => {
+            if (guardOfflineMutation()) {
+                if (source === "calendar") {
+                    pendingTaskEdit?.revert?.();
+                    setPendingTaskEdit(null);
+                }
+                return;
+            }
             setFormError(null);
             clearUndoState();
             setIsEditSaving(true);
@@ -1917,6 +2199,7 @@ export function App() {
             replaceTaskInState,
             showTaskSnackbarMessage,
             showTaskUndo,
+            guardOfflineMutation,
         ],
     );
 
@@ -2124,6 +2407,10 @@ export function App() {
 
     const handleEventDrop = useCallback(
         async (dropInfo: EventDropArg) => {
+            if (guardOfflineMutation()) {
+                dropInfo.revert();
+                return;
+            }
             if (isMobileLayout) {
                 dropInfo.revert();
                 return;
@@ -2176,11 +2463,16 @@ export function App() {
             reloadTasks,
             showTaskSnackbarMessage,
             showTaskUndo,
+            guardOfflineMutation,
         ],
     );
 
     const handleEventResize = useCallback(
         async (resizeInfo: EventResizeDoneArg) => {
+            if (guardOfflineMutation()) {
+                resizeInfo.revert();
+                return;
+            }
             if (isMobileLayout) {
                 resizeInfo.revert();
                 return;
@@ -2233,11 +2525,15 @@ export function App() {
             reloadTasks,
             showTaskSnackbarMessage,
             showTaskUndo,
+            guardOfflineMutation,
         ],
     );
 
     const openCreatePanel = useCallback(
         (start: Date, end: Date) => {
+            if (guardOfflineMutation()) {
+                return;
+            }
             setFormError(null);
             setIsViewMenuOpen(false);
             setIsCategoryMenuOpen(false);
@@ -2265,11 +2561,14 @@ export function App() {
                 titleInputRef.current?.focus();
             }, 0);
         },
-        [selectedListIdForForms],
+        [guardOfflineMutation, selectedListIdForForms],
     );
 
     const openDateOnlyCreatePanel = useCallback(
         (date: Date) => {
+            if (guardOfflineMutation()) {
+                return;
+            }
             setFormError(null);
             setIsViewMenuOpen(false);
             setIsCategoryMenuOpen(false);
@@ -2297,10 +2596,13 @@ export function App() {
                 titleInputRef.current?.focus();
             }, 0);
         },
-        [selectedListIdForForms],
+        [guardOfflineMutation, selectedListIdForForms],
     );
 
     const openUnscheduledCreatePanel = useCallback(() => {
+        if (guardOfflineMutation()) {
+            return;
+        }
         setFormError(null);
         setIsViewMenuOpen(false);
         setIsCategoryMenuOpen(false);
@@ -2321,7 +2623,7 @@ export function App() {
             });
             titleInputRef.current?.focus();
         }, 0);
-    }, [selectedListIdForForms]);
+    }, [guardOfflineMutation, selectedListIdForForms]);
 
     const openTaskDetailPanel = useCallback((taskId: string) => {
         setFormError(null);
@@ -2396,6 +2698,9 @@ export function App() {
 
     const handleCheckboxChange = useCallback(
         async (task: ScheduledTask) => {
+            if (guardOfflineMutation()) {
+                return;
+            }
             clearUndoState();
             try {
                 if (task.completed) {
@@ -2420,11 +2725,14 @@ export function App() {
                 );
             }
         },
-        [clearUndoState, reloadTasks, showTaskUndo],
+        [clearUndoState, guardOfflineMutation, reloadTasks, showTaskUndo],
     );
 
     const applyMobileQuickAction = useCallback(
         async (task: ScheduledTask, action: MobileQuickAction) => {
+            if (guardOfflineMutation()) {
+                return;
+            }
             if (task.all_day || !task.scheduled_start || !task.scheduled_end) {
                 return;
             }
@@ -2472,7 +2780,7 @@ export function App() {
 
             await runTaskUpdate(task.id, updates, "single", "calendar");
         },
-        [runTaskUpdate],
+        [guardOfflineMutation, runTaskUpdate],
     );
 
     const completionTransition = useMemo(
@@ -2766,6 +3074,9 @@ export function App() {
 
     const persistUnscheduledOrder = useCallback(
         (nextOrder: string[]) => {
+            if (guardOfflineMutation()) {
+                return;
+            }
             const saveState = unscheduledOrderSaveStateRef.current;
             saveState.queued = nextOrder;
             if (saveState.saving) {
@@ -2808,7 +3119,13 @@ export function App() {
                 saveState.saving = false;
             })();
         },
-        [applyLocalUnscheduledOrder, clearUndoState, refreshTasks, replaceTasksInState],
+        [
+            applyLocalUnscheduledOrder,
+            clearUndoState,
+            guardOfflineMutation,
+            refreshTasks,
+            replaceTasksInState,
+        ],
     );
 
     const moveTaskRowDuringDrag = useCallback(
@@ -2840,6 +3157,9 @@ export function App() {
             ) {
                 return;
             }
+            if (guardOfflineMutation()) {
+                return;
+            }
 
             setDragTargetMode("reorder");
             preventDefault();
@@ -2865,7 +3185,7 @@ export function App() {
             pointerState.startX = clientX;
             pointerState.startY = clientY;
         },
-        [activeView, applyLocalUnscheduledOrder, dragTargetMode],
+        [activeView, applyLocalUnscheduledOrder, dragTargetMode, guardOfflineMutation],
     );
 
     const handleTaskRowPointerMove = useCallback(
@@ -2980,6 +3300,9 @@ export function App() {
 
     const moveUnscheduledTaskToTop = useCallback(
         (taskId: string) => {
+            if (guardOfflineMutation()) {
+                return;
+            }
             if (activeView !== "unscheduled") {
                 return;
             }
@@ -2994,11 +3317,19 @@ export function App() {
             applyLocalUnscheduledOrder(nextOrder);
             persistUnscheduledOrder(nextOrder);
         },
-        [activeView, applyLocalUnscheduledOrder, persistUnscheduledOrder],
+        [
+            activeView,
+            applyLocalUnscheduledOrder,
+            guardOfflineMutation,
+            persistUnscheduledOrder,
+        ],
     );
 
     const moveUnscheduledTaskByOffset = useCallback(
         (taskId: string, offset: number) => {
+            if (guardOfflineMutation()) {
+                return;
+            }
             if (activeView !== "unscheduled" || offset === 0) {
                 return;
             }
@@ -3027,7 +3358,12 @@ export function App() {
             applyLocalUnscheduledOrder(nextOrder);
             persistUnscheduledOrder(nextOrder);
         },
-        [activeView, applyLocalUnscheduledOrder, persistUnscheduledOrder],
+        [
+            activeView,
+            applyLocalUnscheduledOrder,
+            guardOfflineMutation,
+            persistUnscheduledOrder,
+        ],
     );
 
     const endScheduleDragHighlight = useCallback(() => {
@@ -3037,6 +3373,9 @@ export function App() {
     }, []);
 
     const startScheduleDragHighlight = useCallback(() => {
+        if (isOfflineReadOnly) {
+            return;
+        }
         endScheduleDragHighlight();
         setDragTargetMode("schedule");
 
@@ -3062,7 +3401,7 @@ export function App() {
             window.removeEventListener("pointercancel", handlePointerCancel);
             clear();
         };
-    }, [endScheduleDragHighlight]);
+    }, [endScheduleDragHighlight, isOfflineReadOnly]);
 
     useEffect(() => {
         return () => {
@@ -3072,6 +3411,10 @@ export function App() {
 
     const handleExternalTaskDrop = useCallback(
         async (dropInfo: DropArg) => {
+            if (guardOfflineMutation()) {
+                endScheduleDragHighlight();
+                return;
+            }
             if (isMobileLayout) {
                 endScheduleDragHighlight();
                 return;
@@ -3126,6 +3469,7 @@ export function App() {
             replaceTaskInState,
             showTaskSnackbarMessage,
             showTaskUndo,
+            guardOfflineMutation,
         ],
     );
 
@@ -3252,6 +3596,9 @@ export function App() {
 
     const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        if (guardOfflineMutation()) {
+            return;
+        }
         setFormError(null);
 
         if (!formState.title.trim()) {
@@ -3397,6 +3744,9 @@ export function App() {
 
     const handleEditSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        if (guardOfflineMutation()) {
+            return;
+        }
         setFormError(null);
 
         if (!selectedTask || !editState) {
@@ -3480,6 +3830,9 @@ export function App() {
 
     const handleCreateTaskList = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        if (guardOfflineMutation()) {
+            return;
+        }
         setFormError(null);
 
         const name = newListName.trim();
@@ -3526,16 +3879,22 @@ export function App() {
     }, [isCategoryMenuOpen, resetCategoryEditor]);
 
     const startEditingTaskList = useCallback((taskList: TaskList) => {
+        if (guardOfflineMutation()) {
+            return;
+        }
         setIsAddingCategory(false);
         setIsDeleteCategoryConfirming(false);
         setEditingTaskListId(taskList.id);
         setEditingListName(taskList.name);
         setEditingListColor(taskList.color);
         window.setTimeout(() => categoryNameInputRef.current?.focus(), 0);
-    }, []);
+    }, [guardOfflineMutation]);
 
     const handleUpdateTaskList = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        if (guardOfflineMutation()) {
+            return;
+        }
         setFormError(null);
 
         if (!editingTaskListId) {
@@ -3573,6 +3932,9 @@ export function App() {
     };
 
     const handleDeleteEditingTaskList = async () => {
+        if (guardOfflineMutation()) {
+            return;
+        }
         if (!editingTaskListId) {
             return;
         }
@@ -3607,6 +3969,9 @@ export function App() {
     };
 
     const handleDeleteSelectedTask = async () => {
+        if (guardOfflineMutation()) {
+            return;
+        }
         if (!selectedTask) {
             return;
         }
@@ -3619,6 +3984,9 @@ export function App() {
     };
 
     const handleDeleteFromMenu = async () => {
+        if (guardOfflineMutation()) {
+            return;
+        }
         if (!contextMenu) {
             return;
         }
@@ -3666,6 +4034,9 @@ export function App() {
     };
 
     const handleDuplicateFromMenu = async () => {
+        if (guardOfflineMutation()) {
+            return;
+        }
         if (!contextMenu || contextMenu.kind !== "task") {
             return;
         }
@@ -3714,6 +4085,9 @@ export function App() {
         value.trim() || null;
 
     const saveWebhookSettings = async (): Promise<boolean> => {
+        if (guardOfflineMutation()) {
+            return false;
+        }
         setFormError(null);
         setWebhookTestMessage(null);
         setIsWebhookSettingsSaving(true);
@@ -3756,6 +4130,9 @@ export function App() {
     };
 
     const handleTestWebhookSettings = async () => {
+        if (guardOfflineMutation()) {
+            return;
+        }
         setFormError(null);
         setWebhookTestMessage(null);
         setIsWebhookSettingsTesting(true);
@@ -3836,6 +4213,10 @@ export function App() {
     };
 
     const refreshAdminUsers = async () => {
+        if (isOfflineReadOnly) {
+            setAdminUsersError(offlineMutationMessage);
+            return;
+        }
         setIsAdminUsersLoading(true);
         setAdminUsersError(null);
         try {
@@ -3860,6 +4241,9 @@ export function App() {
 
     const handleSavePasswordChange = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        if (guardOfflineMutation()) {
+            return;
+        }
         setChangePasswordError(null);
         setChangePasswordSuccess(null);
 
@@ -3892,6 +4276,9 @@ export function App() {
 
     const handleDeleteAccount = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        if (guardOfflineMutation()) {
+            return;
+        }
         setDeleteAccountError(null);
 
         if (deleteAccountConfirmation !== "DELETE") {
@@ -3918,6 +4305,9 @@ export function App() {
     };
 
     const openDeleteAdminUserConfirm = (user: AdminUser) => {
+        if (guardOfflineMutation()) {
+            return;
+        }
         setAdminUsersError(null);
         setAdminUserDeleteCandidate(user);
     };
@@ -3930,6 +4320,9 @@ export function App() {
     };
 
     const handleDeleteAdminUser = async () => {
+        if (guardOfflineMutation()) {
+            return;
+        }
         if (!adminUserDeleteCandidate) {
             return;
         }
@@ -4101,6 +4494,16 @@ export function App() {
             mobileQuickActionTask.scheduled_start &&
             mobileQuickActionTask.scheduled_end,
     );
+    const offlineStatusLabel = !isBrowserOnline
+        ? isUsingCachedData
+            ? "Offline: cached data"
+            : "Offline"
+        : isUsingCachedData
+          ? "Online: showing cached data"
+          : "Online";
+    const offlineStatusTitle = offlineCachedAt
+        ? `${offlineStatusLabel}. Cached ${formatDateTime(offlineCachedAt)}.`
+        : offlineStatusLabel;
 
     if (!authToken) {
         return (
@@ -4149,6 +4552,15 @@ export function App() {
                 setIsCategoryMenuOpen(false);
             }}
         >
+            <div
+                className={`offline-status offline-status-${isOfflineReadOnly ? "readonly" : "online"}`}
+                role="status"
+                aria-live="polite"
+                title={offlineStatusTitle}
+            >
+                <span className="offline-status-dot" aria-hidden="true" />
+                <span>{offlineStatusLabel}</span>
+            </div>
             <nav className="mobile-app-nav" aria-label="Mobile app navigation">
                 <button
                     type="button"
@@ -4798,6 +5210,9 @@ export function App() {
                                         className="settings-action-button settings-action-button-danger"
                                         disabled={isBackupImporting}
                                         onClick={() => {
+                                            if (guardOfflineMutation()) {
+                                                return;
+                                            }
                                             if (backupImportFile) {
                                                 void handleConfirmBackupImport(
                                                     backupImportFile,
@@ -4865,15 +5280,18 @@ export function App() {
                                             value={
                                                 webhookSettingsDraft.discord_webhook_url
                                             }
-                                            onChange={(event) =>
+                                            onChange={(event) => {
+                                                if (guardOfflineMutation()) {
+                                                    return;
+                                                }
                                                 setWebhookSettingsDraft(
                                                     (current) => ({
                                                         ...current,
                                                         discord_webhook_url:
                                                             event.target.value,
                                                     }),
-                                                )
-                                            }
+                                                );
+                                            }}
                                         />
                                     </label>
                                     <label>
@@ -4885,15 +5303,18 @@ export function App() {
                                             value={
                                                 webhookSettingsDraft.discord_message_template
                                             }
-                                            onChange={(event) =>
+                                            onChange={(event) => {
+                                                if (guardOfflineMutation()) {
+                                                    return;
+                                                }
                                                 setWebhookSettingsDraft(
                                                     (current) => ({
                                                         ...current,
                                                         discord_message_template:
                                                             event.target.value,
                                                     }),
-                                                )
-                                            }
+                                                );
+                                            }}
                                             rows={4}
                                         />
                                     </label>
@@ -5498,6 +5919,11 @@ export function App() {
                                                         aria-label="Add category"
                                                         title="Add category"
                                                         onClick={() => {
+                                                            if (
+                                                                guardOfflineMutation()
+                                                            ) {
+                                                                return;
+                                                            }
                                                             setEditingTaskListId(
                                                                 null,
                                                             );
@@ -6658,7 +7084,7 @@ export function App() {
                     onTouchCancel={handleCalendarTouchCancel}
                 >
                     <FullCalendar
-                        key={`calendar-interactions-${calendarInteractionMode}`}
+                        key={`calendar-interactions-${calendarInteractionMode}-${isOfflineReadOnly ? "readonly" : "editable"}`}
                         ref={calendarRef}
                         plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
                         initialView={calendarView}
@@ -6712,14 +7138,14 @@ export function App() {
                                 : undefined
                         }
                         select={handleDateSelect}
-                        editable={!isMobileLayout}
-                        eventStartEditable={!isMobileLayout}
-                        eventDurationEditable={!isMobileLayout}
+                        editable={!isMobileLayout && !isOfflineReadOnly}
+                        eventStartEditable={!isMobileLayout && !isOfflineReadOnly}
+                        eventDurationEditable={!isMobileLayout && !isOfflineReadOnly}
                         eventDragMinDistance={
                             isMobileLayout ? 9999 : 8
                         }
-                        droppable={!isMobileLayout}
-                        selectable
+                        droppable={!isMobileLayout && !isOfflineReadOnly}
+                        selectable={!isOfflineReadOnly}
                         longPressDelay={
                             isMobileLayout
                                 ? mobileCalendarReadonlyLongPressDelayMs
@@ -6737,7 +7163,7 @@ export function App() {
                         }
                         stickyFooterScrollbar={false}
                         scrollTimeReset={false}
-                        eventResizableFromStart={!isMobileLayout}
+                        eventResizableFromStart={!isMobileLayout && !isOfflineReadOnly}
                         nowIndicator
                         scrollTime={`${workingHours.start}:00`}
                         slotMinTime={calendarSlotMinTime}
@@ -9484,6 +9910,14 @@ function readBackupFileText(file: File): Promise<string> {
         reader.onerror = () => reject(new Error("Unable to read backup file"));
         reader.readAsText(file);
     });
+}
+
+function isOfflineNetworkError(error: unknown): boolean {
+    return (
+        error instanceof TypeError ||
+        (error instanceof Error &&
+            /failed to fetch|network|load failed/i.test(error.message))
+    );
 }
 
 function formatBackupDate(value: string): string {
