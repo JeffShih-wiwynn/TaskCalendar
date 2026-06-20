@@ -191,8 +191,7 @@ type WebhookSettingsFormState = {
 
 const DEFAULT_WEBHOOK_MESSAGE_TEMPLATE =
     "Task due: {title}\nWhen: {when}\nNotes: {notes}\nOpen app: {app_url}";
-const offlineMutationMessage =
-    "You are offline. Editing is disabled until you reconnect.";
+const offlineReadOnlyMessage = "Offline: editing disabled";
 
 const recurringTaskChoiceActionStyle: CSSProperties = {
     backgroundColor: "rgb(69 181 143 / 52%)",
@@ -471,7 +470,6 @@ export function App() {
     );
     const [offlineDataSource, setOfflineDataSource] =
         useState<OfflineDataSource>("empty");
-    const [offlineCachedAt, setOfflineCachedAt] = useState<string | null>(null);
     const [authMode, setAuthMode] = useState<AuthMode>("login");
     const [authFormState, setAuthFormState] = useState<AuthFormState>({
         username: "",
@@ -790,7 +788,7 @@ export function App() {
         (updates: Partial<WorkingHoursSettings>) => {
             if (isOfflineReadOnly) {
                 setTaskUndo(null);
-                setTaskSnackbarMessage(offlineMutationMessage);
+                setTaskSnackbarMessage(offlineReadOnlyMessage);
                 return;
             }
             setWorkingHours((current) => ({
@@ -809,7 +807,7 @@ export function App() {
         (value: WeekStart) => {
             if (isOfflineReadOnly) {
                 setTaskUndo(null);
-                setTaskSnackbarMessage(offlineMutationMessage);
+                setTaskSnackbarMessage(offlineReadOnlyMessage);
                 return;
             }
             setWeekStart(value);
@@ -861,7 +859,6 @@ export function App() {
         locallyUpdatedTasksRef.current.clear();
         setTaskState({ status: "loading", tasks: [] });
         setOfflineDataSource("empty");
-        setOfflineCachedAt(null);
         setTaskLists([]);
         setSelectedTaskId(null);
         setDetailPanelMode(null);
@@ -910,7 +907,7 @@ export function App() {
     const handleOpenBackupSummary = useCallback(async () => {
         if (isOfflineReadOnly) {
             setTaskUndo(null);
-            setTaskSnackbarMessage(offlineMutationMessage);
+            setTaskSnackbarMessage(offlineReadOnlyMessage);
             return;
         }
         setIsBackupLoading(true);
@@ -1121,7 +1118,6 @@ export function App() {
         });
         setTaskLists(record.taskLists);
         setOfflineDataSource("cache");
-        setOfflineCachedAt(record.metadata.cached_at);
         if (record.settings) {
             setWebhookSettings(record.settings);
             setWebhookSettingsDraft({
@@ -1205,9 +1201,7 @@ export function App() {
             const didLoadCache = await loadCachedAppData(userId);
             if (didLoadCache) {
                 if (!options?.silent) {
-                    setTaskSnackbarMessage(
-                        "You are offline. Showing cached data.",
-                    );
+                    setTaskSnackbarMessage(offlineReadOnlyMessage);
                 }
                 return;
             }
@@ -1224,7 +1218,6 @@ export function App() {
                 tasks: nextTasks,
             });
             setOfflineDataSource("server");
-            setOfflineCachedAt(null);
             tasksRef.current = nextTasks;
             void saveCurrentTaskCache({ tasks: nextTasks });
         } catch (error) {
@@ -1236,9 +1229,7 @@ export function App() {
                 const didLoadCache = await loadCachedAppData(userId);
                 if (didLoadCache) {
                     if (!options?.silent) {
-                        setTaskSnackbarMessage(
-                            "You are offline. Showing cached data.",
-                        );
+                        setTaskSnackbarMessage(offlineReadOnlyMessage);
                     }
                     return;
                 }
@@ -1279,9 +1270,7 @@ export function App() {
             void (async () => {
                 const didLoadCache = await loadCachedAppData(currentUser.id);
                 if (didLoadCache) {
-                    setTaskSnackbarMessage(
-                        "You are offline. Showing cached data.",
-                    );
+                    setTaskSnackbarMessage(offlineReadOnlyMessage);
                 }
             })();
         }
@@ -1369,7 +1358,7 @@ export function App() {
     const handleConfirmBackupImport = useCallback(async (file: File | null) => {
         if (isOfflineReadOnly) {
             setTaskUndo(null);
-            setTaskSnackbarMessage(offlineMutationMessage);
+            setTaskSnackbarMessage(offlineReadOnlyMessage);
             return;
         }
         if (!file) {
@@ -1407,7 +1396,7 @@ export function App() {
         (event: ChangeEvent<HTMLInputElement>) => {
             if (isOfflineReadOnly) {
                 setTaskUndo(null);
-                setTaskSnackbarMessage(offlineMutationMessage);
+                setTaskSnackbarMessage(offlineReadOnlyMessage);
                 event.target.value = "";
                 return;
             }
@@ -1969,16 +1958,35 @@ export function App() {
     }, []);
 
     const guardOfflineMutation = useCallback(
-        (message = offlineMutationMessage): boolean => {
+        (message = offlineReadOnlyMessage): boolean => {
             if (!isOfflineReadOnly) {
                 return false;
             }
 
-            showTaskSnackbarMessage(message);
+            setTaskUndo(null);
+            setTaskSnackbarMessage((current) =>
+                current === message ? current : message,
+            );
             return true;
         },
-        [isOfflineReadOnly, showTaskSnackbarMessage],
+        [isOfflineReadOnly],
     );
+
+    useEffect(() => {
+        if (isOfflineReadOnly) {
+            setTaskUndo(null);
+            setTaskSnackbarMessage((current) =>
+                current === offlineReadOnlyMessage
+                    ? current
+                    : offlineReadOnlyMessage,
+            );
+            return;
+        }
+
+        setTaskSnackbarMessage((current) =>
+            current === offlineReadOnlyMessage ? null : current,
+        );
+    }, [isOfflineReadOnly]);
 
     useEffect(() => {
         if (typeof window === "undefined") {
@@ -1987,14 +1995,14 @@ export function App() {
 
         const handleOnline = () => {
             setIsBrowserOnline(true);
-            showTaskSnackbarMessage("Back online.");
             void refreshTasks();
             void refreshTaskLists({ silent: true });
             void refreshWebhookSettings();
         };
         const handleOffline = () => {
             setIsBrowserOnline(false);
-            showTaskSnackbarMessage("You are offline. Showing cached data.");
+            setTaskUndo(null);
+            setTaskSnackbarMessage(offlineReadOnlyMessage);
             if (currentUserIdRef.current) {
                 void loadCachedAppData(currentUserIdRef.current);
             }
@@ -2012,7 +2020,6 @@ export function App() {
         refreshTaskLists,
         refreshTasks,
         refreshWebhookSettings,
-        showTaskSnackbarMessage,
     ]);
 
     const handleUndoTaskChange = useCallback(async () => {
@@ -4214,7 +4221,7 @@ export function App() {
 
     const refreshAdminUsers = async () => {
         if (isOfflineReadOnly) {
-            setAdminUsersError(offlineMutationMessage);
+            setAdminUsersError(offlineReadOnlyMessage);
             return;
         }
         setIsAdminUsersLoading(true);
@@ -4494,16 +4501,6 @@ export function App() {
             mobileQuickActionTask.scheduled_start &&
             mobileQuickActionTask.scheduled_end,
     );
-    const offlineStatusLabel = !isBrowserOnline
-        ? isUsingCachedData
-            ? "Offline: cached data"
-            : "Offline"
-        : isUsingCachedData
-          ? "Online: showing cached data"
-          : "Online";
-    const offlineStatusTitle = offlineCachedAt
-        ? `${offlineStatusLabel}. Cached ${formatDateTime(offlineCachedAt)}.`
-        : offlineStatusLabel;
 
     if (!authToken) {
         return (
@@ -4552,15 +4549,6 @@ export function App() {
                 setIsCategoryMenuOpen(false);
             }}
         >
-            <div
-                className={`offline-status offline-status-${isOfflineReadOnly ? "readonly" : "online"}`}
-                role="status"
-                aria-live="polite"
-                title={offlineStatusTitle}
-            >
-                <span className="offline-status-dot" aria-hidden="true" />
-                <span>{offlineStatusLabel}</span>
-            </div>
             <nav className="mobile-app-nav" aria-label="Mobile app navigation">
                 <button
                     type="button"

@@ -1181,6 +1181,16 @@ describe("App", () => {
         );
     });
 
+    it("does not show a persistent online status in normal online mode", async () => {
+        render(<App />);
+
+        await screen.findByText("Hello, alice");
+        await waitFor(() => expect(mocks.listTasks).toHaveBeenCalled());
+
+        expect(screen.queryByText(/^Online$/)).not.toBeInTheDocument();
+        expect(document.querySelector(".offline-status")).toBeNull();
+    });
+
     it("loads cached task data when the task request fails from a network error", async () => {
         mocks.taskCacheRecords.set("user-1", {
             tasks: [
@@ -1202,7 +1212,9 @@ describe("App", () => {
         render(<App />);
 
         expect(await screen.findByText("Cached offline task")).toBeInTheDocument();
-        expect(await screen.findByText("Online: showing cached data")).toBeInTheDocument();
+        expect(await screen.findByText("Offline: editing disabled")).toBeInTheDocument();
+        expect(screen.queryByText(/^Online$/)).not.toBeInTheDocument();
+        expect(document.querySelector(".offline-status")).toBeNull();
         await waitFor(() =>
             expect(mocks.loadTaskCache).toHaveBeenCalledWith("user-1"),
         );
@@ -1268,13 +1280,42 @@ describe("App", () => {
                 name: "Toggle Read only cached task",
             }),
         );
+        fireEvent.click(
+            screen.getByRole("checkbox", {
+                name: "Toggle Read only cached task",
+            }),
+        );
 
         expect(mocks.completeTask).not.toHaveBeenCalled();
+        expect(await screen.findByText("Offline: editing disabled")).toBeInTheDocument();
+        expect(screen.queryAllByText("Offline: editing disabled")).toHaveLength(1);
         expect(
-            await screen.findByText(
+            screen.queryByText(
                 "You are offline. Editing is disabled until you reconnect.",
             ),
-        ).toBeInTheDocument();
+        ).not.toBeInTheDocument();
+    });
+
+    it("dismisses the offline snackbar when the browser returns online", async () => {
+        mocks.tasks = [
+            makeTask({
+                id: "task-online-return",
+                title: "Online return task",
+            }),
+        ];
+
+        render(<App />);
+
+        expect(await screen.findByText("Online return task")).toBeInTheDocument();
+
+        fireEvent(window, new Event("offline"));
+        expect(await screen.findByText("Offline: editing disabled")).toBeInTheDocument();
+
+        fireEvent(window, new Event("online"));
+        await waitFor(() =>
+            expect(screen.queryByText("Offline: editing disabled")).not.toBeInTheDocument(),
+        );
+        expect(screen.queryByText(/^Online$/)).not.toBeInTheDocument();
     });
 
     it("clears an invalid token and returns to login", async () => {
