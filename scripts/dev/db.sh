@@ -21,7 +21,7 @@ run_migrations() {
   python_bin="$(backend_python)"
   (
     cd "${ROOT_DIR}/backend"
-    env DATABASE_URL="${LOCAL_DATABASE_URL}" "${python_bin}" -m alembic upgrade head
+    env DATABASE_URL="${LOCAL_DATABASE_URL}" "${ROOT_DIR}/backend/.venv/bin/alembic" upgrade head
   )
 }
 
