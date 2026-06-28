@@ -5846,6 +5846,13 @@ describe("App", () => {
         expect(
             await screen.findByRole("button", { name: "Task view" }),
         ).toBeInTheDocument();
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.events).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({ id: "task-1" }),
+                ]),
+            ),
+        );
         fireEvent.click(
             screen.getByRole("button", { name: "Drop all-day task" }),
         );
@@ -5880,6 +5887,13 @@ describe("App", () => {
         expect(
             await screen.findByRole("button", { name: "Task view" }),
         ).toBeInTheDocument();
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.events).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({ id: "task-1" }),
+                ]),
+            ),
+        );
         fireEvent.click(screen.getByRole("button", { name: "Resize task" }));
 
         await waitFor(() =>
