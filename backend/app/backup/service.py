@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.backup.schemas import BackupImportRequest
 from app.core.timezone import ensure_aware_datetime, now_in_app_timezone, to_app_isoformat
+from app.google_calendar.outbox import enqueue_user_reconciliation
 from app.models.scheduled_task import ScheduledTask
 from app.models.task_list import TaskList
 
@@ -106,6 +107,7 @@ def import_user_backup(
                 for task in backup.tasks
             )
             db.flush()
+            enqueue_user_reconciliation(db, user_id=user_id)
     except SQLAlchemyError as exc:
         db.rollback()
         raise HTTPException(

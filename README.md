@@ -122,6 +122,7 @@ Before exposing this app to the internet:
 - Set a strong `JWT_SECRET_KEY` in `backend/.env`; do not use the example value.
 - Set a strong `POSTGRES_PASSWORD` in the repo-root `.env`.
 - Set `APP_BASE_URL` and `FRONTEND_ORIGINS` to the actual HTTPS origin.
+- Optional Google Calendar mirror setup is documented in [docs/google-calendar.md](docs/google-calendar.md). Automatic sync mirrors incomplete scheduled tasks for emergency viewing when the Google worker is running; manual Sync now starts background reconciliation through the worker. Bulk reconciliation uses bounded Google batch requests and lower priority than single-task edits. TaskCalendar remains the source of truth.
 - Serve the app over HTTPS.
 - Decide whether open registration is acceptable. Anyone who can reach the app can register.
 - Register the first account yourself; the first registered user becomes the admin.

@@ -19,6 +19,7 @@ This document explains how the project is structured today and why it is organiz
 - Auth: Username/password registration and login with JWT access tokens on the backend.
 - Admin: first-user-admin bootstrap with Settings -> Admin user management.
 - Notifications: A minimal Discord webhook worker for due-task notifications.
+- Google Calendar mirror: OAuth and manual sync to a dedicated secondary calendar per user. The mirror contains incomplete scheduled tasks only.
 
 ## Architectural Principles
 
@@ -108,7 +109,7 @@ The notification system is intentionally minimal.
 ## Current Limitations And Intentional Non-Goals
 
 - No full CalDAV sync yet.
-- No Google Calendar sync yet.
+- No durable Google Calendar background sync yet. Current Google support is manual `Sync now` only and does not import Google-side edits.
 - No collaborative editing yet.
 - No offline sync engine yet.
 - No native Android app yet.

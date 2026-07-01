@@ -8,6 +8,12 @@ from sqlalchemy.orm import Session
 from app.auth.schemas import AuthCredentials, ChangePasswordRequest, DeleteAccountRequest
 from app.auth.security import create_access_token, hash_password, verify_password
 from app.models.app_settings import AppSettings
+from app.models.google_calendar import (
+    GoogleCalendarConnection,
+    GoogleEventMirror,
+    GoogleOAuthState,
+    GoogleSyncOutbox,
+)
 from app.models.scheduled_task import ScheduledTask
 from app.models.task_list import TaskList
 from app.models.user import User
@@ -116,6 +122,12 @@ def delete_account(
     db.execute(delete(ScheduledTask).where(ScheduledTask.user_id == user.id))
     db.execute(delete(TaskList).where(TaskList.user_id == user.id))
     db.execute(delete(AppSettings).where(AppSettings.user_id == user.id))
+    db.execute(delete(GoogleOAuthState).where(GoogleOAuthState.user_id == user.id))
+    db.execute(delete(GoogleSyncOutbox).where(GoogleSyncOutbox.user_id == user.id))
+    db.execute(delete(GoogleEventMirror).where(GoogleEventMirror.user_id == user.id))
+    db.execute(
+        delete(GoogleCalendarConnection).where(GoogleCalendarConnection.user_id == user.id)
+    )
     db.delete(user)
     db.commit()
     return "Account deleted"
@@ -147,6 +159,12 @@ def delete_user_as_admin(db: Session, *, user_id: uuid.UUID) -> str:
     db.execute(delete(ScheduledTask).where(ScheduledTask.user_id == user.id))
     db.execute(delete(TaskList).where(TaskList.user_id == user.id))
     db.execute(delete(AppSettings).where(AppSettings.user_id == user.id))
+    db.execute(delete(GoogleOAuthState).where(GoogleOAuthState.user_id == user.id))
+    db.execute(delete(GoogleSyncOutbox).where(GoogleSyncOutbox.user_id == user.id))
+    db.execute(delete(GoogleEventMirror).where(GoogleEventMirror.user_id == user.id))
+    db.execute(
+        delete(GoogleCalendarConnection).where(GoogleCalendarConnection.user_id == user.id)
+    )
     db.delete(user)
     db.commit()
     return "User deleted"

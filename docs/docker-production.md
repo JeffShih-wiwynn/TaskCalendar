@@ -6,8 +6,9 @@ The project still treats non-Docker Ubuntu deployment as the primary manual path
 
 - `postgres`: PostgreSQL 16 with a persistent volume.
 - `backend`: FastAPI app started from a Python image.
+- `worker`: Google Calendar sync worker using the backend image and `python -m app.google_calendar.worker`.
 - `web`: Caddy serving the built frontend and reverse proxying API routes to the backend.
-- Only `web` is exposed on the host. `backend` and `postgres` stay private on the Compose network.
+- Only `web` is exposed on the host. `backend`, `worker`, and `postgres` stay private on the Compose network.
 - Docker deployment uses Compose project `calendar`, container `calendar-postgres`, and volume `calendar_postgres_data`.
 - Local development uses Compose project `calendar-dev`, container `calendar-dev-postgres`, and volume `calendar-dev_postgres_data`.
 
@@ -22,6 +23,10 @@ Required values:
 - `APP_BASE_URL`
 - `APP_TIMEZONE`
 - `DISCORD_WEBHOOK_URL`
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
+- `GOOGLE_OAUTH_REDIRECT_URI`
+- `GOOGLE_TOKEN_ENCRYPTION_KEY`
 - `JWT_SECRET_KEY`
 - `JWT_ALGORITHM`
 - `JWT_ACCESS_TOKEN_EXPIRE_MINUTES`
@@ -52,12 +57,14 @@ bash ./scripts/docker-deploy.sh
 docker compose -p calendar up -d --build
 ```
 
-The backend container waits for PostgreSQL readiness, runs `alembic upgrade head`, and then starts Uvicorn.
+The backend container waits for PostgreSQL readiness, runs `alembic upgrade head`, and then starts Uvicorn. The worker starts after the backend health check passes and runs the same migration entrypoint before executing `python -m app.google_calendar.worker`.
 
 The `web` container builds the frontend assets and serves them with Caddy.
 Compose maps host port `8088` to container port `80` by default, so the app is available at a URL such as `http://<your-server-ip>:8088` or behind your reverse proxy.
 The backend listens on `8000` only inside the Compose network, and PostgreSQL listens on `5432` only inside the Compose network.
 The deploy PostgreSQL service does not publish host port `5432`; that localhost port is reserved for the dev database when `./scripts/dev.sh` is running.
+
+For Google Calendar mirror sync, keep the `worker` service running. Without it, task changes and manual `Sync now` reconciliation requests remain queued until the worker is started. Sync now starts background reconciliation and does not wait for completion. Bulk reconciliation uses Google batch chunks of up to 50 event operations and yields between chunks so higher-priority task edits can sync promptly.
 
 ## Initial Admin Account
 
@@ -101,6 +108,7 @@ JSON backup/restore is not a full-instance backup. Back up PostgreSQL separately
 - Replace every example secret in `backend/.env`.
 - Set a strong `POSTGRES_PASSWORD` in the repo-root `.env`.
 - Set `APP_BASE_URL` and `FRONTEND_ORIGINS` to the deployed HTTPS origin.
+- For Google Calendar mirror connection, follow [google-calendar.md](google-calendar.md) and use `https://<your-origin>/api/google-calendar/oauth/callback` as the authorized redirect URI.
 - Put the app behind HTTPS.
 - Register the first account yourself; it becomes the admin.
 - Decide whether open registration is acceptable for your deployment.
