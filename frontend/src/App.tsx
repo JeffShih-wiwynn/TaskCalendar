@@ -4183,6 +4183,7 @@ export function App() {
     const appShellStyle: CSSProperties = {
         "--sidebar-width": `${isSidebarOpen ? Math.max(240, sidebarWidth) : 0}px`,
         "--sidebar-resizer-width": `${isSidebarOpen ? 12 : 0}px`,
+        "--mobile-bottom-nav-reserved": "140px",
     } as CSSProperties;
     const isSettingsMenuOpen = settingsView === "menu";
     const isCalendarDisplaySettingsOpen =
@@ -4342,6 +4343,7 @@ export function App() {
             </nav>
             <aside
                 className={`task-sidebar ${isSidebarOpen ? "task-sidebar-open" : "task-sidebar-collapsed"}`}
+                data-testid="mobile-task-scroll-container"
                 aria-hidden={!isSidebarOpen}
                 inert={!isSidebarOpen}
                 onTransitionEnd={(event) => {

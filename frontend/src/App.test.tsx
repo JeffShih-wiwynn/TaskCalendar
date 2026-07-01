@@ -2533,6 +2533,74 @@ describe("App", () => {
         expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
     });
 
+    it("renders mobile Today with one task-list region beside the fixed bottom nav", async () => {
+        setMobileLayout(true);
+        mocks.tasks = Array.from({ length: 24 }, (_, index) =>
+            makeTask({
+                id: `task-mobile-today-${index}`,
+                title: `Mobile Today task ${index + 1}`,
+                scheduled_start: "2026-05-08T09:00:00.000Z",
+                scheduled_end: "2026-05-08T10:00:00.000Z",
+            }),
+        );
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Mobile Today" }));
+        const todayRegion = await screen.findByRole("region", {
+            name: "today tasks",
+        });
+        const appShell = todayRegion.closest(".app-shell");
+        const scrollContainer = screen.getByTestId("mobile-task-scroll-container");
+
+        expect(todayRegion).toHaveClass("task-list");
+        expect(todayRegion.closest(".task-sidebar")).toBe(scrollContainer);
+        expect(scrollContainer).toHaveClass("task-sidebar");
+        expect(appShell).toHaveStyle({
+            "--mobile-bottom-nav-reserved": "140px",
+        });
+        expect(document.querySelectorAll(".task-list")).toHaveLength(1);
+        expect(screen.getByRole("navigation", { name: "Mobile app navigation" })).toHaveClass(
+            "mobile-app-nav",
+        );
+        expect(screen.getByText("Mobile Today task 24")).toBeInTheDocument();
+    });
+
+    it("renders mobile Upcoming with one task-list region beside the fixed bottom nav", async () => {
+        setMobileLayout(true);
+        const upcomingStart = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        const upcomingEnd = new Date(upcomingStart.getTime() + 60 * 60 * 1000);
+        mocks.tasks = Array.from({ length: 24 }, (_, index) =>
+            makeTask({
+                id: `task-mobile-upcoming-${index}`,
+                title: `Mobile Upcoming task ${index + 1}`,
+                scheduled_start: upcomingStart.toISOString(),
+                scheduled_end: upcomingEnd.toISOString(),
+            }),
+        );
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Mobile Upcoming" }));
+        const upcomingRegion = await screen.findByRole("region", {
+            name: "upcoming tasks",
+        });
+        const appShell = upcomingRegion.closest(".app-shell");
+        const scrollContainer = screen.getByTestId("mobile-task-scroll-container");
+
+        expect(upcomingRegion).toHaveClass("task-list");
+        expect(upcomingRegion.closest(".task-sidebar")).toBe(scrollContainer);
+        expect(scrollContainer).toHaveClass("task-sidebar");
+        expect(appShell).toHaveStyle({
+            "--mobile-bottom-nav-reserved": "140px",
+        });
+        expect(document.querySelectorAll(".task-list")).toHaveLength(1);
+        expect(screen.getByRole("navigation", { name: "Mobile app navigation" })).toHaveClass(
+            "mobile-app-nav",
+        );
+        expect(screen.getByText("Mobile Upcoming task 24")).toBeInTheDocument();
+    });
+
     it("refreshes authenticated data on focus without resetting an open edit form", async () => {
         mocks.tasks = [
             makeTask({

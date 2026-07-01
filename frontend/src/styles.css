@@ -3926,19 +3926,28 @@ input[type="checkbox"].task-checkbox:checked {
 
 @media (max-width: 860px) {
   html,
-  body {
+  body,
+  #root {
     width: 100%;
+    min-height: 100%;
     overflow-x: hidden;
   }
 
   body {
     min-width: 0;
-    overflow-y: auto;
+    overflow: hidden;
+  }
+
+  #root {
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
   }
 
   .app-shell {
+    height: 100vh;
     min-height: 100dvh;
-    height: auto;
+    height: 100dvh;
     display: flex;
     flex-direction: column;
     grid-template-columns: 1fr;
@@ -3946,8 +3955,9 @@ input[type="checkbox"].task-checkbox:checked {
     padding:
       max(12px, env(safe-area-inset-top))
       max(12px, env(safe-area-inset-right))
-      calc(84px + env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-bottom))
       max(12px, env(safe-area-inset-left));
+    overflow: hidden;
     overscroll-behavior-y: contain;
   }
 
@@ -3990,9 +4000,14 @@ input[type="checkbox"].task-checkbox:checked {
 
   .task-sidebar {
     width: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
     max-height: none;
     padding-right: 0;
-    overflow: visible;
+    padding-bottom: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .task-sidebar-collapsed {
@@ -4085,8 +4100,20 @@ input[type="checkbox"].task-checkbox:checked {
   .app-shell.mobile-screen-today .task-list,
   .app-shell.mobile-screen-upcoming .task-list,
   .app-shell.mobile-screen-unscheduled .task-list {
+    flex: 0 0 auto;
+    min-height: auto;
     overflow: visible;
-    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+    padding-bottom: 0;
+  }
+
+  .app-shell.mobile-screen-today .task-list-content::after,
+  .app-shell.mobile-screen-upcoming .task-list-content::after,
+  .app-shell.mobile-screen-unscheduled .task-list-content::after {
+    content: "";
+    display: block;
+    block-size: calc(
+      var(--mobile-bottom-nav-reserved, 140px) + env(safe-area-inset-bottom) + 16px
+    );
   }
 
   .app-shell.mobile-screen-unscheduled .task-order-button-desktop-top,
@@ -5034,7 +5061,7 @@ input[type="checkbox"].task-checkbox:checked {
     padding:
       max(8px, env(safe-area-inset-top))
       max(8px, env(safe-area-inset-right))
-      calc(84px + env(safe-area-inset-bottom))
+      max(8px, env(safe-area-inset-bottom))
       max(8px, env(safe-area-inset-left));
   }
 
