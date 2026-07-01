@@ -44,6 +44,21 @@ services:
     expose:
       - "8000"
 
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: calendar-worker
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://calendar:${POSTGRES_PASSWORD:-calendar}@postgres:5432/calendar
+    command: ["python", "-m", "app.google_calendar.worker"]
+
   web:
     build:
       context: .

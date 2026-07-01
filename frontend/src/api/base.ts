@@ -18,6 +18,12 @@ export const API_ROUTES = {
         export: "/backup/export",
         import: "/backup/import",
     },
+    googleCalendar: {
+        status: "/api/google-calendar/status",
+        connect: "/api/google-calendar/connect",
+        disconnect: "/api/google-calendar/disconnect",
+        syncNow: "/api/google-calendar/sync-now",
+    },
     health: "/health",
     settings: {
         root: "/api/settings",

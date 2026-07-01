@@ -71,6 +71,14 @@ source .venv/bin/activate
 uvicorn app.main:app --reload
 ```
 
+Google Calendar sync worker:
+
+```sh
+cd backend
+source .venv/bin/activate
+python -m app.google_calendar.worker
+```
+
 Lint:
 
 ```sh
@@ -170,6 +178,8 @@ The dev migration command is equivalent to:
 cd backend
 DATABASE_URL=postgresql+psycopg://calendar:calendar@127.0.0.1:5432/calendar .venv/bin/python -m alembic upgrade head
 ```
+
+If Google Calendar mirror sync is connected, automatic sync requires the worker command above. Without it, task mutations and Settings -> Google Calendar -> Sync now remain durable pending jobs until the worker starts. Sync now starts background reconciliation and does not wait for completion. Bulk reconciliation runs in Google batch chunks of up to 50 event operations and yields between chunks so higher-priority task edits can sync promptly.
 
 Expected development endpoints:
 

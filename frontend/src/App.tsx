@@ -72,6 +72,13 @@ import {
     type AppSettings,
 } from "./api/settings";
 import {
+    connectGoogleCalendar,
+    disconnectGoogleCalendar,
+    getGoogleCalendarStatus,
+    syncGoogleCalendarNow,
+    type GoogleCalendarStatus,
+} from "./api/googleCalendar";
+import {
     createTaskList,
     deleteTaskList,
     listTaskLists,
@@ -244,6 +251,7 @@ type SettingsView =
     | "delete-account"
     | "admin"
     | "webhook"
+    | "google-calendar"
     | "backup";
 type TaskFormAccordionSectionId = "schedule" | "organization" | "notes";
 type TaskRowDragEvent =
@@ -544,6 +552,21 @@ export function App() {
     const [webhookTestMessage, setWebhookTestMessage] = useState<string | null>(
         null,
     );
+    const [googleCalendarStatus, setGoogleCalendarStatus] =
+        useState<GoogleCalendarStatus | null>(null);
+    const [isGoogleCalendarLoading, setIsGoogleCalendarLoading] =
+        useState(false);
+    const [isGoogleCalendarConnecting, setIsGoogleCalendarConnecting] =
+        useState(false);
+    const [isGoogleCalendarDisconnecting, setIsGoogleCalendarDisconnecting] =
+        useState(false);
+    const [isGoogleCalendarSyncing, setIsGoogleCalendarSyncing] =
+        useState(false);
+    const [googleCalendarError, setGoogleCalendarError] = useState<
+        string | null
+    >(null);
+    const [isGoogleDisconnectConfirmOpen, setIsGoogleDisconnectConfirmOpen] =
+        useState(false);
     const [changePasswordCurrentPassword, setChangePasswordCurrentPassword] =
         useState("");
     const [changePasswordNewPassword, setChangePasswordNewPassword] =
@@ -842,6 +865,13 @@ export function App() {
             discord_message_template: "",
         });
         setWebhookTestMessage(null);
+        setGoogleCalendarStatus(null);
+        setGoogleCalendarError(null);
+        setIsGoogleCalendarLoading(false);
+        setIsGoogleCalendarConnecting(false);
+        setIsGoogleCalendarDisconnecting(false);
+        setIsGoogleCalendarSyncing(false);
+        setIsGoogleDisconnectConfirmOpen(false);
         setAdminUsers([]);
         setAdminUsersError(null);
         setIsAdminUsersLoading(false);
@@ -944,6 +974,28 @@ export function App() {
             }
         })();
     }, [authToken, handleAuthExpired]);
+
+    useEffect(() => {
+        if (!authToken) {
+            return;
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        const result = params.get("google_calendar");
+        if (!result) {
+            return;
+        }
+
+        setTaskSnackbarMessage(
+            result === "connected"
+                ? "Google Calendar connected."
+                : "Google Calendar connection failed.",
+        );
+        params.delete("google_calendar");
+        const nextQuery = params.toString();
+        const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${window.location.hash}`;
+        window.history.replaceState(null, "", nextUrl);
+    }, [authToken]);
 
     useEffect(() => {
         if (calendarTransitionTimeoutRef.current !== null) {
@@ -3780,6 +3832,78 @@ export function App() {
         }
     };
 
+    const refreshGoogleCalendarStatus = async () => {
+        setIsGoogleCalendarLoading(true);
+        setGoogleCalendarError(null);
+        try {
+            setGoogleCalendarStatus(await getGoogleCalendarStatus());
+        } catch (error) {
+            setGoogleCalendarError(
+                error instanceof Error
+                    ? error.message
+                    : "Unable to load Google Calendar status",
+            );
+        } finally {
+            setIsGoogleCalendarLoading(false);
+        }
+    };
+
+    const handleConnectGoogleCalendar = async () => {
+        setGoogleCalendarError(null);
+        setIsGoogleCalendarConnecting(true);
+        try {
+            const response = await connectGoogleCalendar();
+            window.location.href = response.authorization_url;
+        } catch (error) {
+            setGoogleCalendarError(
+                error instanceof Error
+                    ? error.message
+                    : "Unable to start Google Calendar connection",
+            );
+            setIsGoogleCalendarConnecting(false);
+        }
+    };
+
+    const handleDisconnectGoogleCalendar = async () => {
+        setGoogleCalendarError(null);
+        setIsGoogleCalendarDisconnecting(true);
+        try {
+            await disconnectGoogleCalendar();
+            setIsGoogleDisconnectConfirmOpen(false);
+            await refreshGoogleCalendarStatus();
+            setTaskSnackbarMessage("Google Calendar disconnected.");
+        } catch (error) {
+            setGoogleCalendarError(
+                error instanceof Error
+                    ? error.message
+                    : "Unable to disconnect Google Calendar",
+            );
+        } finally {
+            setIsGoogleCalendarDisconnecting(false);
+        }
+    };
+
+    const handleSyncGoogleCalendarNow = async () => {
+        setGoogleCalendarError(null);
+        setIsGoogleCalendarSyncing(true);
+        try {
+            const result = await syncGoogleCalendarNow();
+            await refreshGoogleCalendarStatus();
+            setTaskSnackbarMessage(
+                result.message ||
+                    "Sync started. Google Calendar will update in the background.",
+            );
+        } catch (error) {
+            setGoogleCalendarError(
+                error instanceof Error
+                    ? error.message
+                    : "Unable to sync Google Calendar",
+            );
+        } finally {
+            setIsGoogleCalendarSyncing(false);
+        }
+    };
+
     const openSettingsMenu = () => {
         closeDetailPanel();
         closeSettingsPanels();
@@ -3797,6 +3921,15 @@ export function App() {
             discord_message_template:
                 webhookSettings?.discord_message_template ?? "",
         });
+    };
+
+    const openGoogleCalendarSettings = () => {
+        closeDetailPanel();
+        closeSettingsPanels();
+        setGoogleCalendarError(null);
+        setIsGoogleDisconnectConfirmOpen(false);
+        setSettingsView("google-calendar");
+        void refreshGoogleCalendarStatus();
     };
 
     const openCalendarDisplaySettings = () => {
@@ -4059,6 +4192,7 @@ export function App() {
     const isDeleteAccountSettingsOpen = settingsView === "delete-account";
     const isAdminSettingsOpen = settingsView === "admin";
     const isWebhookSettingsOpen = settingsView === "webhook";
+    const isGoogleCalendarSettingsOpen = settingsView === "google-calendar";
     const isBackupSettingsOpen = settingsView === "backup";
     const isSettingsSubviewOpen = settingsView !== null;
     const isSidebarTaskContentVisible =
@@ -4332,6 +4466,13 @@ export function App() {
                                         onClick={openWebhookSettings}
                                     >
                                         Webhook
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="settings-action-button settings-action-button-neutral"
+                                        onClick={openGoogleCalendarSettings}
+                                    >
+                                        Google Calendar
                                     </button>
                                     <button
                                         type="button"
@@ -4841,6 +4982,140 @@ export function App() {
                                 </div>
                             </motion.section>
                         )}
+                        {!detailPanelMode && isGoogleCalendarSettingsOpen && (
+                            <motion.section
+                                key="google-calendar-settings"
+                                className="filter-section"
+                                onClick={(event) => event.stopPropagation()}
+                                variants={panelVariants}
+                                initial="hidden"
+                                animate="visible"
+                                exit="exit"
+                                transition={panelTransition}
+                            >
+                                <div className="task-form account-settings-form">
+                                    <div className="account-settings-heading">
+                                        <h3 className="working-hours-title">
+                                            Google Calendar Mirror
+                                        </h3>
+                                        <p className="muted">
+                                            Google Calendar shows incomplete
+                                            scheduled tasks for emergency viewing.
+                                            Completed and unscheduled tasks do not
+                                            appear in the mirror.
+                                        </p>
+                                    </div>
+                                    {isGoogleCalendarLoading ? (
+                                        <p className="muted">Loading status...</p>
+                                    ) : googleCalendarStatus?.connected ? (
+                                        <div className="backup-summary">
+                                            <div>
+                                                <span>Status:</span> Connected
+                                            </div>
+                                            <div>
+                                                <span>Mirror calendar:</span>{" "}
+                                                {googleCalendarStatus.mirror_calendar_summary ??
+                                                    "TaskCalendar Mirror — Read Only"}
+                                            </div>
+                                            {googleCalendarStatus.last_successful_sync_at ? (
+                                                <div>
+                                                    <span>Last successful sync:</span>{" "}
+                                                    {formatBackupDate(
+                                                        googleCalendarStatus.last_successful_sync_at,
+                                                    )}
+                                                </div>
+                                            ) : null}
+                                            <div>
+                                                <span>Pending sync items:</span>{" "}
+                                                {googleCalendarStatus.pending_sync_items}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <p className="muted">
+                                            No Google Calendar mirror is connected.
+                                        </p>
+                                    )}
+                                    {googleCalendarStatus?.last_error_when_safe_to_show && (
+                                        <p className="form-error">
+                                            {
+                                                googleCalendarStatus.last_error_when_safe_to_show
+                                            }
+                                        </p>
+                                    )}
+                                    {googleCalendarError && (
+                                        <p className="form-error">
+                                            {googleCalendarError}
+                                        </p>
+                                    )}
+                                    <button
+                                        type="button"
+                                        className="settings-action-button settings-action-button-primary"
+                                        disabled={
+                                            isGoogleCalendarConnecting ||
+                                            isGoogleCalendarDisconnecting ||
+                                            isGoogleCalendarSyncing
+                                        }
+                                        onClick={() =>
+                                            void handleConnectGoogleCalendar()
+                                        }
+                                    >
+                                        {isGoogleCalendarConnecting
+                                            ? "Connecting..."
+                                            : googleCalendarStatus?.connected
+                                              ? "Reconnect Google account"
+                                              : "Connect Google account"}
+                                    </button>
+                                    {googleCalendarStatus?.connected ? (
+                                        <>
+                                            <button
+                                                type="button"
+                                                className="settings-action-button settings-action-button-primary"
+                                                disabled={
+                                                    isGoogleCalendarConnecting ||
+                                                    isGoogleCalendarDisconnecting ||
+                                                    isGoogleCalendarSyncing
+                                                }
+                                                onClick={() =>
+                                                    void handleSyncGoogleCalendarNow()
+                                                }
+                                            >
+                                                {isGoogleCalendarSyncing
+                                                    ? "Starting..."
+                                                    : "Sync now"}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="settings-action-button settings-action-button-danger"
+                                                disabled={
+                                                    isGoogleCalendarConnecting ||
+                                                    isGoogleCalendarDisconnecting ||
+                                                    isGoogleCalendarSyncing
+                                                }
+                                                onClick={() =>
+                                                    setIsGoogleDisconnectConfirmOpen(
+                                                        true,
+                                                    )
+                                                }
+                                            >
+                                                Disconnect
+                                            </button>
+                                        </>
+                                    ) : null}
+                                    <button
+                                        type="button"
+                                        className="settings-action-button settings-action-button-neutral"
+                                        disabled={
+                                            isGoogleCalendarConnecting ||
+                                            isGoogleCalendarDisconnecting ||
+                                            isGoogleCalendarSyncing
+                                        }
+                                        onClick={openSettingsMenu}
+                                    >
+                                        Back
+                                    </button>
+                                </div>
+                            </motion.section>
+                        )}
                         {!detailPanelMode && isWebhookSettingsOpen && (
                             <motion.section
                                 key="webhook-settings"
@@ -5005,6 +5280,68 @@ export function App() {
                                             : `Delete ${getAdminUserDisplayName(
                                                   adminUserDeleteCandidate,
                                               )}`}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {isGoogleDisconnectConfirmOpen && (
+                        <div
+                            className={`dialog-backdrop ${
+                                isMobileLayout
+                                    ? "dialog-backdrop--mobile-sheet"
+                                    : ""
+                            }`}
+                            role="presentation"
+                            onClick={() => {
+                                if (!isGoogleCalendarDisconnecting) {
+                                    setIsGoogleDisconnectConfirmOpen(false);
+                                }
+                            }}
+                        >
+                            <div
+                                className={`choice-dialog ${
+                                    isMobileLayout
+                                        ? "choice-dialog--mobile-sheet"
+                                        : ""
+                                }`}
+                                role="dialog"
+                                aria-modal="true"
+                                aria-labelledby="disconnect-google-calendar-title"
+                                onClick={(event) => event.stopPropagation()}
+                            >
+                                <h2 id="disconnect-google-calendar-title">
+                                    Disconnect Google Calendar?
+                                </h2>
+                                <p className="muted">
+                                    This stops future synchronization and leaves
+                                    the existing Google calendar unchanged.
+                                </p>
+                                <div className="choice-dialog-actions">
+                                    <button
+                                        type="button"
+                                        className="secondary-button"
+                                        disabled={isGoogleCalendarDisconnecting}
+                                        onClick={() =>
+                                            setIsGoogleDisconnectConfirmOpen(
+                                                false,
+                                            )
+                                        }
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="admin-confirm-delete-button"
+                                        disabled={isGoogleCalendarDisconnecting}
+                                        onClick={() =>
+                                            void handleDisconnectGoogleCalendar()
+                                        }
+                                    >
+                                        {isGoogleCalendarDisconnecting
+                                            ? "Disconnecting..."
+                                            : "Disconnect"}
                                     </button>
                                 </div>
                             </div>

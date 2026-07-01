@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     app_base_url: str | None = None
     app_timezone: str = "UTC"
     discord_webhook_url: str | None = None
+    google_oauth_client_id: str | None = None
+    google_oauth_client_secret: str | None = None
+    google_oauth_redirect_uri: str | None = None
+    google_token_encryption_key: str | None = None
     jwt_secret_key: str = "change-this-secret-in-production-at-least-32-bytes"
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60 * 24

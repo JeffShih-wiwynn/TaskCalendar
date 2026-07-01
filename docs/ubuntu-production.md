@@ -36,6 +36,10 @@ Set these in the backend environment file used by `systemd`:
 - `APP_BASE_URL`
 - `APP_TIMEZONE`
 - `DISCORD_WEBHOOK_URL`
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
+- `GOOGLE_OAUTH_REDIRECT_URI`
+- `GOOGLE_TOKEN_ENCRYPTION_KEY`
 - `JWT_SECRET_KEY`
 - `JWT_ALGORITHM`
 - `JWT_ACCESS_TOKEN_EXPIRE_MINUTES`
@@ -50,6 +54,10 @@ FRONTEND_ORIGINS=https://calendar.example.com
 APP_BASE_URL=https://calendar.example.com
 APP_TIMEZONE=UTC
 DISCORD_WEBHOOK_URL=
+GOOGLE_OAUTH_CLIENT_ID=
+GOOGLE_OAUTH_CLIENT_SECRET=
+GOOGLE_OAUTH_REDIRECT_URI=https://calendar.example.com/api/google-calendar/oauth/callback
+GOOGLE_TOKEN_ENCRYPTION_KEY=
 JWT_SECRET_KEY=replace-with-a-long-random-secret
 JWT_ALGORITHM=HS256
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES=1440
@@ -97,7 +105,7 @@ If the backend and frontend are deployed from separate directories, copy `fronte
 
 ## Systemd
 
-Use one service for the backend API. The service should activate the virtual environment and start Uvicorn without `--reload`.
+Use one service for the backend API and one service for the Google Calendar sync worker. The backend service should activate the virtual environment and start Uvicorn without `--reload`.
 
 Example `/etc/systemd/system/calendar-backend.service`:
 
@@ -125,6 +133,34 @@ Reload and start the service:
 sudo systemctl daemon-reload
 sudo systemctl enable --now calendar-backend
 sudo systemctl status calendar-backend
+```
+
+Example `/etc/systemd/system/calendar-google-worker.service`:
+
+```ini
+[Unit]
+Description=Calendar Google sync worker
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=calendar
+Group=calendar
+WorkingDirectory=/opt/calendar/backend
+EnvironmentFile=/opt/calendar/backend/.env
+ExecStart=/opt/calendar/backend/.venv/bin/python -m app.google_calendar.worker
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Start it after migrations have been run:
+
+```sh
+sudo systemctl daemon-reload
+sudo systemctl enable --now calendar-google-worker
+sudo systemctl status calendar-google-worker
 ```
 
 ## Caddy
@@ -184,7 +220,7 @@ The backend route layout is currently mixed across `/api/*`, `/auth/*`, `/admin/
 2. Install or update Python dependencies in `backend/.venv`.
 3. Run `alembic upgrade head`.
 4. Rebuild the frontend with `npm run build`.
-5. Restart the backend `systemd` service.
+5. Restart the backend and Google worker `systemd` services.
 6. Reload Caddy if the site config changed.
 
 ## Before Exposing Publicly
@@ -192,6 +228,7 @@ The backend route layout is currently mixed across `/api/*`, `/auth/*`, `/admin/
 - Replace every example secret in the backend environment file.
 - Use a strong database password and strong `JWT_SECRET_KEY`.
 - Set `APP_BASE_URL` and `FRONTEND_ORIGINS` to the deployed HTTPS origin.
+- For Google Calendar mirror connection, follow [google-calendar.md](google-calendar.md) and use `https://<your-origin>/api/google-calendar/oauth/callback` as the authorized redirect URI.
 - Serve the app over HTTPS.
 - Register the first admin account yourself.
 - Decide whether open registration is acceptable for your deployment.

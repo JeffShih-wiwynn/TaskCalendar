@@ -154,6 +154,30 @@ const mocks = vi.hoisted(() => ({
         imported_tasks: 1,
     })),
     downloadBackupPayload: vi.fn(),
+    googleCalendarStatus: {
+        connected: false,
+        status: "disabled" as
+            | "connected"
+            | "needs_reauth"
+            | "disabled"
+            | "error",
+        mirror_calendar_summary: null as string | null,
+        last_successful_sync_at: null as string | null,
+        last_error_when_safe_to_show: null as string | null,
+        pending_sync_items: 0,
+    },
+    getGoogleCalendarStatus: vi.fn(),
+    connectGoogleCalendar: vi.fn(async () => ({
+        authorization_url: "https://accounts.google.example/auth",
+    })),
+    disconnectGoogleCalendar: vi.fn(async () => ({
+        message: "Google Calendar disconnected",
+    })),
+    syncGoogleCalendarNow: vi.fn(async () => ({
+        started: true,
+        pending_sync_items: 3,
+        message: "Google Calendar sync started.",
+    })),
     register: vi.fn(async () => ({
         id: "user-1",
         username: "alice",
@@ -666,6 +690,13 @@ vi.mock("./api/backup", () => ({
     importBackup: mocks.importBackup,
 }));
 
+vi.mock("./api/googleCalendar", () => ({
+    connectGoogleCalendar: mocks.connectGoogleCalendar,
+    disconnectGoogleCalendar: mocks.disconnectGoogleCalendar,
+    getGoogleCalendarStatus: mocks.getGoogleCalendarStatus,
+    syncGoogleCalendarNow: mocks.syncGoogleCalendarNow,
+}));
+
 function mockTaskRowRects(rows: Element[]): void {
     rows.forEach((row, index) => {
         vi.spyOn(row, "getBoundingClientRect").mockReturnValue({
@@ -1047,6 +1078,32 @@ describe("App", () => {
             imported_tasks: 1,
         });
         mocks.downloadBackupPayload.mockClear();
+        mocks.googleCalendarStatus = {
+            connected: false,
+            status: "disabled",
+            mirror_calendar_summary: null,
+            last_successful_sync_at: null,
+            last_error_when_safe_to_show: null,
+            pending_sync_items: 0,
+        };
+        mocks.getGoogleCalendarStatus.mockClear();
+        mocks.getGoogleCalendarStatus.mockImplementation(() =>
+            Promise.resolve(mocks.googleCalendarStatus),
+        );
+        mocks.connectGoogleCalendar.mockClear();
+        mocks.connectGoogleCalendar.mockResolvedValue({
+            authorization_url: "https://accounts.google.example/auth",
+        });
+        mocks.disconnectGoogleCalendar.mockClear();
+        mocks.disconnectGoogleCalendar.mockResolvedValue({
+            message: "Google Calendar disconnected",
+        });
+        mocks.syncGoogleCalendarNow.mockClear();
+        mocks.syncGoogleCalendarNow.mockResolvedValue({
+            started: true,
+            pending_sync_items: 3,
+            message: "Google Calendar sync started.",
+        });
         mocks.register.mockClear();
         mocks.getCurrentUser.mockClear();
         mocks.getCurrentUser.mockResolvedValue({
@@ -3936,6 +3993,113 @@ describe("App", () => {
                 discord_message_template: null,
             }),
         );
+    });
+
+    it("shows Google Calendar status and starts the OAuth connection", async () => {
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Settings" }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Google Calendar" }));
+
+        expect(
+            await screen.findByText("Google Calendar Mirror"),
+        ).toBeInTheDocument();
+        expect(
+            await screen.findByText("No Google Calendar mirror is connected."),
+        ).toBeInTheDocument();
+
+        fireEvent.click(
+            screen.getByRole("button", { name: "Connect Google account" }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.connectGoogleCalendar).toHaveBeenCalledTimes(1),
+        );
+    });
+
+    it("disconnects Google Calendar after confirmation", async () => {
+        mocks.googleCalendarStatus = {
+            connected: true,
+            status: "connected",
+            mirror_calendar_summary: "TaskCalendar Mirror — Read Only",
+            last_successful_sync_at: null,
+            last_error_when_safe_to_show: null,
+            pending_sync_items: 0,
+        };
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Settings" }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Google Calendar" }));
+
+        expect(await screen.findByText("Status:")).toBeInTheDocument();
+        expect(
+            screen.getByText("TaskCalendar Mirror — Read Only"),
+        ).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+
+        const dialog = await screen.findByRole("dialog", {
+            name: "Disconnect Google Calendar?",
+        });
+        expect(
+            within(dialog).getByText(
+                "This stops future synchronization and leaves the existing Google calendar unchanged.",
+            ),
+        ).toBeInTheDocument();
+        fireEvent.click(within(dialog).getByRole("button", { name: "Disconnect" }));
+
+        await waitFor(() =>
+            expect(mocks.disconnectGoogleCalendar).toHaveBeenCalledTimes(1),
+        );
+    });
+
+    it("runs Google Calendar Sync now from the connected settings panel", async () => {
+        mocks.googleCalendarStatus = {
+            connected: true,
+            status: "connected",
+            mirror_calendar_summary: "TaskCalendar Mirror — Read Only",
+            last_successful_sync_at: "2026-07-01T00:00:00.000Z",
+            last_error_when_safe_to_show: null,
+            pending_sync_items: 2,
+        };
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Settings" }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Google Calendar" }));
+
+        expect(await screen.findByText("Last successful sync:")).toBeInTheDocument();
+        expect(screen.getByText("Pending sync items:")).toBeInTheDocument();
+        expect(screen.getByText("2")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Sync now" }));
+
+        await waitFor(() =>
+            expect(mocks.syncGoogleCalendarNow).toHaveBeenCalledTimes(1),
+        );
+        expect(
+            await screen.findByText(
+                "Google Calendar sync started.",
+            ),
+        ).toBeInTheDocument();
+    });
+
+    it("shows a Google Calendar callback result message and cleans the URL", async () => {
+        window.history.replaceState(
+            null,
+            "",
+            "/?google_calendar=connected",
+        );
+
+        render(<App />);
+
+        expect(
+            await screen.findByText("Google Calendar connected."),
+        ).toBeInTheDocument();
+        expect(window.location.search).toBe("");
     });
 
     it("closes the create panel when opening webhook settings", async () => {

@@ -7,6 +7,11 @@ from sqlalchemy import Select, and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.timezone import now_in_app_timezone, to_app_timezone
+from app.google_calendar.outbox import (
+    enqueue_task_delete,
+    enqueue_task_upsert,
+    enqueue_user_reconciliation,
+)
 from app.models.scheduled_task import ScheduledTask
 from app.models.task_list import TaskList
 from app.models.user import User
@@ -145,6 +150,13 @@ def create_task(
     payloads = build_recurrence_payloads(task_data)
     tasks = [ScheduledTask(**payload) for payload in payloads]
     db.add_all(tasks)
+    db.flush()
+    if len(tasks) > 1:
+        enqueue_user_reconciliation(db, user_id=tasks[0].user_id)
+    else:
+        task = tasks[0]
+        if task.scheduled_start is not None:
+            enqueue_task_upsert(db, user_id=task.user_id, task_id=task.id)
     db.commit()
     db.refresh(tasks[0])
     return tasks[0]
@@ -183,12 +195,15 @@ def update_task(
 
     if "recurrence_rule" in updates:
         update_task_recurrence(db, task, updates, update_scope)
+        enqueue_user_reconciliation(db, user_id=task.user_id)
     elif update_scope == "series" and task.recurrence_series_id is not None:
         update_task_series(db, task, updates)
+        enqueue_user_reconciliation(db, user_id=task.user_id)
     else:
         detach_task_from_series_if_needed(task, updates)
         apply_task_updates(task, updates)
         db.add(task)
+        enqueue_task_upsert(db, user_id=task.user_id, task_id=task.id)
 
     db.commit()
     db.refresh(task)
@@ -242,6 +257,7 @@ def delete_task(
         or task.recurrence_series_id is None
         or task.scheduled_start is None
     ):
+        enqueue_task_delete(db, user_id=task.user_id, task_id=task.id)
         db.delete(task)
         db.commit()
         return
@@ -256,6 +272,7 @@ def delete_task(
 
     for recurring_task in tasks_to_delete:
         db.delete(recurring_task)
+    enqueue_user_reconciliation(db, user_id=task.user_id)
 
     db.commit()
 
@@ -623,6 +640,7 @@ def complete_task(
     task.completed_at = datetime.now(UTC)
     task.updated_at = datetime.now(UTC)
     db.add(task)
+    enqueue_task_upsert(db, user_id=task.user_id, task_id=task.id)
     db.commit()
     db.refresh(task)
     return task
@@ -639,6 +657,7 @@ def uncomplete_task(
     task.completed_at = None
     task.updated_at = datetime.now(UTC)
     db.add(task)
+    enqueue_task_upsert(db, user_id=task.user_id, task_id=task.id)
     db.commit()
     db.refresh(task)
     return task

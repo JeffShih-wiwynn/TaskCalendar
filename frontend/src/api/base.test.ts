@@ -22,6 +22,8 @@ describe("API_ROUTES", () => {
         expect(API_ROUTES.auth.login).toBe("/auth/login");
         expect(API_ROUTES.admin.users).toBe("/admin/users");
         expect(API_ROUTES.backup.export).toBe("/backup/export");
+        expect(API_ROUTES.googleCalendar.status).toBe("/api/google-calendar/status");
+        expect(API_ROUTES.googleCalendar.syncNow).toBe("/api/google-calendar/sync-now");
         expect(API_ROUTES.settings.root).toBe("/api/settings");
         expect(API_ROUTES.taskLists.root).toBe("/api/task-lists");
         expect(API_ROUTES.tasks.root).toBe("/api/tasks");
