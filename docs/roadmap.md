@@ -4,139 +4,16 @@ This roadmap starts from the current repository state and tracks the next phases
 
 ---
 
-## Phase 6: Authentication and multi-user support
+## Completed Platform Work
 
-Goal: finish multi-user safety before wider deployment and export work.
-
-- [x] Add backend username/password registration and login endpoints.
-- [x] Hash passwords securely.
-- [x] Use JWT access tokens for the backend auth foundation.
-- [x] Make JWT secret configurable.
-- [x] Add a reusable current-user dependency.
-- [x] Add frontend login/logout UI.
-- [x] Store JWT access token in local storage and attach it to API requests.
-- [x] Clear invalid or expired tokens and return to login.
-- [x] Scope task and category routes to the authenticated user.
-- [x] Prevent users from accessing other users' tasks and categories.
-- [x] Add cross-user backend isolation tests.
-- [x] Keep the initial auth UI simple and stable.
-- [x] Promote the first registered user to admin when the users table is empty.
-- [x] Avoid seeding a default `root`/`111111` account or any default user.
-- [x] Add Settings -> Admin user management for admins.
-- [x] Allow admins to list users and delete managed users.
-- [x] Block deletion of the last admin account.
-- [x] Add two-step admin deletion confirmation in the frontend.
-- [x] Add account password change and self-deletion flows.
-- [ ] Preserve local self-hosted usability.
-
----
-
-## Phase 7: Deployment portability and environment configuration
-
-Goal: make the project portable and easy to configure across local and server environments.
-
-- [x] Add or improve Dockerfiles where needed.
-- [x] `docker-compose.yml` exists and has a minimal production stack.
-- [x] Frontend API base URL is configurable through `VITE_API_BASE_URL`.
-- [x] Backend database URL and CORS origins are configurable.
-- [x] `backend/.env.example` exists and captures the current backend config shape.
-- [x] Make timezone configurable.
-- [x] Add deployment instructions for Ubuntu production use.
-- [x] Add reverse proxy examples (Nginx or Caddy).
-- [x] Keep non-Docker local development working while deployment artifacts are added.
-- [x] Document the current environment variables and defaults in one place.
-- [x] Keep dev env loading independent of the caller's current working directory.
-- [x] Run dev reset migrations from the local backend checkout instead of a stale Docker backend image.
-- [x] Proxy `/admin/*` in Docker Caddy so Admin API requests reach the backend.
-
----
-
-## Phase 8: Backup, restore, migration, and production readiness
-
-Goal: harden the backend for real-world use and prevent accidental data loss.
-
-- [x] Add a database migration workflow.
-- [x] Add a baseline Alembic migration.
-- [x] Stop mutating schema automatically on FastAPI startup.
-- [x] Document migration commands.
-- [x] Add migration smoke tests.
-- [x] Add backup and restore instructions.
-- [ ] Add basic logging guidance.
-- [x] Add production environment notes.
-- [ ] Add a production readiness checklist.
-- [x] Health checks exist, but they still need to be part of the production runbook.
-
-### Full app backup/export
-
-Goal: support full app backup, restore, and migration of user-owned data.
-
-- [x] Add full JSON export endpoint.
-- [x] Export current user-owned calendar data:
-  - tasks
-  - categories
-  - recurrence fields
-  - notification fields
-  - unscheduled ordering
-  - completed state
-  - notes
-- [x] Exclude auth secrets, password hashes, and user accounts from JSON backups.
-- [x] Add JSON import endpoint.
-- [x] Validate import schema before writing to database.
-- [ ] Support conflict behaviors:
-  - merge/import as copy
-- [x] Replace existing current-user calendar data during restore.
-- [x] Add backup/import UI in settings.
-- [x] Document manual backup and restore workflow.
-- [ ] Include global app settings only if they become user-scoped later.
-
----
-
-## Phase 9: Mobile/PWA usability
-
-Goal: make the web app pleasant to use on Android browsers before building native Android.
-
-- [x] Add a PWA manifest if one is missing.
-- [x] Add a service worker only if it improves the actual UX and does not make development brittle.
-- [x] Improve responsive layout for narrow Android browser screens.
-- [x] Keep desktop drag-and-drop and resizing.
-- [x] Do not rely only on drag-and-drop on mobile.
-- [x] Add a bottom sheet or other mobile-friendly task editor.
-- [x] Tapping a task on mobile should open an editor.
-- [x] Disable mobile calendar drag and resize affordances so narrow-screen events stay tap-only.
-- [x] The mobile editor should support title, completed state, `scheduled_start`, `scheduled_end`, and notes.
-- [x] Keep `eventDrop` and `eventResize` working where supported.
-- [x] Make time editing reliable even when touch dragging is awkward.
-- [ ] Add offline task editing/sync only after a safe conflict and auth strategy exists.
-- [ ] Add push notifications only after notification delivery semantics are designed.
-
----
-
-## Phase 10: Task list/sidebar improvements
-
-Status: mostly already implemented in the current repository, but keep this phase as a place for refinement and consistency work.
-
-- [x] Add `Today`, `Upcoming`, `Completed`, and `All tasks` views.
-- [x] Add an `Overdue` task view/filter.
-- [x] Include incomplete overdue all-day tasks in the Today view.
-- [x] Show checkbox, title, scheduled range, and due date in each task row where available.
-- [x] Clicking a task opens an edit panel.
-- [x] Task changes PATCH the backend.
-- [x] Persist manual `No time tasks` ordering through the backend with a dedicated `unscheduled_order` field.
-- [x] Keep the no-time drag source and month-view drag preview stable across sidebar and calendar re-renders, and keep month-view day-grid layout aligned on first render.
-- [ ] Keep polishing keyboard navigation, accessibility, and layout consistency as the sidebar evolves.
-
----
-
-## Phase 10.5: Recurrence and notifications MVP
-
-Goal: add the smallest safe recurrence and notification support that still fits the current task model.
-
-- [x] Add RRULE-compatible recurrence storage for daily, weekly, monthly, and yearly intervals.
-- [x] Materialize recurring occurrences as independent tasks so completion stays per occurrence.
-- [x] Keep cross-occurrence edits limited for now instead of trying to implement full override behavior.
-- [x] Validate all-day recurring tasks without requiring a time component.
-- [x] Add per-task notification fields and a Discord webhook worker.
-- [ ] Remove the one-year open-ended recurrence horizon only if/when we add a real recurrence scheduler.
+- [x] Authentication and multi-user safety.
+- [x] Deployment portability and environment configuration.
+- [x] Backup, restore, migration, and production readiness.
+- [x] Mobile/PWA usability baseline.
+- [x] Task list/sidebar improvements.
+- [x] Recurrence and notifications MVP.
+- [x] Google Calendar mirror with durable outbox and worker.
+- [x] Undo support.
 
 ---
 
@@ -166,8 +43,6 @@ Goal: normalize backend product routes under `/api/*` once the current MVP surfa
 - [ ] Keep `/health` at the root.
 - [ ] Put future external calendar APIs under `/api/external-calendars/*` or a similar subtree.
 - [ ] Keep current Caddy and PWA route exclusions in sync until normalization is complete.
-
----
 
 ## Phase 12: Native Android planning
 

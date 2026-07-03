@@ -8,6 +8,7 @@ This document describes how the current web MVP can grow into an Android client 
 - Backend: FastAPI with task and task-list REST APIs.
 - Storage: PostgreSQL through SQLAlchemy models.
 - Current app shape: scheduled tasks have checkbox state plus optional calendar timing.
+- The web app already includes PWA install support, mobile bottom navigation, and a touch-first mobile calendar/task layout.
 
 ## Future Android Architecture
 
