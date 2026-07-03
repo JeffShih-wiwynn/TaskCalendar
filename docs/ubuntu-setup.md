@@ -11,24 +11,14 @@ sudo apt-get install -y python3.12 python3.12-venv python3-pip docker.io docker-
 
 If your Ubuntu release packages Docker Compose differently, install the Docker Compose plugin package provided by that release.
 
-The current machine check found:
-
-- `node v24.15.0` available.
-- `npm 11.12.1` available.
-- `python3 3.12.3` available.
-- `docker` missing.
-- `python3.12-venv` missing, which also left `python3 -m pip` unavailable.
-
 ## Node And Package Manager Setup
 
 The frontend uses npm with `frontend/package-lock.json`.
 
 Recommended runtime:
 
-- Node.js `20.19+`.
-- npm from the installed Node.js distribution.
-
-Node `24.15.0` worked for frontend install, lint, typecheck, tests, build, and Vite startup in this environment.
+- Node.js `20.19+`
+- npm from the installed Node.js distribution
 
 ## Install Dependencies
 
@@ -51,17 +41,9 @@ cp .env.example .env
 
 ## Run PostgreSQL For Local Development
 
-The supported local development flow is `scripts/dev.sh`. It starts the dev PostgreSQL service, writes local env files, runs migrations, and starts the backend and frontend:
+The supported local development flow is `./dev.sh` or `./scripts/dev.sh start`. It starts the dev PostgreSQL service, writes local env files, runs migrations, and starts the backend and frontend.
 
-```sh
-./scripts/dev.sh start
-```
-
-The dev stack uses Compose project `calendar-dev`, container `calendar-dev-postgres`, database `calendar`, user `calendar`, and host port `127.0.0.1:5432`. The dev database URL is:
-
-```text
-postgresql+psycopg://calendar:calendar@127.0.0.1:5432/calendar
-```
+The dev stack uses Compose project `calendar-dev`, container `calendar-dev-postgres`, database `calendar`, user `calendar`, and host port `127.0.0.1:5432`.
 
 Migrations run from the local backend checkout, not from a Docker backend image:
 
@@ -97,7 +79,7 @@ There is no backend build step beyond installing the Python package and running 
 
 ## Production Notes
 
-For production, use [docs/ubuntu-production.md](docs/ubuntu-production.md) for the primary non-Docker path or [docs/docker-production.md](docs/docker-production.md) for the minimal Compose path. Local development commands in this guide remain unchanged.
+For production, use [ubuntu-production.md](ubuntu-production.md) for the primary non-Docker path or [docker-production.md](docker-production.md) for the Compose path. Local development commands in this guide remain unchanged.
 
 ## Ubuntu Troubleshooting
 

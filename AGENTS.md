@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Self-hosted scheduled task calendar MVP. The app is currently a React + TypeScript frontend using FullCalendar, a FastAPI backend, and PostgreSQL for storage.
+Self-hosted scheduled task calendar MVP. The app is a React + TypeScript frontend using FullCalendar, a FastAPI backend, and PostgreSQL for storage.
 
 The product centers on tasks that can remain unscheduled or appear on the calendar as concrete time blocks, such as `07:00-09:00`. Completion is task state and must remain available for scheduled and unscheduled tasks.
 
@@ -18,10 +18,10 @@ sudo apt-get install -y python3.12 python3.12-venv python3-pip docker.io docker-
 Start the local development stack:
 
 ```sh
-./scripts/dev.sh start
+./dev.sh
 ```
 
-Or start the full local stack in the background:
+Or use the explicit dispatcher:
 
 ```sh
 ./scripts/dev.sh start
@@ -64,6 +64,7 @@ npm run dev
 Background stack helpers:
 
 ```sh
+./dev.sh
 ./scripts/dev.sh start
 ./scripts/dev.sh stop
 ./scripts/dev.sh status
@@ -72,6 +73,15 @@ Background stack helpers:
 For remote testing, use `DEV_HOST=<reachable-ip> ./scripts/dev.sh start`. The default `DEV_HOST` is `127.0.0.1`.
 Local development uses Compose project `calendar-dev`, container `calendar-dev-postgres`, database `calendar`, and host port `127.0.0.1:5432`. Docker deployment uses Compose project `calendar`.
 `./scripts/dev.sh reset-db` drops and recreates only the local dev `calendar` database, then runs migrations from the local backend checkout. `./scripts/dev.sh destroy-db` requires typing `DESTROY` and removes the local dev PostgreSQL volume.
+
+Google Calendar mirror sync is one-way and uses a dedicated Google secondary calendar, a durable outbox, and the `python -m app.google_calendar.worker` worker process.
+
+Google mirror environment variables live in `backend/.env.example`:
+
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
+- `GOOGLE_OAUTH_REDIRECT_URI`
+- `GOOGLE_TOKEN_ENCRYPTION_KEY`
 
 Frontend validation:
 
@@ -92,6 +102,27 @@ ruff check .
 pytest
 ```
 
+Google sync worker:
+
+```sh
+cd backend
+source .venv/bin/activate
+python -m app.google_calendar.worker
+```
+
+Docker deployment:
+
+```sh
+bash ./scripts/docker-build.sh
+bash ./scripts/docker-deploy.sh
+```
+
+Repository sanity suite:
+
+```sh
+bash ./scripts/sanity.sh
+```
+
 ## Code Style Rules
 
 - Use React function components with TypeScript.
@@ -103,6 +134,7 @@ pytest
 - Store timestamps in a timezone-safe way.
 - Keep comments short and useful.
 - Avoid broad refactors unrelated to the current task.
+- Preserve the current one-way Google Calendar mirror behavior unless a test proves a bug.
 
 ## Data Model Rules
 
@@ -141,7 +173,7 @@ pytest
 - Android widget.
 - Offline/local-first sync.
 - Full CalDAV server support.
-- Google Calendar or external calendar sync.
+- Two-way Google Calendar sync.
 - Advanced recurrence override semantics beyond the current materialized-occurrence MVP.
 - Natural-language parsing.
 - Multi-user sharing.

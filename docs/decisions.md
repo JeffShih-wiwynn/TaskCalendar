@@ -19,8 +19,10 @@ This file records the architecture decisions that should stay stable unless the 
 - The current recurrence MVP uses `recurrence_rule` plus `recurrence_series_id` on task rows and materializes concrete occurrences up to a capped horizon.
 - Discord webhook notifications are the first MVP notification channel; push notifications remain future work.
 - `notification_enabled`, `notification_offset_minutes`, `notification_channel`, and `notification_sent_at` are the notification fields to preserve across API layers.
-- FullCalendar drag mirrors should avoid transformed ancestors; the calendar uses a body-level fixed mirror parent so month-view external drag previews stay aligned with the cursor.
-- Phase 1 PWA support should cache built static frontend assets only. API, auth, admin, backup, and health requests should continue to go to the backend normally until an explicit offline editing and conflict strategy exists.
+- Google Calendar mirror is one-way. TaskCalendar remains authoritative.
+- Google Calendar sync uses a dedicated secondary calendar, a durable outbox, and a background worker.
+- Google-side edits are not imported.
+- Phase 1 PWA support should cache built static frontend assets only. API, auth, admin, backup, health, and Google mirror requests should continue to go to the backend normally until an explicit offline editing and conflict strategy exists.
 - Product APIs are currently split across `/api/*`, `/auth/*`, `/admin/*`, and `/backup/*`; route normalization under `/api/*` is future cleanup, not current behavior.
 - JSON backup/restore is user-scoped calendar data backup and should stay separate from future ICS/VTODO interoperability export.
 - The app should not seed a default admin/root account; the first registered user becomes admin when the users table is empty.

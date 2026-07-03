@@ -1,6 +1,6 @@
 # Ubuntu Production Deployment
 
-This project is still primarily developed and run locally with `scripts/dev.sh`. The guide below covers a non-Docker Ubuntu production setup with `systemd`, a Python virtual environment, built frontend assets, PostgreSQL, and Caddy.
+This project is still primarily developed and run locally with `scripts/dev.sh`. The guide below covers the non-Docker Ubuntu path with `systemd`, a Python virtual environment, built frontend assets, PostgreSQL, and Caddy.
 
 ## Assumptions
 
@@ -44,32 +44,28 @@ Set these in the backend environment file used by `systemd`:
 - `JWT_ALGORITHM`
 - `JWT_ACCESS_TOKEN_EXPIRE_MINUTES`
 
-`APP_TIMEZONE` defaults to `UTC` when unset. Use an IANA timezone name such as `UTC`, `Asia/Taipei`, or `America/New_York`.
+`APP_TIMEZONE` defaults to `UTC` when unset.
 
 Example `/opt/calendar/backend/.env`:
 
 ```env
 DATABASE_URL=postgresql+psycopg://calendar:change-me@127.0.0.1:5432/calendar
-FRONTEND_ORIGINS=https://calendar.example.com
-APP_BASE_URL=https://calendar.example.com
+FRONTEND_ORIGINS=https://<server-host>
+APP_BASE_URL=https://<server-host>
 APP_TIMEZONE=UTC
 DISCORD_WEBHOOK_URL=
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
-GOOGLE_OAUTH_REDIRECT_URI=https://calendar.example.com/api/google-calendar/oauth/callback
+GOOGLE_OAUTH_REDIRECT_URI=https://<server-host>/api/google-calendar/oauth/callback
 GOOGLE_TOKEN_ENCRYPTION_KEY=
 JWT_SECRET_KEY=replace-with-a-long-random-secret
 JWT_ALGORITHM=HS256
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES=1440
 ```
 
-For the Docker deployment path in this repository, there is no repo-root `.env` requirement. The Docker Compose stack reads `backend/.env` directly.
-For the Docker deployment path, create both `backend/.env` and the repo-root `.env` from their examples.
-
 ## Initial Admin Account
 
-The app does not seed a default user or a default `root`/`111111` account. When the users table is empty, the first registered user becomes an admin. Admin user management is available in Settings -> Admin, and the last admin account cannot be deleted.
-Registration is open to anyone who can reach the app, so register the first admin account before exposing the service broadly.
+The app does not seed a default user or a default `root`/`111111` account. When the users table is empty, the first registered user becomes an admin. Register the first admin account before exposing the service broadly.
 
 ## Backend Setup
 
@@ -163,6 +159,8 @@ sudo systemctl enable --now calendar-google-worker
 sudo systemctl status calendar-google-worker
 ```
 
+The backend process also starts the in-process Discord notification worker thread when it runs normally.
+
 ## Caddy
 
 Serve the built frontend assets and reverse proxy API requests to the backend.
@@ -201,18 +199,9 @@ calendar.example.com {
 }
 ```
 
-Use `handle`, not `handle_path`, for backend route families. The backend routers include their prefixes, so Caddy must preserve `/api`, `/auth`, `/admin`, and `/backup`. In particular, `/admin/*` must reach the backend and must not fall through to the React app shell.
+Use `handle`, not `handle_path`, for backend route families. The backend routers include their prefixes, so Caddy must preserve `/api`, `/auth`, `/admin`, and `/backup`.
 
-If you prefer a separate static host, point `root` at the deployed `frontend/dist` directory and keep the proxy rules for backend routes.
-
-The backend route layout is currently mixed across `/api/*`, `/auth/*`, `/admin/*`, and `/backup/*`. A future cleanup should normalize product APIs under `/api/*` before larger integrations are added. A reasonable target is:
-
-- `/auth/*` -> `/api/auth/*`
-- `/admin/*` -> `/api/admin/*`
-- `/backup/*` -> `/api/backup/*`
-- future external calendar APIs -> `/api/external-calendars/*` or a similar subtree
-
-`/health` may remain at the root.
+The backend route layout is currently mixed across `/api/*`, `/auth/*`, `/admin/*`, and `/backup/*`. A future cleanup should normalize product APIs under `/api/*` before larger integrations are added.
 
 ## Deployment Flow
 
@@ -223,20 +212,41 @@ The backend route layout is currently mixed across `/api/*`, `/auth/*`, `/admin/
 5. Restart the backend and Google worker `systemd` services.
 6. Reload Caddy if the site config changed.
 
+For a release-tag deployment, check out the tag before steps 2 to 6:
+
+```sh
+git fetch --tags
+git checkout <release-tag>
+```
+
+## Backups
+
+JSON backup/restore is user-scoped calendar data backup. It is separate from future ICS/VTODO export and does not include password hashes, JWT secrets, Google OAuth secrets, or user accounts.
+
+Back up PostgreSQL before upgrades:
+
+```sh
+pg_dump -h 127.0.0.1 -U calendar -d calendar > <backup-file>
+```
+
+Restore with:
+
+```sh
+psql -h 127.0.0.1 -U calendar -d calendar < <backup-file>
+```
+
 ## Before Exposing Publicly
 
 - Replace every example secret in the backend environment file.
 - Use a strong database password and strong `JWT_SECRET_KEY`.
 - Set `APP_BASE_URL` and `FRONTEND_ORIGINS` to the deployed HTTPS origin.
-- For Google Calendar mirror connection, follow [google-calendar.md](google-calendar.md) and use `https://<your-origin>/api/google-calendar/oauth/callback` as the authorized redirect URI.
+- For Google Calendar mirror connection, follow [google-calendar.md](google-calendar.md) and use `https://<server-host>/api/google-calendar/oauth/callback` as the authorized redirect URI.
 - Serve the app over HTTPS.
 - Register the first admin account yourself.
 - Decide whether open registration is acceptable for your deployment.
-- Back up PostgreSQL before upgrades.
 
 ## Notes
 
-- Docker is not the primary production path yet.
+- Docker is not the primary production path for this guide.
 - This guide does not change the local development workflow.
 - Keep backend and frontend environment values in ignored env files only; use `.env.example`, `backend/.env.example`, and `frontend/.env.example` as public templates.
-- JSON backup/restore is user-scoped calendar data backup. It is separate from future ICS/VTODO export and does not include password hashes, JWT secrets, or user accounts.
