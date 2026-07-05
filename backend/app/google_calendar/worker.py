@@ -177,9 +177,11 @@ def classify_job_failure(exc: Exception) -> JobFailure:
     if isinstance(exc, service.GoogleSyncError):
         return JobFailure(retryable=False, message=service.SAFE_LAST_ERROR)
     if isinstance(exc, GoogleProviderError):
-        if exc.status_code in {401, 403}:
+        if service.provider_error_requires_reconnect(exc):
             return JobFailure(retryable=False, message="Google Calendar reconnect is required")
         if exc.status_code is None or exc.status_code == 429 or exc.status_code >= 500:
+            return JobFailure(retryable=True, message="Google Calendar sync failed")
+        if exc.status_code in {401, 403}:
             return JobFailure(retryable=True, message="Google Calendar sync failed")
         return JobFailure(retryable=False, message="Google Calendar sync failed")
     return JobFailure(retryable=True, message="Google Calendar sync failed")

@@ -54,9 +54,16 @@ class GoogleBatchEventResponse:
 
 
 class GoogleProviderError(Exception):
-    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        error_code: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.status_code = status_code
+        self.error_code = error_code
 
 
 class GoogleCalendarClient:
@@ -456,9 +463,11 @@ def read_response(request_obj: request.Request) -> str:
         with request.urlopen(request_obj, timeout=15) as response:
             return response.read().decode("utf-8")
     except error.HTTPError as exc:
+        response_body = exc.read().decode("utf-8", errors="replace")
         raise GoogleProviderError(
             "Google Calendar request failed",
             status_code=exc.code,
+            error_code=parse_google_error_code(response_body),
         ) from exc
     except error.URLError as exc:
         raise GoogleProviderError("Google Calendar request failed") from exc
@@ -466,3 +475,23 @@ def read_response(request_obj: request.Request) -> str:
 
 def provider_error(message: str) -> HTTPException:
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+
+
+def parse_google_error_code(response_body: str) -> str | None:
+    if not response_body:
+        return None
+    try:
+        payload = json.loads(response_body)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+
+    error_value = payload.get("error")
+    if isinstance(error_value, str):
+        return error_value
+    if isinstance(error_value, dict):
+        code = error_value.get("status") or error_value.get("reason")
+        if isinstance(code, str):
+            return code
+    return None
