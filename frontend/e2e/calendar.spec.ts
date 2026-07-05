@@ -218,6 +218,12 @@ async function createCategoryViaUi(page: Page, name: string): Promise<void> {
   await expect(page.getByRole('button', { name: 'Task category' })).toBeVisible();
 }
 
+async function openPreferences(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: 'Preferences' }).click();
+  await expect(page.getByRole('heading', { name: 'Preferences' })).toBeVisible();
+}
+
 test.describe('Calendar E2E', () => {
   test('registers, logs in, logs out, and logs back in', async ({ page }) => {
     const username = uniqueName('auth');
@@ -232,7 +238,7 @@ test.describe('Calendar E2E', () => {
     await expect(page.getByText(`Hello, ${username}`)).toBeVisible();
 
     await page.getByRole('button', { name: 'Settings' }).click();
-    await page.getByRole('button', { name: 'Account' }).click();
+    await page.getByRole('button', { name: 'Profile & Security' }).click();
     await page.getByRole('button', { name: 'Logout' }).click();
     await expect(page.getByRole('heading', { name: /Register|Welcome back/ })).toBeVisible();
 
@@ -547,25 +553,24 @@ test.describe('Calendar E2E', () => {
     const user = await registerUser(request, 'settings');
     await openAuthenticatedApp(page, user);
 
-    await page.getByRole('button', { name: 'Settings' }).click();
-    await page.getByRole('button', { name: 'Calendar display' }).click();
-    const workingHoursForm = page.locator('.calendar-display-form');
-    await expect(workingHoursForm.getByText('Working hours')).toBeVisible();
+    await openPreferences(page);
+    await page.getByRole('button', { name: 'Working hours' }).click();
+    await expect(page.getByLabel('Start time')).toBeVisible();
 
-    await workingHoursForm.getByLabel('Start time').fill('08:00');
-    await workingHoursForm.getByLabel('End time').fill('17:00');
+    await page.getByLabel('Start time').fill('08:00');
+    await page.getByLabel('End time').fill('17:00');
     await expect.poll(async () => page.evaluate(() => (
       window.localStorage.getItem('calendar-working-hours')
     ))).toBe(JSON.stringify({ start: '08:00', end: '17:00' }));
-    await workingHoursForm.getByRole('button', { name: 'Done' }).click();
+    await page.getByRole('button', { name: 'Done' }).click();
 
     await page.reload();
     await expect(page.getByText(`Hello, ${user.username}`)).toBeVisible();
-    await page.getByRole('button', { name: 'Settings' }).click();
-    await page.getByRole('button', { name: 'Calendar display' }).click();
+    await openPreferences(page);
+    await page.getByRole('button', { name: 'Working hours' }).click();
 
-    await expect(page.locator('.calendar-display-form').getByLabel('Start time')).toHaveValue('08:00');
-    await expect(page.locator('.calendar-display-form').getByLabel('End time')).toHaveValue('17:00');
+    await expect(page.getByLabel('Start time')).toHaveValue('08:00');
+    await expect(page.getByLabel('End time')).toHaveValue('17:00');
   });
 
   test('toggles completed task visibility', async ({ page, request }) => {
@@ -597,7 +602,7 @@ test.describe('Calendar E2E', () => {
     await expect(taskRow(page, title)).toBeVisible();
     await expect(calendarEvent(page, title)).toBeVisible();
 
-    await page.getByRole('button', { name: 'Settings' }).click();
+    await openPreferences(page);
     await page.getByRole('switch', { name: 'Show completed tasks' }).click();
     await expect(page.getByRole('switch', { name: 'Show completed tasks' })).toHaveAttribute('aria-checked', 'false');
     await expect(taskRow(page, title)).toHaveCount(0);
@@ -608,7 +613,7 @@ test.describe('Calendar E2E', () => {
     await expect(taskRow(page, title)).toHaveCount(0);
     await expect(calendarEvent(page, title)).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Settings' }).click();
+    await openPreferences(page);
     await expect(page.getByRole('switch', { name: 'Show completed tasks' })).toHaveAttribute('aria-checked', 'false');
     await page.getByRole('switch', { name: 'Show completed tasks' }).click();
     await page.getByRole('button', { name: 'Return to sidebar' }).click();

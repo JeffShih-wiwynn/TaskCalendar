@@ -393,7 +393,7 @@ body {
 
 .sidebar-settings-list {
   display: grid;
-  gap: 6px;
+  gap: 14px;
 }
 
 .sidebar-settings-row {
@@ -404,6 +404,228 @@ body {
   padding: 10px;
   color: var(--text);
   font-weight: 700;
+}
+
+.settings-list-section {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-list-section-title {
+  margin: 0;
+  padding: 0 10px 2px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.settings-navigation-row {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  border-radius: 7px;
+  padding: 9px 10px;
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition:
+    background-color var(--micro-duration-fast) ease,
+    color var(--micro-duration-fast) ease;
+}
+
+.settings-navigation-row:hover:not(:disabled),
+.settings-navigation-row:focus-visible {
+  background: color-mix(in srgb, var(--accent-soft) 48%, transparent);
+}
+
+.settings-navigation-row:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 54%, #ffffff 46%);
+  outline-offset: 2px;
+}
+
+.settings-navigation-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.settings-navigation-row-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.settings-navigation-row-title {
+  color: var(--text);
+  font-size: 0.94rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.settings-navigation-row-subtitle {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.settings-navigation-row-chevron {
+  flex: 0 0 auto;
+  color: var(--subtle);
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.settings-navigation-row-danger .settings-navigation-row-title,
+.settings-navigation-row-danger .settings-navigation-row-chevron {
+  color: var(--danger);
+}
+
+.settings-navigation-row-danger {
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
+}
+
+.settings-navigation-row-danger:hover:not(:disabled),
+.settings-navigation-row-danger:focus-visible {
+  background: color-mix(in srgb, var(--danger) 14%, var(--panel-bg));
+}
+
+.settings-navigation-row-danger:focus-visible {
+  outline-color: color-mix(in srgb, var(--danger) 72%, #ffffff 28%);
+}
+
+.calendar-display-toggle-row,
+.preferences-toggle-row {
+  min-height: 48px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--panel-bg) 66%, transparent);
+}
+
+.preferences-settings-panel {
+  display: grid;
+  gap: 14px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+}
+
+.settings-action-button.preferences-done-button {
+  margin-top: 2px;
+  border-color: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: color-mix(in srgb, var(--accent) 92%, #000 8%);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.settings-action-button.preferences-done-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 20%, var(--panel-bg));
+}
+
+.settings-action-button.preferences-done-button:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 24%, var(--panel-bg));
+}
+
+.settings-action-button.preferences-done-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 66%, #ffffff 34%);
+  outline-offset: 2px;
+}
+
+.preferences-summary-row-trailing {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.preferences-summary-value {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preferences-inline-options,
+.preferences-inline-editor {
+  display: grid;
+  gap: 8px;
+  padding: 4px 10px 8px;
+}
+
+.preferences-inline-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.preferences-choice-button {
+  min-height: 44px;
+  border: 1px solid color-mix(in srgb, var(--field-border) 72%, var(--text) 28%);
+  border-radius: 7px;
+  padding: 9px 11px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel-bg) 78%, transparent);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background-color var(--micro-duration-fast) ease,
+    border-color var(--micro-duration-fast) ease,
+    color var(--micro-duration-fast) ease;
+}
+
+.preferences-choice-button:hover:not(:disabled),
+.preferences-choice-button:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--field-border) 76%);
+  background: color-mix(in srgb, var(--accent-soft) 40%, var(--panel-bg) 60%);
+}
+
+.preferences-choice-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 54%, #ffffff 46%);
+  outline-offset: 2px;
+}
+
+.preferences-choice-button-active {
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+  color: color-mix(in srgb, var(--accent) 92%, #000 8%);
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel-bg));
+}
+
+.preferences-inline-editor {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.preferences-inline-editor label {
+  display: grid;
+  gap: 6px;
+}
+
+.preferences-inline-editor label span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.google-connection-management {
+  display: grid;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.google-connection-management .settings-list-section-title {
+  padding-left: 0;
 }
 
 .sidebar-settings-row + .filter-option,
@@ -494,7 +716,8 @@ body {
 }
 
 .working-hours-form input[type="time"],
-.calendar-display-form input[type="time"] {
+.calendar-display-form input[type="time"],
+.preferences-inline-editor input[type="time"] {
   width: 100%;
   min-width: 0;
   border: 1px solid var(--field-border);
@@ -506,7 +729,8 @@ body {
 }
 
 .working-hours-form input[type="time"]::-webkit-calendar-picker-indicator,
-.calendar-display-form input[type="time"]::-webkit-calendar-picker-indicator {
+.calendar-display-form input[type="time"]::-webkit-calendar-picker-indicator,
+.preferences-inline-editor input[type="time"]::-webkit-calendar-picker-indicator {
   opacity: 0.85;
 }
 
