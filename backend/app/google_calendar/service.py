@@ -40,6 +40,7 @@ from app.models.scheduled_task import ScheduledTask
 
 OAUTH_STATE_TTL_MINUTES = 10
 SAFE_LAST_ERROR = "Google Calendar connection needs attention."
+RECONNECT_REQUIRED_GOOGLE_ERROR_CODES = {"invalid_grant"}
 SOURCE_NOTICE = (
     "Source: TaskCalendar\n"
     "This event is mirrored automatically.\n"
@@ -474,7 +475,7 @@ def refresh_google_access_token(
             decrypt_refresh_token(connection.encrypted_refresh_token),
         )
     except GoogleProviderError as exc:
-        if exc.status_code in {status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN}:
+        if provider_error_requires_reconnect(exc):
             raise GoogleReconnectRequiredError() from exc
         raise
     return token_response.access_token
@@ -1291,7 +1292,7 @@ def set_connection_error_from_provider(
     connection: GoogleCalendarConnection,
     exc: GoogleProviderError,
 ) -> None:
-    if exc.status_code in {status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN}:
+    if provider_error_requires_reconnect(exc):
         connection.status = "needs_reauth"
     else:
         connection.status = "error"
@@ -1299,6 +1300,10 @@ def set_connection_error_from_provider(
     connection.updated_at = datetime.now(UTC)
     db.add(connection)
     db.commit()
+
+
+def provider_error_requires_reconnect(exc: GoogleProviderError) -> bool:
+    return exc.error_code in RECONNECT_REQUIRED_GOOGLE_ERROR_CODES
 
 
 def update_connection_sync_success(db: Session, connection: GoogleCalendarConnection) -> None:

@@ -1241,7 +1241,11 @@ def test_sync_now_revoked_token_marks_reconnect_required(db_session: Session) ->
     user = create_user(db_session)
     connect_google_calendar(db_session, user)
     fake_client = FakeGoogleClient()
-    fake_client.refresh_error = GoogleProviderError("revoked", status_code=401)
+    fake_client.refresh_error = GoogleProviderError(
+        "revoked",
+        status_code=400,
+        error_code="invalid_grant",
+    )
 
     with pytest.raises(HTTPException) as exc_info:
         service.sync_now(db_session, user_id=user.id, client=fake_client)
@@ -1383,7 +1387,7 @@ def test_sync_now_missing_mirror_calendar_sets_error_not_reauth(
     assert "token" not in str(exc_info.value.detail).lower()
 
 
-@pytest.mark.parametrize("provider_status_code", [429, 500, 503, None])
+@pytest.mark.parametrize("provider_status_code", [401, 403, 429, 500, 503, None])
 def test_sync_now_provider_failures_set_error_not_reauth(
     db_session: Session,
     provider_status_code: int | None,
@@ -2223,7 +2227,11 @@ def test_worker_processes_delete_task_idempotently(db_session: Session) -> None:
     assert all(job.status == "done" for job in db_session.query(GoogleSyncOutbox).all())
 
 
-def test_worker_retryable_provider_failure_schedules_retry(db_session: Session) -> None:
+@pytest.mark.parametrize("provider_status_code", [401, 403, 429])
+def test_worker_retryable_provider_failure_schedules_retry(
+    db_session: Session,
+    provider_status_code: int,
+) -> None:
     user = create_user(db_session)
     connect_google_calendar(db_session, user)
     task = create_task(
@@ -2237,7 +2245,10 @@ def test_worker_retryable_provider_failure_schedules_retry(db_session: Session) 
         id="mirror-calendar-id",
         summary="TaskCalendar Mirror — Read Only",
     )
-    fake_client.event_error = GoogleProviderError("rate limited token", status_code=429)
+    fake_client.event_error = GoogleProviderError(
+        "raw provider failure with token",
+        status_code=provider_status_code,
+    )
     enqueue_task_upsert(db_session, user_id=user.id, task_id=task.id)
     db_session.commit()
     job = claim_next_job(db_session, worker_id="worker")
@@ -2262,7 +2273,11 @@ def test_worker_revoked_auth_marks_reauth_and_stops_retrying(db_session: Session
         scheduled_end=datetime.now(UTC) + timedelta(hours=2),
     )
     fake_client = FakeGoogleClient()
-    fake_client.refresh_error = GoogleProviderError("revoked token", status_code=401)
+    fake_client.refresh_error = GoogleProviderError(
+        "revoked token",
+        status_code=400,
+        error_code="invalid_grant",
+    )
     enqueue_task_upsert(db_session, user_id=user.id, task_id=task.id)
     db_session.commit()
     job = claim_next_job(db_session, worker_id="worker")
@@ -2276,6 +2291,43 @@ def test_worker_revoked_auth_marks_reauth_and_stops_retrying(db_session: Session
     assert connection.status == "needs_reauth"
     assert job.status == "dead"
     assert job.last_error == "Google Calendar reconnect is required"
+
+
+def test_worker_generic_refresh_auth_failure_retries_without_reauth(
+    db_session: Session,
+) -> None:
+    user = create_user(db_session)
+    connect_google_calendar(db_session, user)
+    connection = service.get_connection(db_session, user_id=user.id)
+    assert connection is not None
+    connection.last_successful_sync_at = datetime.now(UTC) - timedelta(minutes=5)
+    db_session.add(connection)
+    db_session.commit()
+    task = create_task(
+        db_session,
+        user,
+        scheduled_start=datetime.now(UTC) + timedelta(hours=1),
+        scheduled_end=datetime.now(UTC) + timedelta(hours=2),
+    )
+    fake_client = FakeGoogleClient()
+    fake_client.refresh_error = GoogleProviderError("auth endpoint failed", status_code=401)
+    enqueue_task_upsert(db_session, user_id=user.id, task_id=task.id)
+    db_session.commit()
+    job = claim_next_job(db_session, worker_id="worker")
+    assert job is not None
+
+    process_claimed_job(db_session, job, client=fake_client)
+    db_session.refresh(job)
+    db_session.refresh(connection)
+
+    assert connection.google_calendar_id == "mirror-calendar-id"
+    assert connection.google_calendar_summary == "TaskCalendar Mirror — Read Only"
+    assert connection.last_successful_sync_at is not None
+    assert connection.status == "error"
+    assert connection.status != "needs_reauth"
+    assert job.status == "failed"
+    assert job.attempts == 1
+    assert job.last_error == "Google Calendar sync failed"
 
 
 def test_worker_missing_mirror_calendar_marks_error(db_session: Session) -> None:
