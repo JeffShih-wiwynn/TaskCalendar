@@ -477,6 +477,9 @@ export function App() {
     const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
     const [workingHours, setWorkingHours] = useState(getInitialWorkingHours);
     const [weekStart, setWeekStart] = useState<WeekStart>("sunday");
+    const [expandedPreferenceSection, setExpandedPreferenceSection] = useState<
+        "week-start" | "working-hours" | null
+    >(null);
     const [isFullDayTimelineVisible, setIsFullDayTimelineVisible] =
         useState(false);
     const [taskState, setTaskState] = useState<TaskState>({
@@ -3935,6 +3938,7 @@ export function App() {
     const openCalendarDisplaySettings = () => {
         closeDetailPanel();
         closeSettingsPanels();
+        setExpandedPreferenceSection(null);
         setSettingsView("calendar-display");
     };
 
@@ -4196,6 +4200,10 @@ export function App() {
     const isGoogleCalendarSettingsOpen = settingsView === "google-calendar";
     const isBackupSettingsOpen = settingsView === "backup";
     const isSettingsSubviewOpen = settingsView !== null;
+    const isGoogleCalendarConnected = googleCalendarStatus?.connected === true;
+    const isGoogleCalendarRecoveryState =
+        googleCalendarStatus?.status === "needs_reauth" ||
+        googleCalendarStatus?.status === "error";
     const isSidebarTaskContentVisible =
         !detailPanelMode &&
         !isDetailPanelClosing &&
@@ -4419,86 +4427,148 @@ export function App() {
                                 transition={panelTransition}
                             >
                                 <div className="sidebar-settings-list">
-                                    <div className="sidebar-settings-row">
-                                        <span>Dark mode</span>
+                                    <div className="settings-list-section">
+                                        <p className="settings-list-section-title">
+                                            Calendar
+                                        </p>
                                         <button
                                             type="button"
-                                            className={`sidebar-switch ${themeMode === "dark" ? "sidebar-switch-on" : ""}`}
-                                            role="switch"
-                                            aria-label="Dark mode"
-                                            aria-checked={themeMode === "dark"}
-                                            onClick={() =>
-                                                setThemeMode(
-                                                    themeMode === "dark"
-                                                        ? "light"
-                                                        : "dark",
-                                                )
-                                            }
+                                            className="settings-navigation-row"
+                                            aria-label="Preferences"
+                                            onClick={openCalendarDisplaySettings}
                                         >
-                                            <span className="sidebar-switch-knob" />
+                                            <span className="settings-navigation-row-copy">
+                                                <span className="settings-navigation-row-title">
+                                                    Preferences
+                                                </span>
+                                            </span>
+                                            <span
+                                                className="settings-navigation-row-chevron"
+                                                aria-hidden="true"
+                                            >
+                                                ›
+                                            </span>
                                         </button>
                                     </div>
-                                    <div className="sidebar-settings-row">
-                                        <span>Show completed tasks</span>
+                                    <div className="settings-list-section">
+                                        <p className="settings-list-section-title">
+                                            Integrations
+                                        </p>
                                         <button
                                             type="button"
-                                            className={`sidebar-switch ${showCompletedTasks ? "sidebar-switch-on" : ""}`}
-                                            role="switch"
-                                            aria-label="Show completed tasks"
-                                            aria-checked={showCompletedTasks}
-                                            onClick={() =>
-                                                setShowCompletedTasks(
-                                                    (current) => !current,
-                                                )
-                                            }
+                                            className="settings-navigation-row"
+                                            aria-label="Google Calendar"
+                                            onClick={openGoogleCalendarSettings}
                                         >
-                                            <span className="sidebar-switch-knob" />
+                                            <span className="settings-navigation-row-copy">
+                                                <span className="settings-navigation-row-title">
+                                                    Google Calendar
+                                                </span>
+                                                <span className="settings-navigation-row-subtitle">
+                                                    Mirror scheduled tasks
+                                                </span>
+                                            </span>
+                                            <span
+                                                className="settings-navigation-row-chevron"
+                                                aria-hidden="true"
+                                            >
+                                                ›
+                                            </span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="settings-navigation-row"
+                                            aria-label="Webhook"
+                                            onClick={openWebhookSettings}
+                                        >
+                                            <span className="settings-navigation-row-copy">
+                                                <span className="settings-navigation-row-title">
+                                                    Webhook
+                                                </span>
+                                                <span className="settings-navigation-row-subtitle">
+                                                    Notification integration
+                                                </span>
+                                            </span>
+                                            <span
+                                                className="settings-navigation-row-chevron"
+                                                aria-hidden="true"
+                                            >
+                                                ›
+                                            </span>
                                         </button>
                                     </div>
-                                    <button
-                                        type="button"
-                                        className="settings-action-button settings-action-button-neutral"
-                                        onClick={openCalendarDisplaySettings}
-                                    >
-                                        Calendar display
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="settings-action-button settings-action-button-neutral"
-                                        onClick={openWebhookSettings}
-                                    >
-                                        Webhook
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="settings-action-button settings-action-button-neutral"
-                                        onClick={openGoogleCalendarSettings}
-                                    >
-                                        Google Calendar
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="settings-action-button settings-action-button-neutral"
-                                        onClick={openBackupSettings}
-                                    >
-                                        Backup &amp; Restore
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="settings-action-button settings-action-button-neutral"
-                                        onClick={openAccountSettings}
-                                    >
-                                        Account
-                                    </button>
-                                    {currentUser?.is_admin ? (
+                                    <div className="settings-list-section">
+                                        <p className="settings-list-section-title">
+                                            Data
+                                        </p>
                                         <button
                                             type="button"
-                                            className="settings-action-button settings-action-button-warning"
-                                            onClick={openAdminSettings}
+                                            className="settings-navigation-row"
+                                            aria-label="Backup & Restore"
+                                            onClick={openBackupSettings}
                                         >
-                                            Admin
+                                            <span className="settings-navigation-row-copy">
+                                                <span className="settings-navigation-row-title">
+                                                    Backup &amp; Restore
+                                                </span>
+                                                <span className="settings-navigation-row-subtitle">
+                                                    Export or restore your data
+                                                </span>
+                                            </span>
+                                            <span
+                                                className="settings-navigation-row-chevron"
+                                                aria-hidden="true"
+                                            >
+                                                ›
+                                            </span>
                                         </button>
-                                    ) : null}
+                                    </div>
+                                    <div className="settings-list-section">
+                                        <p className="settings-list-section-title">
+                                            Account
+                                        </p>
+                                        <button
+                                            type="button"
+                                            className="settings-navigation-row"
+                                            aria-label="Profile & Security"
+                                            onClick={openAccountSettings}
+                                        >
+                                            <span className="settings-navigation-row-copy">
+                                                <span className="settings-navigation-row-title">
+                                                    Profile &amp; Security
+                                                </span>
+                                            </span>
+                                            <span
+                                                className="settings-navigation-row-chevron"
+                                                aria-hidden="true"
+                                            >
+                                                ›
+                                            </span>
+                                        </button>
+                                        {currentUser?.is_admin ? (
+                                            <button
+                                                type="button"
+                                                className="settings-navigation-row"
+                                                aria-label="Admin"
+                                                onClick={openAdminSettings}
+                                            >
+                                                <span className="settings-navigation-row-copy">
+                                                    <span className="settings-navigation-row-title">
+                                                        Admin
+                                                    </span>
+                                                    <span className="settings-navigation-row-subtitle">
+                                                        Manage users
+                                                    </span>
+                                                </span>
+                                                <span
+                                                    className="settings-navigation-row-chevron"
+                                                    aria-hidden="true"
+                                                >
+                                                    ›
+                                                </span>
+                                            </button>
+                                        ) : null}
+                                    </div>
                                 </div>
                             </motion.section>
                         )}
@@ -4537,7 +4607,7 @@ export function App() {
                                 <div className="task-form account-settings-form">
                                     <div className="account-settings-heading">
                                         <h3 className="working-hours-title">
-                                            Account
+                                            Profile &amp; Security
                                         </h3>
                                         <p className="muted">
                                             Manage your password or delete this
@@ -4770,101 +4840,229 @@ export function App() {
                                 exit="exit"
                                 transition={panelTransition}
                             >
-                                <form
-                                    className="task-form calendar-display-form"
+                                <div
+                                    className="preferences-settings-panel"
                                     onClick={(event) => event.stopPropagation()}
                                 >
-                                    <div className="calendar-display-section">
-                                        <span className="calendar-display-section-title">
-                                            Week starts on
-                                        </span>
-                                        <div
-                                            className="week-start-options"
-                                            role="group"
-                                            aria-label="Week start"
+                                    <div className="account-settings-heading">
+                                        <h3 className="working-hours-title">
+                                            Preferences
+                                        </h3>
+                                    </div>
+                                    <div className="settings-list-section">
+                                        <p className="settings-list-section-title">
+                                            Calendar
+                                        </p>
+                                        <button
+                                            type="button"
+                                            className="settings-navigation-row preferences-summary-row"
+                                            aria-expanded={
+                                                expandedPreferenceSection ===
+                                                "week-start"
+                                            }
+                                            aria-controls="week-start-preference-options"
+                                            onClick={() =>
+                                                setExpandedPreferenceSection(
+                                                    (current) =>
+                                                        current === "week-start"
+                                                            ? null
+                                                            : "week-start",
+                                                )
+                                            }
                                         >
+                                            <span className="settings-navigation-row-copy">
+                                                <span className="settings-navigation-row-title">
+                                                    Week starts on
+                                                </span>
+                                            </span>
+                                            <span className="preferences-summary-row-trailing">
+                                                <span className="preferences-summary-value">
+                                                    {weekStart === "monday"
+                                                        ? "Monday"
+                                                        : "Sunday"}
+                                                </span>
+                                                <span
+                                                    className="settings-navigation-row-chevron"
+                                                    aria-hidden="true"
+                                                >
+                                                    ›
+                                                </span>
+                                            </span>
+                                        </button>
+                                        {expandedPreferenceSection ===
+                                        "week-start" ? (
+                                            <div
+                                                id="week-start-preference-options"
+                                                className="preferences-inline-options"
+                                                role="group"
+                                                aria-label="Week start"
+                                            >
+                                                <button
+                                                    type="button"
+                                                    className={`preferences-choice-button ${
+                                                        weekStart === "sunday"
+                                                            ? "preferences-choice-button-active"
+                                                            : ""
+                                                    }`}
+                                                    aria-pressed={
+                                                        weekStart === "sunday"
+                                                    }
+                                                    onClick={() =>
+                                                        updateWeekStart("sunday")
+                                                    }
+                                                >
+                                                    Sunday
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={`preferences-choice-button ${
+                                                        weekStart === "monday"
+                                                            ? "preferences-choice-button-active"
+                                                            : ""
+                                                    }`}
+                                                    aria-pressed={
+                                                        weekStart === "monday"
+                                                    }
+                                                    onClick={() =>
+                                                        updateWeekStart("monday")
+                                                    }
+                                                >
+                                                    Monday
+                                                </button>
+                                            </div>
+                                        ) : null}
+                                        <button
+                                            type="button"
+                                            className="settings-navigation-row preferences-summary-row"
+                                            aria-expanded={
+                                                expandedPreferenceSection ===
+                                                "working-hours"
+                                            }
+                                            aria-controls="working-hours-preference-editor"
+                                            onClick={() =>
+                                                setExpandedPreferenceSection(
+                                                    (current) =>
+                                                        current === "working-hours"
+                                                            ? null
+                                                            : "working-hours",
+                                                )
+                                            }
+                                        >
+                                            <span className="settings-navigation-row-copy">
+                                                <span className="settings-navigation-row-title">
+                                                    Working hours
+                                                </span>
+                                            </span>
+                                            <span className="preferences-summary-row-trailing">
+                                                <span className="preferences-summary-value">
+                                                    {workingHours.start} –{" "}
+                                                    {workingHours.end}
+                                                </span>
+                                                <span
+                                                    className="settings-navigation-row-chevron"
+                                                    aria-hidden="true"
+                                                >
+                                                    ›
+                                                </span>
+                                            </span>
+                                        </button>
+                                        {expandedPreferenceSection ===
+                                        "working-hours" ? (
+                                            <div
+                                                id="working-hours-preference-editor"
+                                                className="preferences-inline-editor"
+                                            >
+                                                <label>
+                                                    <span>Start time</span>
+                                                    <input
+                                                        type="time"
+                                                        lang="en-GB"
+                                                        min="00:00"
+                                                        max="23:00"
+                                                        step="3600"
+                                                        value={workingHours.start}
+                                                        onChange={(event) =>
+                                                            updateWorkingHours({
+                                                                start: event
+                                                                    .target.value,
+                                                            })
+                                                        }
+                                                    />
+                                                </label>
+                                                <label>
+                                                    <span>End time</span>
+                                                    <input
+                                                        type="time"
+                                                        lang="en-GB"
+                                                        min="00:00"
+                                                        max="23:00"
+                                                        step="3600"
+                                                        value={workingHours.end}
+                                                        onChange={(event) =>
+                                                            updateWorkingHours({
+                                                                end: event.target
+                                                                    .value,
+                                                            })
+                                                        }
+                                                    />
+                                                </label>
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                    <div className="settings-list-section">
+                                        <p className="settings-list-section-title">
+                                            Appearance
+                                        </p>
+                                        <div className="sidebar-settings-row preferences-toggle-row">
+                                            <span>Dark mode</span>
                                             <button
                                                 type="button"
-                                                className={`week-start-option ${
-                                                    weekStart === "sunday"
-                                                        ? "week-start-option-active"
-                                                        : ""
-                                                }`}
-                                                aria-pressed={
-                                                    weekStart === "sunday"
-                                                }
+                                                className={`sidebar-switch ${themeMode === "dark" ? "sidebar-switch-on" : ""}`}
+                                                role="switch"
+                                                aria-label="Dark mode"
+                                                aria-checked={themeMode === "dark"}
                                                 onClick={() =>
-                                                    updateWeekStart("sunday")
+                                                    setThemeMode(
+                                                        themeMode === "dark"
+                                                            ? "light"
+                                                            : "dark",
+                                                    )
                                                 }
                                             >
-                                                Sunday
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className={`week-start-option ${
-                                                    weekStart === "monday"
-                                                        ? "week-start-option-active"
-                                                        : ""
-                                                }`}
-                                                aria-pressed={
-                                                    weekStart === "monday"
-                                                }
-                                                onClick={() =>
-                                                    updateWeekStart("monday")
-                                                }
-                                            >
-                                                Monday
+                                                <span className="sidebar-switch-knob" />
                                             </button>
                                         </div>
                                     </div>
-                                    <div className="calendar-display-section">
-                                        <span className="calendar-display-section-title">
-                                            Working hours
-                                        </span>
-                                        <label>
-                                            <span>Start time</span>
-                                            <input
-                                                type="time"
-                                                lang="en-GB"
-                                                min="00:00"
-                                                max="23:00"
-                                                step="3600"
-                                                value={workingHours.start}
-                                                onChange={(event) =>
-                                                    updateWorkingHours({
-                                                        start: event.target
-                                                            .value,
-                                                    })
+                                    <div className="settings-list-section">
+                                        <p className="settings-list-section-title">
+                                            Task visibility
+                                        </p>
+                                        <div className="sidebar-settings-row preferences-toggle-row">
+                                            <span>Show completed tasks</span>
+                                            <button
+                                                type="button"
+                                                className={`sidebar-switch ${showCompletedTasks ? "sidebar-switch-on" : ""}`}
+                                                role="switch"
+                                                aria-label="Show completed tasks"
+                                                aria-checked={showCompletedTasks}
+                                                onClick={() =>
+                                                    setShowCompletedTasks(
+                                                        (current) => !current,
+                                                    )
                                                 }
-                                            />
-                                        </label>
-                                        <label>
-                                            <span>End time</span>
-                                            <input
-                                                type="time"
-                                                lang="en-GB"
-                                                min="00:00"
-                                                max="23:00"
-                                                step="3600"
-                                                value={workingHours.end}
-                                                onChange={(event) =>
-                                                    updateWorkingHours({
-                                                        end: event.target.value,
-                                                    })
-                                                }
-                                            />
-                                        </label>
+                                            >
+                                                <span className="sidebar-switch-knob" />
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div className="task-form-actions">
-                                        <button
-                                            type="button"
-                                            className="settings-action-button settings-action-button-primary"
-                                            onClick={openSettingsMenu}
-                                        >
-                                            Done
-                                        </button>
-                                    </div>
-                                </form>
+                                    <button
+                                        type="button"
+                                        className="settings-action-button preferences-done-button"
+                                        onClick={openSettingsMenu}
+                                    >
+                                        Done
+                                    </button>
+                                </div>
                             </motion.section>
                         )}
                         {!detailPanelMode && isBackupSettingsOpen && (
@@ -5009,7 +5207,7 @@ export function App() {
                                     </div>
                                     {isGoogleCalendarLoading ? (
                                         <p className="muted">Loading status...</p>
-                                    ) : googleCalendarStatus?.connected ? (
+                                    ) : isGoogleCalendarConnected ? (
                                         <div className="backup-summary">
                                             <div>
                                                 <span>Status:</span> Connected
@@ -5027,10 +5225,41 @@ export function App() {
                                                     )}
                                                 </div>
                                             ) : null}
+                                            {googleCalendarStatus.pending_sync_items >
+                                            0 ? (
+                                                <div>
+                                                    Syncing{" "}
+                                                    {
+                                                        googleCalendarStatus.pending_sync_items
+                                                    }{" "}
+                                                    change
+                                                    {googleCalendarStatus.pending_sync_items ===
+                                                    1
+                                                        ? ""
+                                                        : "s"}
+                                                    ...
+                                                </div>
+                                            ) : (
+                                                <div>Up to date</div>
+                                            )}
+                                        </div>
+                                    ) : isGoogleCalendarRecoveryState ? (
+                                        <div className="backup-summary">
                                             <div>
-                                                <span>Pending sync items:</span>{" "}
-                                                {googleCalendarStatus.pending_sync_items}
+                                                <span>Status:</span> Needs attention
                                             </div>
+                                            <div>
+                                                Reconnect Google Calendar to resume
+                                                mirroring scheduled tasks.
+                                            </div>
+                                            {googleCalendarStatus?.pending_sync_items &&
+                                            googleCalendarStatus.pending_sync_items >
+                                                0 ? (
+                                                <div>
+                                                    Sync will retry automatically
+                                                    after the connection is restored.
+                                                </div>
+                                            ) : null}
                                         </div>
                                     ) : (
                                         <p className="muted">
@@ -5049,25 +5278,7 @@ export function App() {
                                             {googleCalendarError}
                                         </p>
                                     )}
-                                    <button
-                                        type="button"
-                                        className="settings-action-button settings-action-button-primary"
-                                        disabled={
-                                            isGoogleCalendarConnecting ||
-                                            isGoogleCalendarDisconnecting ||
-                                            isGoogleCalendarSyncing
-                                        }
-                                        onClick={() =>
-                                            void handleConnectGoogleCalendar()
-                                        }
-                                    >
-                                        {isGoogleCalendarConnecting
-                                            ? "Connecting..."
-                                            : googleCalendarStatus?.connected
-                                              ? "Reconnect Google account"
-                                              : "Connect Google account"}
-                                    </button>
-                                    {googleCalendarStatus?.connected ? (
+                                    {isGoogleCalendarConnected ? (
                                         <>
                                             <button
                                                 type="button"
@@ -5085,24 +5296,89 @@ export function App() {
                                                     ? "Starting..."
                                                     : "Sync now"}
                                             </button>
-                                            <button
-                                                type="button"
-                                                className="settings-action-button settings-action-button-danger"
-                                                disabled={
-                                                    isGoogleCalendarConnecting ||
-                                                    isGoogleCalendarDisconnecting ||
-                                                    isGoogleCalendarSyncing
-                                                }
-                                                onClick={() =>
-                                                    setIsGoogleDisconnectConfirmOpen(
-                                                        true,
-                                                    )
-                                                }
-                                            >
-                                                Disconnect
-                                            </button>
+                                            <div className="google-connection-management">
+                                                <p className="settings-list-section-title">
+                                                    Connection management
+                                                </p>
+                                                <p className="muted">
+                                                    Reconnect only when changing
+                                                    Google authorization or recovering
+                                                    access.
+                                                </p>
+                                                <button
+                                                    type="button"
+                                                    className="settings-navigation-row"
+                                                    aria-label="Reconnect Google Calendar"
+                                                    disabled={
+                                                        isGoogleCalendarConnecting ||
+                                                        isGoogleCalendarDisconnecting ||
+                                                        isGoogleCalendarSyncing
+                                                    }
+                                                    onClick={() =>
+                                                        void handleConnectGoogleCalendar()
+                                                    }
+                                                >
+                                                    <span className="settings-navigation-row-copy">
+                                                        <span className="settings-navigation-row-title">
+                                                            Reconnect Google Calendar
+                                                        </span>
+                                                    </span>
+                                                    <span
+                                                        className="settings-navigation-row-chevron"
+                                                        aria-hidden="true"
+                                                    >
+                                                        ›
+                                                    </span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="settings-navigation-row settings-navigation-row-danger"
+                                                    aria-label="Disconnect Google Calendar"
+                                                    disabled={
+                                                        isGoogleCalendarConnecting ||
+                                                        isGoogleCalendarDisconnecting ||
+                                                        isGoogleCalendarSyncing
+                                                    }
+                                                    onClick={() =>
+                                                        setIsGoogleDisconnectConfirmOpen(
+                                                            true,
+                                                        )
+                                                    }
+                                                >
+                                                    <span className="settings-navigation-row-copy">
+                                                        <span className="settings-navigation-row-title">
+                                                            Disconnect Google Calendar
+                                                        </span>
+                                                    </span>
+                                                    <span
+                                                        className="settings-navigation-row-chevron"
+                                                        aria-hidden="true"
+                                                    >
+                                                        ›
+                                                    </span>
+                                                </button>
+                                            </div>
                                         </>
-                                    ) : null}
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            className="settings-action-button settings-action-button-primary"
+                                            disabled={
+                                                isGoogleCalendarConnecting ||
+                                                isGoogleCalendarDisconnecting ||
+                                                isGoogleCalendarSyncing
+                                            }
+                                            onClick={() =>
+                                                void handleConnectGoogleCalendar()
+                                            }
+                                        >
+                                            {isGoogleCalendarConnecting
+                                                ? "Connecting..."
+                                                : isGoogleCalendarRecoveryState
+                                                  ? "Reconnect Google Calendar"
+                                                  : "Connect Google account"}
+                                        </button>
+                                    )}
                                     <button
                                         type="button"
                                         className="settings-action-button settings-action-button-neutral"

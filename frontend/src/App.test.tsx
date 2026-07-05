@@ -1195,18 +1195,51 @@ describe("App", () => {
         render(<App />);
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
-        fireEvent.click(screen.getByRole("button", { name: "Account" }));
+        fireEvent.click(screen.getByRole("button", { name: "Profile & Security" }));
         fireEvent.click(await screen.findByRole("button", { name: "Logout" }));
 
         expect(window.localStorage.getItem("calendar-auth-token")).toBeNull();
         expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
     });
 
-    it("toggles dark mode from the sidebar settings menu", async () => {
+    it("renders grouped settings rows without display preference switches", async () => {
         render(<App />);
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
-        const darkModeSwitch = screen.getByRole("switch", {
+
+        expect(screen.getAllByText("Calendar").length).toBeGreaterThan(0);
+        expect(screen.getByText("Integrations")).toBeInTheDocument();
+        expect(screen.getByText("Data")).toBeInTheDocument();
+        expect(screen.getAllByText("Account").length).toBeGreaterThan(0);
+        expect(
+            screen.getByRole("button", { name: "Preferences" }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole("button", { name: "Profile & Security" }),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Calendar display" }),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Account" }),
+        ).not.toBeInTheDocument();
+        expect(screen.getByText("Mirror scheduled tasks")).toBeInTheDocument();
+        expect(screen.getByText("Notification integration")).toBeInTheDocument();
+        expect(screen.getByText("Export or restore your data")).toBeInTheDocument();
+        expect(
+            screen.queryByRole("switch", { name: "Dark mode" }),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByRole("switch", { name: "Show completed tasks" }),
+        ).not.toBeInTheDocument();
+    });
+
+    it("toggles dark mode from preferences settings", async () => {
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
+        const darkModeSwitch = await screen.findByRole("switch", {
             name: "Dark mode",
         });
 
@@ -1224,11 +1257,12 @@ describe("App", () => {
         expect(window.localStorage.getItem("calendar-theme")).toBe("dark");
     });
 
-    it("shows completed tasks toggle in settings and defaults it on", async () => {
+    it("shows completed tasks toggle in preferences settings and defaults it on", async () => {
         render(<App />);
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
-        const showCompletedSwitch = screen.getByRole("switch", {
+        fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
+        const showCompletedSwitch = await screen.findByRole("switch", {
             name: "Show completed tasks",
         });
 
@@ -1249,7 +1283,8 @@ describe("App", () => {
         render(<App />);
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
-        const showCompletedSwitch = screen.getByRole("switch", {
+        fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
+        const showCompletedSwitch = await screen.findByRole("switch", {
             name: "Show completed tasks",
         });
 
@@ -1261,8 +1296,9 @@ describe("App", () => {
         render(<App />);
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
         fireEvent.click(
-            screen.getByRole("switch", { name: "Show completed tasks" }),
+            await screen.findByRole("switch", { name: "Show completed tasks" }),
         );
 
         await waitFor(() =>
@@ -1279,17 +1315,40 @@ describe("App", () => {
         );
     });
 
-    it("shows calendar display settings with default working hours", async () => {
+    it("shows compact preferences rows with default values", async () => {
         render(<App />);
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
         fireEvent.click(
-            screen.getByRole("button", { name: /Calendar display/i }),
+            screen.getByRole("button", { name: /Preferences/i }),
         );
 
         expect(await screen.findByText("Week starts on")).toBeInTheDocument();
-        expect(screen.getByLabelText("Start time")).toHaveValue("08:00");
-        expect(screen.getByLabelText("End time")).toHaveValue("22:00");
+        expect(
+            screen.getByRole("heading", { name: "Preferences" }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole("button", { name: /Week starts on.*Sunday/i }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole("button", { name: /Working hours.*08:00.*22:00/i }),
+        ).toBeInTheDocument();
+        expect(screen.queryByLabelText("Start time")).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Sunday" })).toBeNull();
+        expect(screen.getByRole("button", { name: "Done" })).toHaveClass(
+            "preferences-done-button",
+        );
+        expect(screen.getByText("Appearance")).toBeInTheDocument();
+        expect(screen.getByText("Task visibility")).toBeInTheDocument();
+        expect(
+            screen.getByRole("switch", { name: "Dark mode" }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole("switch", { name: "Show completed tasks" }),
+        ).toBeInTheDocument();
+        fireEvent.click(
+            screen.getByRole("button", { name: /Working hours.*08:00.*22:00/i }),
+        );
         expect(screen.getByLabelText("Start time")).toHaveAttribute(
             "type",
             "time",
@@ -1321,32 +1380,64 @@ describe("App", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
         fireEvent.click(
-            screen.getByRole("button", { name: /Calendar display/i }),
+            screen.getByRole("button", { name: /Preferences/i }),
         );
 
         await screen.findByText("Week starts on");
-        expect(screen.getByLabelText("Start time")).toHaveValue("09:00");
+        expect(
+            screen.getByRole("button", { name: /Working hours.*09:00.*18:00/i }),
+        ).toBeInTheDocument();
+        fireEvent.click(
+            screen.getByRole("button", { name: /Working hours.*09:00.*18:00/i }),
+        );
+        expect(await screen.findByLabelText("Start time")).toHaveValue("09:00");
         expect(screen.getByLabelText("End time")).toHaveValue("18:00");
     });
 
-    it("returns from calendar display to the settings menu and sidebar", async () => {
+    it("returns from preferences to settings with the Done button", async () => {
         render(<App />);
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
         fireEvent.click(
-            screen.getByRole("button", { name: /Calendar display/i }),
+            screen.getByRole("button", { name: /Preferences/i }),
         );
 
         await screen.findByText("Week starts on");
+        expect(
+            screen.getByRole("button", { name: "Done" }),
+        ).toHaveClass("preferences-done-button");
+
         fireEvent.click(screen.getByRole("button", { name: "Done" }));
         expect(
-            await screen.findByRole("button", { name: /Calendar display/i }),
+            await screen.findByRole("button", { name: "Preferences" }),
         ).toBeInTheDocument();
+    });
 
-        fireEvent.click(screen.getByRole("button", { name: "Return to sidebar" }));
+    it("keeps preference changes immediately persisted when Done returns to settings", async () => {
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(
+            screen.getByRole("button", { name: /Preferences/i }),
+        );
+
+        expect(await screen.findByText("Week starts on")).toBeInTheDocument();
+        fireEvent.click(
+            screen.getByRole("button", { name: /Week starts on.*Sunday/i }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Monday" }));
+
+        await waitFor(() =>
+            expect(mocks.updateSettings).toHaveBeenCalledWith({
+                week_start: "monday",
+            }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
         expect(
-            screen.getByRole("button", { name: "Settings" }),
+            await screen.findByRole("button", { name: "Preferences" }),
         ).toBeInTheDocument();
+        expect(mocks.updateSettings).toHaveBeenCalledTimes(1);
     });
 
     it("focuses the calendar on the configured working-hours start time", async () => {
@@ -1367,11 +1458,14 @@ describe("App", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
         fireEvent.click(
-            screen.getByRole("button", { name: /Calendar display/i }),
+            screen.getByRole("button", { name: /Preferences/i }),
         );
 
         await screen.findByText("Week starts on");
-        fireEvent.change(screen.getByLabelText("Start time"), {
+        fireEvent.click(
+            screen.getByRole("button", { name: /Working hours.*08:00.*22:00/i }),
+        );
+        fireEvent.change(await screen.findByLabelText("Start time"), {
             target: { value: "09:00" },
         });
 
@@ -1396,13 +1490,16 @@ describe("App", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
         expect(
-            await screen.findByRole("button", { name: /Calendar display/i }),
-        ).toHaveTextContent("Calendar display");
+            await screen.findByRole("button", { name: /Preferences/i }),
+        ).toHaveTextContent("Preferences");
         fireEvent.click(
-            screen.getByRole("button", { name: /Calendar display/i }),
+            screen.getByRole("button", { name: /Preferences/i }),
         );
 
         expect(await screen.findByText("Week starts on")).toBeInTheDocument();
+        fireEvent.click(
+            screen.getByRole("button", { name: /Week starts on.*Sunday/i }),
+        );
         fireEvent.click(screen.getByRole("button", { name: "Monday" }));
 
         await waitFor(() =>
@@ -2659,7 +2756,7 @@ describe("App", () => {
         const initialTaskListCalls = mocks.listTaskLists.mock.calls.length;
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
-        fireEvent.click(screen.getByRole("button", { name: "Account" }));
+        fireEvent.click(screen.getByRole("button", { name: "Profile & Security" }));
         fireEvent.click(await screen.findByRole("button", { name: "Logout" }));
         fireEvent.focus(window);
 
@@ -4107,7 +4204,9 @@ describe("App", () => {
         expect(
             screen.getByText("TaskCalendar Mirror — Read Only"),
         ).toBeInTheDocument();
-        fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+        fireEvent.click(
+            screen.getByRole("button", { name: "Disconnect Google Calendar" }),
+        );
 
         const dialog = await screen.findByRole("dialog", {
             name: "Disconnect Google Calendar?",
@@ -4124,7 +4223,7 @@ describe("App", () => {
         );
     });
 
-    it("runs Google Calendar Sync now from the connected settings panel", async () => {
+    it("uses a secondary reconnect action and friendly sync status when connected", async () => {
         mocks.googleCalendarStatus = {
             connected: true,
             status: "connected",
@@ -4141,8 +4240,29 @@ describe("App", () => {
         fireEvent.click(screen.getByRole("button", { name: "Google Calendar" }));
 
         expect(await screen.findByText("Last successful sync:")).toBeInTheDocument();
-        expect(screen.getByText("Pending sync items:")).toBeInTheDocument();
-        expect(screen.getByText("2")).toBeInTheDocument();
+        expect(screen.getByText("Syncing 2 changes...")).toBeInTheDocument();
+        expect(screen.queryByText("Pending sync items:")).not.toBeInTheDocument();
+        expect(
+            screen.getByText("Connection management"),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole("button", { name: "Sync now" }),
+        ).toHaveClass("settings-action-button-primary");
+        expect(
+            screen.getByRole("button", { name: "Reconnect Google Calendar" }),
+        ).not.toHaveClass("settings-action-button-primary");
+        expect(
+            screen.getByRole("button", { name: "Reconnect Google Calendar" }),
+        ).toHaveClass("settings-navigation-row");
+        expect(
+            screen.queryByRole("button", { name: "Reconnect Google account" }),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.getByRole("button", { name: "Disconnect Google Calendar" }),
+        ).toHaveClass("settings-navigation-row-danger");
+        expect(
+            screen.getByRole("button", { name: "Disconnect Google Calendar" }),
+        ).toHaveClass("settings-navigation-row");
         fireEvent.click(screen.getByRole("button", { name: "Sync now" }));
 
         await waitFor(() =>
@@ -4153,6 +4273,42 @@ describe("App", () => {
                 "Google Calendar sync started.",
             ),
         ).toBeInTheDocument();
+    });
+
+    it("keeps reconnect prominent when Google Calendar needs reauthorization", async () => {
+        mocks.googleCalendarStatus = {
+            connected: false,
+            status: "needs_reauth",
+            mirror_calendar_summary: "TaskCalendar Mirror — Read Only",
+            last_successful_sync_at: null,
+            last_error_when_safe_to_show: "Google authorization expired.",
+            pending_sync_items: 1,
+        };
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Settings" }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Google Calendar" }));
+
+        expect(await screen.findByText("Needs attention")).toBeInTheDocument();
+        expect(
+            screen.getByText(
+                "Reconnect Google Calendar to resume mirroring scheduled tasks.",
+            ),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByText(
+                "Sync will retry automatically after the connection is restored.",
+            ),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole("button", { name: "Reconnect Google Calendar" }),
+        ).toHaveClass("settings-action-button-primary");
+        expect(
+            screen.queryByRole("button", { name: "Sync now" }),
+        ).not.toBeInTheDocument();
+        expect(screen.queryByText("Connection management")).not.toBeInTheDocument();
     });
 
     it("shows a Google Calendar callback result message and cleans the URL", async () => {
@@ -4197,7 +4353,7 @@ describe("App", () => {
         fireEvent.click(
             await screen.findByRole("button", { name: "Settings" }),
         );
-        fireEvent.click(screen.getByRole("button", { name: "Account" }));
+        fireEvent.click(screen.getByRole("button", { name: "Profile & Security" }));
         fireEvent.click(
             await screen.findByRole("button", { name: "Change Password" }),
         );
@@ -4241,7 +4397,7 @@ describe("App", () => {
         fireEvent.click(
             await screen.findByRole("button", { name: "Settings" }),
         );
-        fireEvent.click(screen.getByRole("button", { name: "Account" }));
+        fireEvent.click(screen.getByRole("button", { name: "Profile & Security" }));
         fireEvent.click(
             await screen.findByRole("button", { name: "Delete Account" }),
         );
@@ -4316,7 +4472,23 @@ describe("App", () => {
         fireEvent.click(
             await screen.findByRole("button", { name: "Settings" }),
         );
-        fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
+        const adminSettingsButton = await screen.findByRole("button", {
+            name: "Admin",
+        });
+        expect(adminSettingsButton).toHaveClass("settings-navigation-row");
+        expect(adminSettingsButton).not.toHaveClass(
+            "settings-navigation-row-admin",
+            "settings-action-button-warning",
+        );
+        expect(
+            within(adminSettingsButton).getByText("Manage users"),
+        ).toBeInTheDocument();
+        expect(
+            within(adminSettingsButton).queryByText(
+                "Manage users and system settings",
+            ),
+        ).not.toBeInTheDocument();
+        fireEvent.click(adminSettingsButton);
 
         expect(
             await screen.findByRole("heading", { name: "Admin" }),
@@ -4428,7 +4600,7 @@ describe("App", () => {
             ).not.toBeInTheDocument(),
         );
         expect(
-            await screen.findByRole("button", { name: /Calendar display/i }),
+            await screen.findByRole("button", { name: /Preferences/i }),
         ).toBeInTheDocument();
     });
 
@@ -6626,8 +6798,9 @@ describe("App", () => {
         expect(await screen.findByText("Completed today task")).toBeInTheDocument();
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
         fireEvent.click(
-            screen.getByRole("switch", { name: "Show completed tasks" }),
+            await screen.findByRole("switch", { name: "Show completed tasks" }),
         );
         fireEvent.click(
             screen.getByRole("button", { name: "Return to sidebar" }),
@@ -6640,7 +6813,10 @@ describe("App", () => {
         );
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
-        fireEvent.click(screen.getByRole("switch", { name: "Show completed tasks" }));
+        fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
+        fireEvent.click(
+            await screen.findByRole("switch", { name: "Show completed tasks" }),
+        );
         fireEvent.click(
             screen.getByRole("button", { name: "Return to sidebar" }),
         );
@@ -6682,8 +6858,9 @@ describe("App", () => {
         );
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
         fireEvent.click(
-            screen.getByRole("switch", { name: "Show completed tasks" }),
+            await screen.findByRole("switch", { name: "Show completed tasks" }),
         );
         fireEvent.click(
             screen.getByRole("button", { name: "Return to sidebar" }),
@@ -6694,8 +6871,9 @@ describe("App", () => {
         );
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
         fireEvent.click(
-            screen.getByRole("switch", { name: "Show completed tasks" }),
+            await screen.findByRole("switch", { name: "Show completed tasks" }),
         );
         fireEvent.click(
             screen.getByRole("button", { name: "Return to sidebar" }),
@@ -6855,8 +7033,9 @@ describe("App", () => {
         ).not.toBeInTheDocument();
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
         fireEvent.click(
-            screen.getByRole("switch", { name: "Show completed tasks" }),
+            await screen.findByRole("switch", { name: "Show completed tasks" }),
         );
         fireEvent.click(
             screen.getByRole("button", { name: "Return to sidebar" }),
