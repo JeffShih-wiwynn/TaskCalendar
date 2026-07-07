@@ -4204,6 +4204,9 @@ export function App() {
     const isGoogleCalendarRecoveryState =
         googleCalendarStatus?.status === "needs_reauth" ||
         googleCalendarStatus?.status === "error";
+    const googleCalendarSyncStatusText = googleCalendarStatus
+        ? getGoogleCalendarSyncStatusText(googleCalendarStatus)
+        : "Up to date";
     const isSidebarTaskContentVisible =
         !detailPanelMode &&
         !isDetailPanelClosing &&
@@ -5225,23 +5228,7 @@ export function App() {
                                                     )}
                                                 </div>
                                             ) : null}
-                                            {googleCalendarStatus.pending_sync_items >
-                                            0 ? (
-                                                <div>
-                                                    Syncing{" "}
-                                                    {
-                                                        googleCalendarStatus.pending_sync_items
-                                                    }{" "}
-                                                    change
-                                                    {googleCalendarStatus.pending_sync_items ===
-                                                    1
-                                                        ? ""
-                                                        : "s"}
-                                                    ...
-                                                </div>
-                                            ) : (
-                                                <div>Up to date</div>
-                                            )}
+                                            <div>{googleCalendarSyncStatusText}</div>
                                         </div>
                                     ) : isGoogleCalendarRecoveryState ? (
                                         <div className="backup-summary">
@@ -10104,4 +10091,30 @@ function readBackupFileText(file: File): Promise<string> {
 function formatBackupDate(value: string): string {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? value.slice(0, 10) : date.toISOString().slice(0, 10);
+}
+
+function getGoogleCalendarSyncStatusText(
+    status: GoogleCalendarStatus,
+): string {
+    const processingCount = status.processing_sync_items;
+    const retryingCount = status.retrying_sync_items;
+
+    if (processingCount > 0 && retryingCount > 0) {
+        return `Syncing ${formatChangeCount(
+            processingCount,
+        )}; other changes will retry automatically`;
+    }
+    if (processingCount > 0) {
+        return `Syncing ${formatChangeCount(processingCount)}...`;
+    }
+    if (retryingCount > 0) {
+        return `Sync will retry automatically (${formatChangeCount(
+            retryingCount,
+        )})`;
+    }
+    return "Up to date";
+}
+
+function formatChangeCount(count: number): string {
+    return `${count} change${count === 1 ? "" : "s"}`;
 }

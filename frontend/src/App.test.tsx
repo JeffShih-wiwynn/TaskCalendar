@@ -165,6 +165,8 @@ const mocks = vi.hoisted(() => ({
         last_successful_sync_at: null as string | null,
         last_error_when_safe_to_show: null as string | null,
         pending_sync_items: 0,
+        processing_sync_items: 0,
+        retrying_sync_items: 0,
     },
     getGoogleCalendarStatus: vi.fn(),
     connectGoogleCalendar: vi.fn(async () => ({
@@ -1085,6 +1087,8 @@ describe("App", () => {
             last_successful_sync_at: null,
             last_error_when_safe_to_show: null,
             pending_sync_items: 0,
+            processing_sync_items: 0,
+            retrying_sync_items: 0,
         };
         mocks.getGoogleCalendarStatus.mockClear();
         mocks.getGoogleCalendarStatus.mockImplementation(() =>
@@ -4192,6 +4196,8 @@ describe("App", () => {
             last_successful_sync_at: null,
             last_error_when_safe_to_show: null,
             pending_sync_items: 0,
+            processing_sync_items: 0,
+            retrying_sync_items: 0,
         };
         render(<App />);
 
@@ -4231,6 +4237,8 @@ describe("App", () => {
             last_successful_sync_at: "2026-07-01T00:00:00.000Z",
             last_error_when_safe_to_show: null,
             pending_sync_items: 2,
+            processing_sync_items: 2,
+            retrying_sync_items: 0,
         };
         render(<App />);
 
@@ -4275,6 +4283,101 @@ describe("App", () => {
         ).toBeInTheDocument();
     });
 
+    it("shows retry wording for Google Calendar retry-wait work", async () => {
+        mocks.googleCalendarStatus = {
+            connected: true,
+            status: "connected",
+            mirror_calendar_summary: "TaskCalendar Mirror — Read Only",
+            last_successful_sync_at: "2026-07-01T00:00:00.000Z",
+            last_error_when_safe_to_show: null,
+            pending_sync_items: 2,
+            processing_sync_items: 0,
+            retrying_sync_items: 2,
+        };
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Settings" }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Google Calendar" }));
+
+        expect(
+            await screen.findByText(
+                "Sync will retry automatically (2 changes)",
+            ),
+        ).toBeInTheDocument();
+        expect(screen.queryByText("Syncing 2 changes...")).not.toBeInTheDocument();
+    });
+
+    it("shows mixed Google Calendar processing and retry wording", async () => {
+        mocks.googleCalendarStatus = {
+            connected: true,
+            status: "connected",
+            mirror_calendar_summary: "TaskCalendar Mirror — Read Only",
+            last_successful_sync_at: "2026-07-01T00:00:00.000Z",
+            last_error_when_safe_to_show: null,
+            pending_sync_items: 3,
+            processing_sync_items: 1,
+            retrying_sync_items: 2,
+        };
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Settings" }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Google Calendar" }));
+
+        expect(
+            await screen.findByText(
+                "Syncing 1 change; other changes will retry automatically",
+            ),
+        ).toBeInTheDocument();
+    });
+
+    it("shows Google Calendar up to date when there is no active work", async () => {
+        mocks.googleCalendarStatus = {
+            connected: true,
+            status: "connected",
+            mirror_calendar_summary: "TaskCalendar Mirror — Read Only",
+            last_successful_sync_at: "2026-07-01T00:00:00.000Z",
+            last_error_when_safe_to_show: null,
+            pending_sync_items: 0,
+            processing_sync_items: 0,
+            retrying_sync_items: 0,
+        };
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Settings" }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Google Calendar" }));
+
+        expect(await screen.findByText("Up to date")).toBeInTheDocument();
+    });
+
+    it("does not show historical dead Google Calendar work as active", async () => {
+        mocks.googleCalendarStatus = {
+            connected: true,
+            status: "connected",
+            mirror_calendar_summary: "TaskCalendar Mirror — Read Only",
+            last_successful_sync_at: "2026-07-01T00:00:00.000Z",
+            last_error_when_safe_to_show: null,
+            pending_sync_items: 0,
+            processing_sync_items: 0,
+            retrying_sync_items: 0,
+        };
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Settings" }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Google Calendar" }));
+
+        expect(await screen.findByText("Up to date")).toBeInTheDocument();
+        expect(screen.queryByText(/retry automatically/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Syncing .*changes/i)).not.toBeInTheDocument();
+    });
+
     it("keeps reconnect prominent when Google Calendar needs reauthorization", async () => {
         mocks.googleCalendarStatus = {
             connected: false,
@@ -4283,6 +4386,8 @@ describe("App", () => {
             last_successful_sync_at: null,
             last_error_when_safe_to_show: "Google authorization expired.",
             pending_sync_items: 1,
+            processing_sync_items: 0,
+            retrying_sync_items: 1,
         };
         render(<App />);
 

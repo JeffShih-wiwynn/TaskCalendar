@@ -26,6 +26,7 @@ from app.google_calendar.client import (
 )
 from app.google_calendar.crypto import decrypt_refresh_token, encrypt_refresh_token
 from app.google_calendar.outbox import (
+    count_active_jobs_by_status,
     count_pending_jobs,
     enqueue_task_delete,
     enqueue_task_upsert,
@@ -48,7 +49,7 @@ SOURCE_NOTICE = (
     "Changes made here may be overwritten by TaskCalendar."
 )
 logger = logging.getLogger(__name__)
-BATCH_SIZE = 50
+BATCH_SIZE = 10
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,22 @@ class GoogleMirrorCalendarMissingError(GoogleSyncError):
         )
 
 
+class GoogleReconcileBatchTimeoutError(TimeoutError):
+    def __init__(
+        self,
+        *,
+        phase: str,
+        batch_size: int,
+        progress_state: str,
+        timeout_source: str,
+    ) -> None:
+        super().__init__("Google Calendar reconcile batch timed out")
+        self.phase = phase
+        self.batch_size = batch_size
+        self.progress_state = progress_state
+        self.timeout_source = timeout_source
+
+
 def get_status(db: Session, *, user_id: uuid.UUID) -> dict:
     connection = get_connection(db, user_id=user_id)
     if connection is None:
@@ -101,9 +118,12 @@ def get_status(db: Session, *, user_id: uuid.UUID) -> dict:
             "last_successful_sync_at": None,
             "last_error_when_safe_to_show": None,
             "pending_sync_items": 0,
+            "processing_sync_items": 0,
+            "retrying_sync_items": 0,
         }
 
     connected = connection.status == "connected" and bool(connection.encrypted_refresh_token)
+    sync_counts = count_active_jobs_by_status(db, user_id=user_id)
     return {
         "connected": connected,
         "status": connection.status,
@@ -111,6 +131,8 @@ def get_status(db: Session, *, user_id: uuid.UUID) -> dict:
         "last_successful_sync_at": connection.last_successful_sync_at,
         "last_error_when_safe_to_show": SAFE_LAST_ERROR if connection.last_error else None,
         "pending_sync_items": count_pending_jobs(db, user_id=user_id),
+        "processing_sync_items": sync_counts["processing"],
+        "retrying_sync_items": sync_counts["pending"] + sync_counts["failed"],
     }
 
 
@@ -867,7 +889,15 @@ def process_reconcile_delete_batch(
             )
         )
 
-    responses = client.batch_event_requests(access_token=access_token, requests=requests)
+    try:
+        responses = client.batch_event_requests(access_token=access_token, requests=requests)
+    except TimeoutError as exc:
+        raise GoogleReconcileBatchTimeoutError(
+            phase="delete",
+            batch_size=len(requests),
+            progress_state=encode_reconcile_progress(state),
+            timeout_source="google_calendar_reconcile_delete_batch",
+        ) from exc
     response_by_id = {response.content_id: response for response in responses}
     for operation in operations:
         response = response_by_id.get(operation.content_id)
@@ -963,7 +993,15 @@ def process_reconcile_upsert_batch(
             )
         )
 
-    responses = client.batch_event_requests(access_token=access_token, requests=requests)
+    try:
+        responses = client.batch_event_requests(access_token=access_token, requests=requests)
+    except TimeoutError as exc:
+        raise GoogleReconcileBatchTimeoutError(
+            phase="upsert",
+            batch_size=len(requests),
+            progress_state=encode_reconcile_progress(state),
+            timeout_source="google_calendar_reconcile_upsert_batch",
+        ) from exc
     response_by_id = {response.content_id: response for response in responses}
     for operation in operations:
         response = response_by_id.get(operation.content_id)

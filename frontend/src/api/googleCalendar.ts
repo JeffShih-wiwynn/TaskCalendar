@@ -8,6 +8,8 @@ export type GoogleCalendarStatus = {
     last_successful_sync_at: string | null;
     last_error_when_safe_to_show: string | null;
     pending_sync_items: number;
+    processing_sync_items: number;
+    retrying_sync_items: number;
 };
 
 export type GoogleCalendarConnectResponse = {
