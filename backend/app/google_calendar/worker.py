@@ -106,12 +106,17 @@ def process_claimed_job(
         db.rollback()
         update_connection_for_failure(db, job, exc)
         failure = classify_job_failure(exc)
+        connection = service.get_connection(db, user_id=job.user_id)
         logger.warning(
             "Google sync job failed",
             extra={
                 "job_id": str(job.id),
                 "operation": job.operation,
                 "user_id": str(job.user_id),
+                "exception_class": type(exc).__name__,
+                "provider_status_code": getattr(exc, "status_code", None),
+                "provider_error_code": getattr(exc, "error_code", None),
+                "connection_status": connection.status if connection is not None else None,
                 "attempts": job.attempts + 1,
                 "retryable": failure.retryable,
             },
