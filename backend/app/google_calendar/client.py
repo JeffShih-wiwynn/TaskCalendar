@@ -60,10 +60,12 @@ class GoogleProviderError(Exception):
         *,
         status_code: int | None = None,
         error_code: str | None = None,
+        error_reason: str | None = None,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.error_code = error_code
+        self.error_reason = error_reason
 
 
 class GoogleCalendarClient:
@@ -468,6 +470,7 @@ def read_response(request_obj: request.Request) -> str:
             "Google Calendar request failed",
             status_code=exc.code,
             error_code=parse_google_error_code(response_body),
+            error_reason=parse_google_error_reason(response_body),
         ) from exc
     except error.URLError as exc:
         raise GoogleProviderError("Google Calendar request failed") from exc
@@ -494,4 +497,29 @@ def parse_google_error_code(response_body: str) -> str | None:
         code = error_value.get("status") or error_value.get("reason")
         if isinstance(code, str):
             return code
+    return None
+
+
+def parse_google_error_reason(response_body: str) -> str | None:
+    if not response_body:
+        return None
+    try:
+        payload = json.loads(response_body)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+
+    error_value = payload.get("error")
+    if not isinstance(error_value, dict):
+        return None
+    errors = error_value.get("errors")
+    if not isinstance(errors, list):
+        return None
+    for item in errors:
+        if not isinstance(item, dict):
+            continue
+        reason = item.get("reason")
+        if isinstance(reason, str) and reason:
+            return reason
     return None

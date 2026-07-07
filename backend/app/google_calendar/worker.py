@@ -6,6 +6,7 @@ import socket
 import time
 import uuid
 from dataclasses import dataclass
+import json
 from threading import Event
 
 from sqlalchemy.orm import Session
@@ -14,6 +15,7 @@ from app.core.database import SessionLocal
 from app.google_calendar import service
 from app.google_calendar.client import GoogleCalendarClient, GoogleProviderError
 from app.google_calendar.outbox import (
+    MAX_ATTEMPTS,
     claim_next_job,
     enqueue_periodic_reconciliations,
     mark_job_done,
@@ -108,7 +110,14 @@ def process_claimed_job(
         failure = classify_job_failure(exc)
         connection = service.get_connection(db, user_id=job.user_id)
         logger.warning(
-            "Google sync job failed",
+            build_failure_log_message(
+                job=job,
+                failure=failure,
+                exc=exc,
+                resulting_connection_status=(
+                    connection.status if connection is not None else None
+                ),
+            ),
             extra={
                 "job_id": str(job.id),
                 "operation": job.operation,
@@ -116,9 +125,18 @@ def process_claimed_job(
                 "exception_class": type(exc).__name__,
                 "provider_status_code": getattr(exc, "status_code", None),
                 "provider_error_code": getattr(exc, "error_code", None),
+                "provider_error_reason": getattr(exc, "error_reason", None),
                 "connection_status": connection.status if connection is not None else None,
                 "attempts": job.attempts + 1,
                 "retryable": failure.retryable,
+                "reconcile_phase": getattr(exc, "phase", None),
+                "reconcile_batch_size": getattr(exc, "batch_size", None),
+                "reconcile_progress_state": getattr(exc, "progress_state", None),
+                "timeout_source": getattr(exc, "timeout_source", None),
+                "job_status_after_classification": classify_job_status_after_failure(
+                    job,
+                    failure=failure,
+                ),
             },
         )
         mark_job_failed(
@@ -190,6 +208,64 @@ def classify_job_failure(exc: Exception) -> JobFailure:
             return JobFailure(retryable=True, message="Google Calendar sync failed")
         return JobFailure(retryable=False, message="Google Calendar sync failed")
     return JobFailure(retryable=True, message="Google Calendar sync failed")
+
+
+def build_failure_log_message(
+    *,
+    job: GoogleSyncOutbox,
+    failure: JobFailure,
+    exc: Exception,
+    resulting_connection_status: str | None,
+) -> str:
+    payload = {
+        "event": "google_sync_job_failed",
+        "job_id": str(job.id),
+        "operation": job.operation,
+        "attempts": job.attempts + 1,
+        "retryable": failure.retryable,
+        "exception_class": type(exc).__name__,
+        "provider_status_code": safe_log_value(getattr(exc, "status_code", None)),
+        "provider_error_code": safe_log_value(getattr(exc, "error_code", None)),
+        "provider_error_reason": safe_log_value(getattr(exc, "error_reason", None)),
+        "resulting_connection_status": resulting_connection_status,
+        "reconcile_phase": safe_log_value(getattr(exc, "phase", None)),
+        "reconcile_batch_size": safe_log_value(getattr(exc, "batch_size", None)),
+        "reconcile_progress_state": safe_log_value(getattr(exc, "progress_state", None)),
+        "timeout_source": safe_log_value(getattr(exc, "timeout_source", None)),
+        "job_status": classify_job_status_after_failure(job, failure=failure),
+    }
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+
+def classify_job_status_after_failure(
+    job: GoogleSyncOutbox,
+    *,
+    failure: JobFailure,
+) -> str:
+    if not failure.retryable or job.attempts + 1 >= MAX_ATTEMPTS:
+        return "dead"
+    return "failed"
+
+
+def safe_log_value(value: object) -> object:
+    if not isinstance(value, str):
+        return value
+    lowered = value.lower()
+    sensitive_markers = (
+        "access_token",
+        "access-token",
+        "refresh_token",
+        "refresh-token",
+        "authorization",
+        "bearer ",
+        "client_secret",
+        "client-secret",
+        "encryption_key",
+        "encryption-key",
+    )
+    if any(marker in lowered for marker in sensitive_markers):
+        return "[redacted]"
+    return value
 
 
 def update_connection_for_failure(

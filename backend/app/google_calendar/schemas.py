@@ -14,6 +14,8 @@ class GoogleCalendarStatusResponse(BaseModel):
     last_successful_sync_at: datetime | None
     last_error_when_safe_to_show: str | None
     pending_sync_items: int
+    processing_sync_items: int
+    retrying_sync_items: int
 
 
 class GoogleCalendarConnectResponse(BaseModel):

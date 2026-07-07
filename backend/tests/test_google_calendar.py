@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from contextlib import nullcontext
 from collections.abc import Generator
@@ -29,6 +30,7 @@ from app.google_calendar.client import (
 )
 from app.google_calendar.crypto import decrypt_refresh_token
 from app.google_calendar.outbox import (
+    MAX_ATTEMPTS,
     PROCESSING_LEASE_TIMEOUT,
     claim_next_job,
     enqueue_task_delete,
@@ -160,6 +162,8 @@ class FakeGoogleClient:
         self.get_calendar_error: Exception | None = None
         self.create_error: Exception | None = None
         self.event_error: Exception | None = None
+        self.batch_error: Exception | None = None
+        self.batch_error_after_side_effects = False
         self.events: dict[str, dict] = {}
         self.created_event_payloads: list[dict] = []
         self.updated_event_payloads: list[dict] = []
@@ -291,6 +295,8 @@ class FakeGoogleClient:
     ) -> list[GoogleBatchEventResponse]:
         assert access_token == "access-token"
         self.batch_requests.append(list(requests))
+        if self.batch_error is not None and not self.batch_error_after_side_effects:
+            raise self.batch_error
         responses: list[GoogleBatchEventResponse] = []
         for batch_request in requests:
             override = self.batch_status_overrides.get(batch_request.content_id)
@@ -367,6 +373,8 @@ class FakeGoogleClient:
 
             raise AssertionError(f"Unsupported batch method {method}")
 
+        if self.batch_error is not None:
+            raise self.batch_error
         return responses
 
 
@@ -808,22 +816,23 @@ def test_reconcile_user_batches_operations_in_chunks(db_session: Session) -> Non
         summary="TaskCalendar Mirror — Read Only",
     )
 
-    first_result = service.sync_reconcile_batch(
-        db_session,
-        user_id=user.id,
-        progress_state=None,
-        client=fake_client,
-    )
-    second_result = service.sync_reconcile_batch(
-        db_session,
-        user_id=user.id,
-        progress_state=first_result.progress_state,
-        client=fake_client,
-    )
+    progress_state = None
+    results = []
+    while True:
+        result = service.sync_reconcile_batch(
+            db_session,
+            user_id=user.id,
+            progress_state=progress_state,
+            client=fake_client,
+        )
+        results.append(result)
+        if result.complete:
+            break
+        progress_state = result.progress_state
 
-    assert first_result.complete is False
-    assert second_result.complete is True
-    assert [len(batch) for batch in fake_client.batch_requests] == [50, 5]
+    assert results[0].complete is False
+    assert results[-1].complete is True
+    assert [len(batch) for batch in fake_client.batch_requests] == [10, 10, 10, 10, 10, 5]
     assert db_session.query(GoogleEventMirror).filter_by(user_id=user.id).count() == 55
 
 
@@ -904,6 +913,146 @@ def test_failed_batch_subresponse_enqueues_follow_up_without_mapping(
     follow_up = db_session.query(GoogleSyncOutbox).one()
     assert follow_up.operation == "upsert_task"
     assert follow_up.task_id == task.id
+
+
+def test_reconcile_timeout_is_retryable_without_reauth(
+    db_session: Session,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    user = create_user(db_session)
+    connection = connect_google_calendar(db_session, user)
+    create_task(
+        db_session,
+        user,
+        scheduled_start=datetime.now(UTC) + timedelta(hours=1),
+        scheduled_end=datetime.now(UTC) + timedelta(hours=2),
+    )
+    enqueue_user_reconciliation(db_session, user_id=user.id)
+    db_session.commit()
+    fake_client = FakeGoogleClient()
+    fake_client.existing_calendar = GoogleCalendarResource(
+        id="mirror-calendar-id",
+        summary="TaskCalendar Mirror — Read Only",
+    )
+    fake_client.batch_error = TimeoutError("timed out")
+    job = claim_next_job(db_session, worker_id="worker")
+    assert job is not None
+
+    with caplog.at_level(logging.WARNING, logger=worker_module.logger.name):
+        process_claimed_job(db_session, job, client=fake_client)
+
+    db_session.refresh(job)
+    db_session.refresh(connection)
+    payload = json.loads(
+        next(
+            record.message
+            for record in caplog.records
+            if "google_sync_job_failed" in record.message
+        )
+    )
+
+    assert job.status == "failed"
+    assert job.attempts == 1
+    assert job.last_error == "Google Calendar sync failed"
+    assert connection.status == "connected"
+    assert payload["exception_class"] == "GoogleReconcileBatchTimeoutError"
+    assert payload["reconcile_phase"] == "upsert"
+    assert payload["reconcile_batch_size"] == 1
+    assert payload["reconcile_progress_state"] == '{"phase":"upsert"}'
+    assert payload["timeout_source"] == "google_calendar_reconcile_upsert_batch"
+    assert payload["retryable"] is True
+
+
+def test_reconcile_retry_after_timeout_side_effects_avoids_duplicate_mappings(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = create_user(db_session)
+    connect_google_calendar(db_session, user)
+    for index in range(12):
+        create_task(
+            db_session,
+            user,
+            title=f"Timeout resume {index}",
+            scheduled_start=datetime.now(UTC) + timedelta(hours=index + 1),
+            scheduled_end=datetime.now(UTC) + timedelta(hours=index + 2),
+        )
+    enqueue_user_reconciliation(db_session, user_id=user.id)
+    db_session.commit()
+    fake_client = FakeGoogleClient()
+    fake_client.existing_calendar = GoogleCalendarResource(
+        id="mirror-calendar-id",
+        summary="TaskCalendar Mirror — Read Only",
+    )
+    fake_client.batch_error = TimeoutError("timed out after remote writes")
+    fake_client.batch_error_after_side_effects = True
+    monkeypatch.setattr(worker_module, "SessionLocal", lambda: nullcontext(db_session))
+
+    first_job = claim_next_job(db_session, worker_id="worker")
+    assert first_job is not None
+    process_claimed_job(db_session, first_job, client=fake_client)
+    db_session.refresh(first_job)
+    assert first_job.status == "failed"
+    assert db_session.query(GoogleEventMirror).filter_by(user_id=user.id).count() == 0
+    assert len(fake_client.events) == 10
+
+    fake_client.batch_error = None
+    first_job.available_at = datetime.now(UTC)
+    db_session.add(first_job)
+    db_session.commit()
+    assert process_available_jobs(worker_id="worker", client=fake_client) > 0
+
+    assert db_session.query(GoogleEventMirror).filter_by(user_id=user.id).count() == 12
+    assert len(fake_client.events) == 12
+    assert len(fake_client.created_event_payloads) == 12
+
+
+def test_dead_retryable_reconcile_is_excluded_and_fresh_reconcile_can_enqueue(
+    db_session: Session,
+) -> None:
+    user = create_user(db_session)
+    connect_google_calendar(db_session, user)
+    create_task(
+        db_session,
+        user,
+        scheduled_start=datetime.now(UTC) + timedelta(hours=1),
+        scheduled_end=datetime.now(UTC) + timedelta(hours=2),
+    )
+    enqueue_user_reconciliation(db_session, user_id=user.id)
+    db_session.commit()
+    fake_client = FakeGoogleClient()
+    fake_client.existing_calendar = GoogleCalendarResource(
+        id="mirror-calendar-id",
+        summary="TaskCalendar Mirror — Read Only",
+    )
+    fake_client.batch_error = TimeoutError("timed out")
+    job = claim_next_job(db_session, worker_id="worker")
+    assert job is not None
+    job.attempts = MAX_ATTEMPTS - 1
+    db_session.add(job)
+    db_session.commit()
+
+    process_claimed_job(db_session, job, client=fake_client)
+    db_session.refresh(job)
+    status = get_google_calendar_status(db_session, current_user=user)
+
+    assert job.status == "dead"
+    assert status.pending_sync_items == 0
+    assert status.processing_sync_items == 0
+    assert status.retrying_sync_items == 0
+
+    enqueue_user_reconciliation(db_session, user_id=user.id)
+    db_session.commit()
+    fresh_job = (
+        db_session.query(GoogleSyncOutbox)
+        .filter(
+            GoogleSyncOutbox.user_id == user.id,
+            GoogleSyncOutbox.operation == "reconcile_user",
+            GoogleSyncOutbox.status == "pending",
+        )
+        .one()
+    )
+    assert fresh_job.id != job.id
 
 
 def test_batch_create_conflict_retries_without_duplicate_event(
@@ -1848,7 +1997,7 @@ def test_reconcile_yields_between_batches_for_high_priority_delete(
             scheduled_start=datetime.now(UTC) + timedelta(hours=index + 1),
             scheduled_end=datetime.now(UTC) + timedelta(hours=index + 2),
         )
-        for index in range(51)
+        for index in range(11)
     ]
     enqueue_user_reconciliation(db_session, user_id=user.id)
     db_session.commit()
@@ -1876,7 +2025,7 @@ def test_reconcile_yields_between_batches_for_high_priority_delete(
 def test_worker_restart_resumes_reconcile_progress(db_session: Session) -> None:
     user = create_user(db_session)
     connect_google_calendar(db_session, user)
-    for index in range(51):
+    for index in range(11):
         create_task(
             db_session,
             user,
@@ -1904,8 +2053,8 @@ def test_worker_restart_resumes_reconcile_progress(db_session: Session) -> None:
     db_session.refresh(resumed_job)
 
     assert resumed_job.status == "done"
-    assert [len(batch) for batch in fake_client.batch_requests] == [50, 1]
-    assert db_session.query(GoogleEventMirror).filter_by(user_id=user.id).count() == 51
+    assert [len(batch) for batch in fake_client.batch_requests] == [10, 1]
+    assert db_session.query(GoogleEventMirror).filter_by(user_id=user.id).count() == 11
 
 
 def test_worker_drains_multiple_pending_jobs_without_sleeping(
@@ -2567,9 +2716,10 @@ def test_worker_logs_safe_failure_classification(
         summary="TaskCalendar Mirror — Read Only",
     )
     fake_client.event_error = GoogleProviderError(
-        "raw provider failure",
+        "raw provider failure with access-token-secret",
         status_code=403,
         error_code="PERMISSION_DENIED",
+        error_reason="access-token-secret",
     )
     enqueue_task_upsert(db_session, user_id=user.id, task_id=task.id)
     db_session.commit()
@@ -2580,16 +2730,38 @@ def test_worker_logs_safe_failure_classification(
         process_claimed_job(db_session, job, client=fake_client)
 
     record = next(
-        record for record in caplog.records if record.message == "Google sync job failed"
+        record
+        for record in caplog.records
+        if "google_sync_job_failed" in record.message
     )
+    payload = json.loads(record.message)
+    assert payload == {
+        "attempts": 1,
+        "event": "google_sync_job_failed",
+        "exception_class": "GoogleProviderError",
+        "job_id": str(job.id),
+        "job_status": "failed",
+        "operation": "upsert_task",
+        "provider_error_code": "PERMISSION_DENIED",
+        "provider_error_reason": "[redacted]",
+        "provider_status_code": 403,
+        "reconcile_batch_size": None,
+        "reconcile_phase": None,
+        "reconcile_progress_state": None,
+        "resulting_connection_status": "error",
+        "retryable": True,
+        "timeout_source": None,
+    }
     assert record.operation == "upsert_task"
     assert record.job_id == str(job.id)
     assert record.exception_class == "GoogleProviderError"
     assert record.provider_status_code == 403
     assert record.provider_error_code == "PERMISSION_DENIED"
+    assert record.provider_error_reason == "access-token-secret"
     assert record.connection_status == "error"
     assert record.retryable is True
     assert "raw provider failure" not in record.message
+    assert "access-token-secret" not in record.message
 
 
 def test_worker_missing_mirror_calendar_marks_error(db_session: Session) -> None:
@@ -2630,4 +2802,56 @@ def test_pending_job_count_is_status_scoped_per_user(db_session: Session) -> Non
     bob_status = get_google_calendar_status(db_session, current_user=bob)
 
     assert alice_status.pending_sync_items == 1
+    assert alice_status.processing_sync_items == 0
+    assert alice_status.retrying_sync_items == 1
     assert bob_status.pending_sync_items == 0
+    assert bob_status.processing_sync_items == 0
+    assert bob_status.retrying_sync_items == 0
+
+
+def test_google_status_splits_active_processing_and_retry_counts(
+    db_session: Session,
+) -> None:
+    user = create_user(db_session)
+    connect_google_calendar(db_session, user)
+    pending_job = GoogleSyncOutbox(
+        user_id=user.id,
+        operation="reconcile_user",
+        status="pending",
+        priority=40,
+        available_at=datetime.now(UTC),
+    )
+    failed_job = GoogleSyncOutbox(
+        user_id=user.id,
+        operation="reconcile_user",
+        status="failed",
+        priority=40,
+        attempts=2,
+        available_at=datetime.now(UTC) + timedelta(minutes=2),
+    )
+    processing_job = GoogleSyncOutbox(
+        user_id=user.id,
+        operation="reconcile_user",
+        status="processing",
+        priority=40,
+        locked_at=datetime.now(UTC),
+        locked_by="worker",
+        available_at=datetime.now(UTC),
+    )
+    dead_job = GoogleSyncOutbox(
+        user_id=user.id,
+        operation="reconcile_user",
+        status="dead",
+        priority=40,
+        attempts=6,
+        available_at=datetime.now(UTC),
+        processed_at=datetime.now(UTC),
+    )
+    db_session.add_all([pending_job, failed_job, processing_job, dead_job])
+    db_session.commit()
+
+    status = get_google_calendar_status(db_session, current_user=user)
+
+    assert status.pending_sync_items == 3
+    assert status.processing_sync_items == 1
+    assert status.retrying_sync_items == 2

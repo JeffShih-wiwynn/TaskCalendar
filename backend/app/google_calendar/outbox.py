@@ -129,6 +129,20 @@ def count_pending_jobs(db: Session, *, user_id: uuid.UUID) -> int:
     )
 
 
+def count_active_jobs_by_status(db: Session, *, user_id: uuid.UUID) -> dict[str, int]:
+    rows = db.execute(
+        select(GoogleSyncOutbox.status, func.count())
+        .where(
+            GoogleSyncOutbox.user_id == user_id,
+            GoogleSyncOutbox.status.in_(["pending", "failed", "processing"]),
+        )
+        .group_by(GoogleSyncOutbox.status)
+    ).all()
+    counts = {"pending": 0, "failed": 0, "processing": 0}
+    counts.update({status: int(count) for status, count in rows})
+    return counts
+
+
 def claim_next_job(db: Session, *, worker_id: str) -> GoogleSyncOutbox | None:
     now = datetime.now(UTC)
     stale_processing_before = now - PROCESSING_LEASE_TIMEOUT
