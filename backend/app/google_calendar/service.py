@@ -41,6 +41,7 @@ from app.models.scheduled_task import ScheduledTask
 OAUTH_STATE_TTL_MINUTES = 10
 SAFE_LAST_ERROR = "Google Calendar connection needs attention."
 RECONNECT_REQUIRED_GOOGLE_ERROR_CODES = {"invalid_grant"}
+SYNCABLE_CONNECTION_STATUSES = {"connected", "error"}
 SOURCE_NOTICE = (
     "Source: TaskCalendar\n"
     "This event is mirrored automatically.\n"
@@ -261,12 +262,22 @@ def sync_now(
 ) -> dict:
     client = client or GoogleCalendarClient()
     connection = get_connection(db, user_id=user_id)
-    if (
-        connection is None
-        or connection.status != "connected"
-        or not connection.encrypted_refresh_token
-        or not connection.google_calendar_id
-    ):
+    if connection is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google Calendar is not connected",
+        )
+    if connection.status == "needs_reauth":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google Calendar reconnect is required",
+        )
+    if connection.status not in SYNCABLE_CONNECTION_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google Calendar is not connected",
+        )
+    if not connection.encrypted_refresh_token or not connection.google_calendar_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Google Calendar is not connected",
@@ -302,6 +313,7 @@ def sync_now(
         ) from exc
 
     now = datetime.now(UTC)
+    connection.status = "connected"
     connection.last_successful_sync_at = now
     connection.last_error = None
     connection.updated_at = now
@@ -364,12 +376,22 @@ def sync_reconcile_batch(
 
 def start_sync_now(db: Session, *, user_id: uuid.UUID) -> dict:
     connection = get_connection(db, user_id=user_id)
-    if (
-        connection is None
-        or connection.status != "connected"
-        or not connection.encrypted_refresh_token
-        or not connection.google_calendar_id
-    ):
+    if connection is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google Calendar is not connected",
+        )
+    if connection.status == "needs_reauth":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google Calendar reconnect is required",
+        )
+    if connection.status not in SYNCABLE_CONNECTION_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google Calendar is not connected",
+        )
+    if not connection.encrypted_refresh_token or not connection.google_calendar_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Google Calendar is not connected",
@@ -446,13 +468,14 @@ def get_ready_connection(
     client: GoogleCalendarClient,
 ) -> tuple[GoogleCalendarConnection, str]:
     connection = get_connection(db, user_id=user_id)
-    if (
-        connection is None
-        or connection.status != "connected"
-        or not connection.encrypted_refresh_token
-        or not connection.google_calendar_id
-    ):
+    if connection is None:
+        raise GoogleSyncError("Google Calendar is not connected")
+    if connection.status == "needs_reauth":
         raise GoogleReconnectRequiredError()
+    if connection.status not in SYNCABLE_CONNECTION_STATUSES:
+        raise GoogleSyncError("Google Calendar is not connected")
+    if not connection.encrypted_refresh_token or not connection.google_calendar_id:
+        raise GoogleSyncError("Google Calendar is not connected")
 
     access_token = refresh_google_access_token(client=client, connection=connection)
     if client.get_calendar(
@@ -1308,6 +1331,7 @@ def provider_error_requires_reconnect(exc: GoogleProviderError) -> bool:
 
 def update_connection_sync_success(db: Session, connection: GoogleCalendarConnection) -> None:
     now = datetime.now(UTC)
+    connection.status = "connected"
     connection.last_successful_sync_at = now
     connection.last_error = None
     connection.updated_at = now

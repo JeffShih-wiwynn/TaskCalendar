@@ -229,8 +229,9 @@ def mark_job_failed(
 def enqueue_periodic_reconciliations(db: Session) -> int:
     users = db.scalars(
         select(GoogleCalendarConnection.user_id).where(
-            GoogleCalendarConnection.status == "connected",
+            GoogleCalendarConnection.status.in_(["connected", "error"]),
             GoogleCalendarConnection.encrypted_refresh_token.is_not(None),
+            GoogleCalendarConnection.google_calendar_id.is_not(None),
         )
     ).all()
     period = datetime.now(UTC).strftime("%Y%m%d%H%M")
