@@ -358,6 +358,26 @@ class FakeGoogleClient:
                 )
                 continue
 
+            if method == "GET":
+                assert event_id is not None
+                if event_id not in self.events:
+                    responses.append(
+                        GoogleBatchEventResponse(
+                            content_id=batch_request.content_id,
+                            status_code=404,
+                            payload=None,
+                        )
+                    )
+                    continue
+                responses.append(
+                    GoogleBatchEventResponse(
+                        content_id=batch_request.content_id,
+                        status_code=200,
+                        payload={"id": event_id},
+                    )
+                )
+                continue
+
             if method == "DELETE":
                 assert event_id is not None
                 self.deleted_event_ids.append(event_id)
@@ -883,6 +903,124 @@ def test_batch_success_updates_mappings_and_serializes_event_shapes(
     assert timed_payload["start"]["timeZone"] == "UTC"
 
 
+def test_reconcile_unchanged_mirrored_tasks_do_not_send_put_requests(
+    db_session: Session,
+) -> None:
+    user = create_user(db_session)
+    connect_google_calendar(db_session, user)
+    create_task(
+        db_session,
+        user,
+        scheduled_start=datetime.now(UTC) + timedelta(hours=1),
+        scheduled_end=datetime.now(UTC) + timedelta(hours=2),
+    )
+    fake_client = FakeGoogleClient()
+    fake_client.existing_calendar = GoogleCalendarResource(
+        id="mirror-calendar-id",
+        summary="TaskCalendar Mirror — Read Only",
+    )
+
+    first_result = service.sync_reconcile_batch(
+        db_session,
+        user_id=user.id,
+        progress_state=None,
+        client=fake_client,
+    )
+    assert first_result.complete is True
+    fake_client.batch_requests.clear()
+
+    second_result = service.sync_reconcile_batch(
+        db_session,
+        user_id=user.id,
+        progress_state=None,
+        client=fake_client,
+    )
+
+    assert second_result.complete is True
+    assert second_result.skipped_unchanged_count == 1
+    methods = [
+        request.method
+        for batch in fake_client.batch_requests
+        for request in batch
+    ]
+    assert "PUT" not in methods
+
+
+def test_reconcile_changed_mirrored_tasks_still_send_put_requests(
+    db_session: Session,
+) -> None:
+    user = create_user(db_session)
+    connect_google_calendar(db_session, user)
+    task = create_task(
+        db_session,
+        user,
+        title="Original title",
+        scheduled_start=datetime.now(UTC) + timedelta(hours=1),
+        scheduled_end=datetime.now(UTC) + timedelta(hours=2),
+    )
+    fake_client = FakeGoogleClient()
+    fake_client.existing_calendar = GoogleCalendarResource(
+        id="mirror-calendar-id",
+        summary="TaskCalendar Mirror — Read Only",
+    )
+    service.sync_reconcile_batch(
+        db_session,
+        user_id=user.id,
+        progress_state=None,
+        client=fake_client,
+    )
+    fake_client.batch_requests.clear()
+
+    task.title = "Changed title"
+    task.updated_at = datetime.now(UTC) + timedelta(seconds=1)
+    db_session.add(task)
+    db_session.commit()
+
+    result = service.sync_reconcile_batch(
+        db_session,
+        user_id=user.id,
+        progress_state=None,
+        client=fake_client,
+    )
+
+    assert result.complete is True
+    assert [
+        request.method
+        for batch in fake_client.batch_requests
+        for request in batch
+    ] == ["PUT"]
+
+
+def test_reconcile_new_tasks_still_send_post_requests(db_session: Session) -> None:
+    user = create_user(db_session)
+    connect_google_calendar(db_session, user)
+    create_task(
+        db_session,
+        user,
+        scheduled_start=datetime.now(UTC) + timedelta(hours=1),
+        scheduled_end=datetime.now(UTC) + timedelta(hours=2),
+    )
+    fake_client = FakeGoogleClient()
+    fake_client.existing_calendar = GoogleCalendarResource(
+        id="mirror-calendar-id",
+        summary="TaskCalendar Mirror — Read Only",
+    )
+
+    result = service.sync_reconcile_batch(
+        db_session,
+        user_id=user.id,
+        progress_state=None,
+        client=fake_client,
+    )
+
+    assert result.complete is True
+    assert [
+        request.method
+        for batch in fake_client.batch_requests
+        for request in batch
+    ] == ["POST"]
+
+
 def test_failed_batch_subresponse_enqueues_follow_up_without_mapping(
     db_session: Session,
 ) -> None:
@@ -1001,6 +1139,22 @@ def test_reconcile_retry_after_timeout_side_effects_avoids_duplicate_mappings(
     db_session.add(first_job)
     db_session.commit()
     assert process_available_jobs(worker_id="worker", client=fake_client) > 0
+    for _ in range(3):
+        if db_session.query(GoogleEventMirror).filter_by(user_id=user.id).count() == 12:
+            break
+        active_jobs = (
+            db_session.query(GoogleSyncOutbox)
+            .filter(
+                GoogleSyncOutbox.user_id == user.id,
+                GoogleSyncOutbox.status.in_(["pending", "failed"]),
+            )
+            .all()
+        )
+        for active_job in active_jobs:
+            active_job.available_at = datetime.now(UTC) - timedelta(seconds=1)
+            db_session.add(active_job)
+        db_session.commit()
+        assert process_available_jobs(worker_id="worker", client=fake_client) > 0
 
     assert db_session.query(GoogleEventMirror).filter_by(user_id=user.id).count() == 12
     assert len(fake_client.events) == 12
@@ -2022,6 +2176,38 @@ def test_reconcile_yields_between_batches_for_high_priority_delete(
     assert claimed.operation == "delete_task"
 
 
+def test_incomplete_reconcile_requeues_with_future_available_at(
+    db_session: Session,
+) -> None:
+    user = create_user(db_session)
+    connect_google_calendar(db_session, user)
+    for index in range(11):
+        create_task(
+            db_session,
+            user,
+            title=f"Delayed {index}",
+            scheduled_start=datetime.now(UTC) + timedelta(hours=index + 1),
+            scheduled_end=datetime.now(UTC) + timedelta(hours=index + 2),
+        )
+    enqueue_user_reconciliation(db_session, user_id=user.id)
+    db_session.commit()
+    fake_client = FakeGoogleClient()
+    fake_client.existing_calendar = GoogleCalendarResource(
+        id="mirror-calendar-id",
+        summary="TaskCalendar Mirror — Read Only",
+    )
+    job = claim_next_job(db_session, worker_id="worker")
+    assert job is not None
+    before_process = datetime.now(UTC)
+
+    process_claimed_job(db_session, job, client=fake_client)
+    db_session.refresh(job)
+
+    assert job.status == "pending"
+    assert service.ensure_utc(job.available_at) > before_process
+    assert claim_next_job(db_session, worker_id="same-worker") is None
+
+
 def test_worker_restart_resumes_reconcile_progress(db_session: Session) -> None:
     user = create_user(db_session)
     connect_google_calendar(db_session, user)
@@ -2046,6 +2232,11 @@ def test_worker_restart_resumes_reconcile_progress(db_session: Session) -> None:
     process_claimed_job(db_session, first_worker_job, client=fake_client)
     db_session.refresh(first_worker_job)
     assert first_worker_job.status == "pending"
+    assert service.ensure_utc(first_worker_job.available_at) > datetime.now(UTC)
+
+    first_worker_job.available_at = datetime.now(UTC) - timedelta(seconds=1)
+    db_session.add(first_worker_job)
+    db_session.commit()
 
     resumed_job = claim_next_job(db_session, worker_id="worker-after-restart")
     assert resumed_job is not None
@@ -2055,6 +2246,42 @@ def test_worker_restart_resumes_reconcile_progress(db_session: Session) -> None:
     assert resumed_job.status == "done"
     assert [len(batch) for batch in fake_client.batch_requests] == [10, 1]
     assert db_session.query(GoogleEventMirror).filter_by(user_id=user.id).count() == 11
+
+
+def test_reconcile_continuation_still_progresses_through_all_batches(
+    db_session: Session,
+) -> None:
+    user = create_user(db_session)
+    connect_google_calendar(db_session, user)
+    for index in range(25):
+        create_task(
+            db_session,
+            user,
+            title=f"Continue {index}",
+            scheduled_start=datetime.now(UTC) + timedelta(hours=index + 1),
+            scheduled_end=datetime.now(UTC) + timedelta(hours=index + 2),
+        )
+    enqueue_user_reconciliation(db_session, user_id=user.id)
+    db_session.commit()
+    fake_client = FakeGoogleClient()
+    fake_client.existing_calendar = GoogleCalendarResource(
+        id="mirror-calendar-id",
+        summary="TaskCalendar Mirror — Read Only",
+    )
+
+    while True:
+        job = claim_next_job(db_session, worker_id="worker")
+        assert job is not None
+        process_claimed_job(db_session, job, client=fake_client)
+        db_session.refresh(job)
+        if job.status == "done":
+            break
+        job.available_at = datetime.now(UTC) - timedelta(seconds=1)
+        db_session.add(job)
+        db_session.commit()
+
+    assert [len(batch) for batch in fake_client.batch_requests] == [10, 10, 5]
+    assert db_session.query(GoogleEventMirror).filter_by(user_id=user.id).count() == 25
 
 
 def test_worker_drains_multiple_pending_jobs_without_sleeping(
@@ -2735,10 +2962,13 @@ def test_worker_logs_safe_failure_classification(
         if "google_sync_job_failed" in record.message
     )
     payload = json.loads(record.message)
+    elapsed_ms = payload.pop("elapsed_ms")
+    assert isinstance(elapsed_ms, int)
     assert payload == {
         "attempts": 1,
         "event": "google_sync_job_failed",
         "exception_class": "GoogleProviderError",
+        "failure_reason": "Google Calendar sync failed",
         "job_id": str(job.id),
         "job_status": "failed",
         "operation": "upsert_task",

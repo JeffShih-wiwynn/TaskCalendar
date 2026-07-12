@@ -56,6 +56,11 @@ BATCH_SIZE = 10
 class ReconcileBatchResult:
     complete: bool
     progress_state: str | None = None
+    phase: str | None = None
+    scanned_count: int = 0
+    skipped_unchanged_count: int = 0
+    google_request_count: int = 0
+    processed_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -865,6 +870,11 @@ def process_reconcile_delete_batch(
         return ReconcileBatchResult(
             complete=False,
             progress_state=encode_reconcile_progress({"phase": "upsert"}),
+            phase="delete",
+            scanned_count=0,
+            skipped_unchanged_count=0,
+            google_request_count=0,
+            processed_count=0,
         )
 
     operations: list[BatchOperation] = []
@@ -920,6 +930,11 @@ def process_reconcile_delete_batch(
             if remaining
             else {"phase": "upsert"}
         ),
+        phase="delete",
+        scanned_count=len(operations),
+        skipped_unchanged_count=0,
+        google_request_count=len(requests),
+        processed_count=len(operations),
     )
 
 
@@ -946,7 +961,15 @@ def process_reconcile_upsert_batch(
         eligible_tasks = [task for task in eligible_tasks if str(task.id) > last_task_id]
 
     if not eligible_tasks:
-        return ReconcileBatchResult(complete=True, progress_state=None)
+        return ReconcileBatchResult(
+            complete=True,
+            progress_state=None,
+            phase="upsert",
+            scanned_count=0,
+            skipped_unchanged_count=0,
+            google_request_count=0,
+            processed_count=0,
+        )
 
     mirrors_by_task_id = {
         mirror.task_id: mirror
@@ -955,6 +978,7 @@ def process_reconcile_upsert_batch(
     }
     operations: list[BatchOperation] = []
     requests: list[GoogleBatchEventRequest] = []
+    skipped_unchanged_count = 0
     for task in eligible_tasks[:batch_size]:
         payload = build_event_payload(task)
         payload_hash = hash_event_payload(payload)
@@ -966,6 +990,12 @@ def process_reconcile_upsert_batch(
             operation_name = "create"
             method = "POST"
             path = build_events_path(calendar_id=calendar_id)
+        elif mirror.last_payload_hash == payload_hash:
+            operation_name = "verify"
+            method = "GET"
+            event_id = mirror.google_event_id
+            path = build_event_path(calendar_id=calendar_id, event_id=event_id)
+            skipped_unchanged_count += 1
         else:
             operation_name = "update"
             method = "PUT"
@@ -993,37 +1023,44 @@ def process_reconcile_upsert_batch(
             )
         )
 
-    try:
-        responses = client.batch_event_requests(access_token=access_token, requests=requests)
-    except TimeoutError as exc:
-        raise GoogleReconcileBatchTimeoutError(
-            phase="upsert",
-            batch_size=len(requests),
-            progress_state=encode_reconcile_progress(state),
-            timeout_source="google_calendar_reconcile_upsert_batch",
-        ) from exc
-    response_by_id = {response.content_id: response for response in responses}
-    for operation in operations:
-        response = response_by_id.get(operation.content_id)
-        if response is None:
-            raise GoogleProviderError("Google Calendar returned an invalid batch response")
-        handle_batch_upsert_response(
-            db,
-            user_id=user_id,
-            calendar_id=calendar_id,
-            operation=operation,
-            response=response,
-        )
+    if requests:
+        try:
+            responses = client.batch_event_requests(access_token=access_token, requests=requests)
+        except TimeoutError as exc:
+            raise GoogleReconcileBatchTimeoutError(
+                phase="upsert",
+                batch_size=len(requests),
+                progress_state=encode_reconcile_progress(state),
+                timeout_source="google_calendar_reconcile_upsert_batch",
+            ) from exc
+        response_by_id = {response.content_id: response for response in responses}
+        for operation in operations:
+            response = response_by_id.get(operation.content_id)
+            if response is None:
+                raise GoogleProviderError("Google Calendar returned an invalid batch response")
+            handle_batch_upsert_response(
+                db,
+                user_id=user_id,
+                calendar_id=calendar_id,
+                operation=operation,
+                response=response,
+            )
 
     db.commit()
-    remaining = len(eligible_tasks) > len(operations)
+    scanned_count = min(len(eligible_tasks), batch_size)
+    remaining = len(eligible_tasks) > scanned_count
     return ReconcileBatchResult(
         complete=not remaining,
         progress_state=encode_reconcile_progress(
-            {"phase": "upsert", "last_task_id": str(operations[-1].task.id)}
+            {"phase": "upsert", "last_task_id": str(eligible_tasks[scanned_count - 1].id)}
         )
-        if remaining and operations[-1].task is not None
+        if remaining and scanned_count > 0
         else None,
+        phase="upsert",
+        scanned_count=scanned_count,
+        skipped_unchanged_count=skipped_unchanged_count,
+        google_request_count=len(requests),
+        processed_count=len(operations),
     )
 
 
@@ -1060,6 +1097,8 @@ def handle_batch_upsert_response(
     if task is None:
         return
     if response.status_code in {status.HTTP_200_OK, status.HTTP_201_CREATED}:
+        if operation.operation == "verify":
+            return
         payload = response.payload or {}
         event = GoogleEventResource(id=payload.get("id") or operation.event_id or "")
         if not event.id:
