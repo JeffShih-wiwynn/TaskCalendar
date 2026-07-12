@@ -26,27 +26,25 @@ Production:
 https://<server-host>/api/google-calendar/oauth/callback
 ```
 
-If the app runs on a remote server behind a private network or without a public OAuth callback, you can complete OAuth through an SSH tunnel that forwards the local callback port to the production web entrypoint:
-
-```sh
-ssh -N -L 8000:127.0.0.1:<web-port> <server-host>
-```
-
-Replace `<web-port>` with the production web service port or reverse-proxy port that serves TaskCalendar. Leave the browser open on the production TaskCalendar web app, then start the connect flow from the app. Google OAuth redirects the browser to:
+For the public TaskCalendar deployment, use this exact redirect URI:
 
 ```text
-http://127.0.0.1:8000/api/google-calendar/oauth/callback
+https://taskcalendar.masatoserver.com/api/google-calendar/oauth/callback
 ```
 
-The local SSH tunnel forwards that localhost callback to the production server's web entrypoint, and the production web/reverse-proxy layer routes `/api` to the backend. That lets a headless or private-network deployment complete OAuth without exposing a public HTTPS callback.
+The public callback path must be reachable by Google without an interactive Cloudflare Access login. If the deployment is protected by Cloudflare Access, add a bypass policy for:
+
+```text
+/api/google-calendar/oauth/callback
+```
 
 Google Cloud Console must be configured with the exact redirect URI:
 
 ```text
-http://127.0.0.1:8000/api/google-calendar/oauth/callback
+https://taskcalendar.masatoserver.com/api/google-calendar/oauth/callback
 ```
 
-This tunnel flow is only needed when initially connecting or reconnecting Google Calendar for that production database. Normal version updates do not require reconnecting as long as the PostgreSQL data volume and `GOOGLE_TOKEN_ENCRYPTION_KEY` are preserved.
+The old localhost redirect can remain registered for local development, but it should not be used as the production `GOOGLE_OAUTH_REDIRECT_URI`. Normal version updates do not require reconnecting as long as the PostgreSQL data volume and `GOOGLE_TOKEN_ENCRYPTION_KEY` are preserved.
 
 The backend requests only this Google Calendar scope:
 
@@ -61,7 +59,7 @@ Set these in `backend/.env`:
 ```env
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
-GOOGLE_OAUTH_REDIRECT_URI=http://127.0.0.1:8000/api/google-calendar/oauth/callback
+GOOGLE_OAUTH_REDIRECT_URI=https://taskcalendar.masatoserver.com/api/google-calendar/oauth/callback
 GOOGLE_TOKEN_ENCRYPTION_KEY=
 ```
 
