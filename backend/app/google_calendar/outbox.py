@@ -203,13 +203,14 @@ def mark_job_pending(
     job: GoogleSyncOutbox,
     *,
     progress_state: str | None,
+    available_at: datetime | None = None,
 ) -> None:
     now = datetime.now(UTC)
     job.status = "pending"
     job.locked_at = None
     job.locked_by = None
     job.progress_state = progress_state
-    job.available_at = now
+    job.available_at = available_at or now
     job.updated_at = now
     db.add(job)
     db.commit()

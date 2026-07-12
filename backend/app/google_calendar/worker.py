@@ -7,10 +7,12 @@ import time
 import uuid
 from dataclasses import dataclass
 import json
+from datetime import UTC, datetime, timedelta
 from threading import Event
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.google_calendar import service
 from app.google_calendar.client import GoogleCalendarClient, GoogleProviderError
@@ -34,6 +36,16 @@ PERIODIC_RECONCILE_INTERVAL_SECONDS = 15 * 60
 class JobFailure:
     retryable: bool
     message: str
+
+
+@dataclass(frozen=True)
+class JobRunResult:
+    complete: bool
+    reconcile_phase: str | None = None
+    scanned_count: int = 0
+    skipped_unchanged_count: int = 0
+    google_request_count: int = 0
+    processed_count: int = 0
 
 
 def run_worker(
@@ -101,10 +113,39 @@ def process_claimed_job(
     job: GoogleSyncOutbox,
     *,
     client: GoogleCalendarClient,
+    continuation_delay_seconds: float | None = None,
 ) -> None:
+    start_time = time.monotonic()
+    continuation_delay_seconds = (
+        settings.google_reconcile_continuation_delay_seconds
+        if continuation_delay_seconds is None
+        else continuation_delay_seconds
+    )
+    logger.info(
+        build_log_message(
+            {
+                "event": "google_sync_job_claimed",
+                "job_id": str(job.id),
+                "operation": job.operation,
+                "user_id": str(job.user_id),
+                "attempts": job.attempts,
+                "retry_count": job.attempts,
+                "progress_state": safe_log_value(job.progress_state),
+            }
+        ),
+        extra={
+            "job_id": str(job.id),
+            "operation": job.operation,
+            "user_id": str(job.user_id),
+            "attempts": job.attempts,
+            "retry_count": job.attempts,
+            "progress_state": safe_log_value(job.progress_state),
+        },
+    )
     try:
-        complete = run_job_operation(db, job, client=client)
+        result = run_job_operation(db, job, client=client)
     except Exception as exc:
+        elapsed_ms = int((time.monotonic() - start_time) * 1000)
         db.rollback()
         update_connection_for_failure(db, job, exc)
         failure = classify_job_failure(exc)
@@ -114,6 +155,7 @@ def process_claimed_job(
                 job=job,
                 failure=failure,
                 exc=exc,
+                elapsed_ms=elapsed_ms,
                 resulting_connection_status=(
                     connection.status if connection is not None else None
                 ),
@@ -133,6 +175,8 @@ def process_claimed_job(
                 "reconcile_batch_size": getattr(exc, "batch_size", None),
                 "reconcile_progress_state": getattr(exc, "progress_state", None),
                 "timeout_source": getattr(exc, "timeout_source", None),
+                "elapsed_ms": elapsed_ms,
+                "failure_reason": failure.message,
                 "job_status_after_classification": classify_job_status_after_failure(
                     job,
                     failure=failure,
@@ -147,10 +191,43 @@ def process_claimed_job(
         )
         return
 
-    if complete:
+    elapsed_ms = int((time.monotonic() - start_time) * 1000)
+    if result.complete:
         mark_job_done(db, job)
+        success_extra = build_job_success_log_extra(
+            job=job,
+            result=result,
+            elapsed_ms=elapsed_ms,
+            continuation_delay_seconds=None,
+        )
+        logger.info(
+            build_log_message({"event": "google_sync_job_completed"} | success_extra),
+            extra=success_extra,
+        )
     else:
-        mark_job_pending(db, job, progress_state=job.progress_state)
+        continuation_available_at = datetime.now(UTC) + timedelta(
+            seconds=max(0.0, continuation_delay_seconds)
+        )
+        mark_job_pending(
+            db,
+            job,
+            progress_state=job.progress_state,
+            available_at=continuation_available_at,
+        )
+        continuation_extra = build_job_success_log_extra(
+            job=job,
+            result=result,
+            elapsed_ms=elapsed_ms,
+            continuation_delay_seconds=continuation_delay_seconds,
+        ) | {
+            "available_at": continuation_available_at.isoformat(),
+        }
+        logger.info(
+            build_log_message(
+                {"event": "google_sync_job_continuation_scheduled"} | continuation_extra
+            ),
+            extra=continuation_extra,
+        )
 
 
 def run_job_operation(
@@ -158,26 +235,34 @@ def run_job_operation(
     job: GoogleSyncOutbox,
     *,
     client: GoogleCalendarClient,
-) -> bool:
+) -> JobRunResult:
     if job.operation in {"upsert_task", "reconcile_task"}:
         if job.task_id is None:
-            return
-        service.sync_task_now(
+            return JobRunResult(complete=True)
+        result = service.sync_task_now(
             db,
             user_id=job.user_id,
             task_id=job.task_id,
             client=client,
         )
-        return True
+        return JobRunResult(
+            complete=True,
+            google_request_count=1,
+            processed_count=sum_sync_result_counts(result),
+        )
 
     if job.operation == "delete_task":
-        service.delete_task_mirror_now(
+        result = service.delete_task_mirror_now(
             db,
             user_id=job.user_id,
             task_id=job.task_id,
             client=client,
         )
-        return True
+        return JobRunResult(
+            complete=True,
+            google_request_count=result.get("deleted_count", 0),
+            processed_count=sum_sync_result_counts(result),
+        )
 
     if job.operation in {"reconcile_user", "reconcile_series"}:
         result = service.sync_reconcile_batch(
@@ -187,9 +272,53 @@ def run_job_operation(
             client=client,
         )
         job.progress_state = result.progress_state
-        return result.complete
+        return JobRunResult(
+            complete=result.complete,
+            reconcile_phase=result.phase,
+            scanned_count=result.scanned_count,
+            skipped_unchanged_count=result.skipped_unchanged_count,
+            google_request_count=result.google_request_count,
+            processed_count=result.processed_count,
+        )
 
     raise RuntimeError("Unsupported Google sync operation")
+
+
+def sum_sync_result_counts(result: dict) -> int:
+    return int(
+        result.get("created_count", 0)
+        + result.get("updated_count", 0)
+        + result.get("deleted_count", 0)
+        + result.get("skipped_count", 0)
+    )
+
+
+def build_job_success_log_extra(
+    *,
+    job: GoogleSyncOutbox,
+    result: JobRunResult,
+    elapsed_ms: int,
+    continuation_delay_seconds: float | None,
+) -> dict:
+    return {
+        "job_id": str(job.id),
+        "operation": job.operation,
+        "user_id": str(job.user_id),
+        "attempts": job.attempts,
+        "retry_count": job.attempts,
+        "reconcile_phase": result.reconcile_phase,
+        "scanned_count": result.scanned_count,
+        "skipped_unchanged_count": result.skipped_unchanged_count,
+        "google_request_count": result.google_request_count,
+        "processed_count": result.processed_count,
+        "elapsed_ms": elapsed_ms,
+        "complete": result.complete,
+        "continuation_delay_seconds": continuation_delay_seconds,
+    }
+
+
+def build_log_message(payload: dict) -> str:
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
 
 def classify_job_failure(exc: Exception) -> JobFailure:
@@ -215,6 +344,7 @@ def build_failure_log_message(
     job: GoogleSyncOutbox,
     failure: JobFailure,
     exc: Exception,
+    elapsed_ms: int,
     resulting_connection_status: str | None,
 ) -> str:
     payload = {
@@ -223,6 +353,8 @@ def build_failure_log_message(
         "operation": job.operation,
         "attempts": job.attempts + 1,
         "retryable": failure.retryable,
+        "elapsed_ms": elapsed_ms,
+        "failure_reason": failure.message,
         "exception_class": type(exc).__name__,
         "provider_status_code": safe_log_value(getattr(exc, "status_code", None)),
         "provider_error_code": safe_log_value(getattr(exc, "error_code", None)),
