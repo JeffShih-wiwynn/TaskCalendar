@@ -7,6 +7,7 @@ export type AppSettings = {
     discord_message_template: string | null;
     working_hours_start: string;
     week_start: "sunday" | "monday";
+    daily_todo_notification_enabled: boolean;
     created_at: string;
     updated_at: string;
 };
@@ -16,6 +17,7 @@ export type UpdateAppSettingsInput = {
     discord_message_template?: string | null;
     working_hours_start?: string;
     week_start?: "sunday" | "monday";
+    daily_todo_notification_enabled?: boolean;
 };
 
 export type TestAppSettingsInput = {

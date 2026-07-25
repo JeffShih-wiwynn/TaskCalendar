@@ -48,6 +48,14 @@ def update_app_settings(
     if "week_start" in updates and updates["week_start"] is not None:
         app_settings.week_start = updates["week_start"]
 
+    if (
+        "daily_todo_notification_enabled" in updates
+        and updates["daily_todo_notification_enabled"] is not None
+    ):
+        app_settings.daily_todo_notification_enabled = updates[
+            "daily_todo_notification_enabled"
+        ]
+
     app_settings.updated_at = datetime.now(UTC)
     db.add(app_settings)
     db.commit()
