@@ -233,6 +233,7 @@ const mocks = vi.hoisted(() => ({
         discord_message_template: null,
         working_hours_start: "08:00",
         week_start: "sunday",
+        daily_todo_notification_enabled: false,
         created_at: "",
         updated_at: "",
     },
@@ -1062,6 +1063,7 @@ describe("App", () => {
             discord_message_template: null,
             working_hours_start: "08:00",
             week_start: "sunday",
+            daily_todo_notification_enabled: false,
             created_at: "",
             updated_at: "",
         };
@@ -1344,11 +1346,15 @@ describe("App", () => {
         );
         expect(screen.getByText("Appearance")).toBeInTheDocument();
         expect(screen.getByText("Task visibility")).toBeInTheDocument();
+        expect(screen.getByText("Notifications")).toBeInTheDocument();
         expect(
             screen.getByRole("switch", { name: "Dark mode" }),
         ).toBeInTheDocument();
         expect(
             screen.getByRole("switch", { name: "Show completed tasks" }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole("switch", { name: "Daily todo notification" }),
         ).toBeInTheDocument();
         fireEvent.click(
             screen.getByRole("button", { name: /Working hours.*08:00.*22:00/i }),
@@ -1372,6 +1378,99 @@ describe("App", () => {
         expect(
             screen.queryByRole("heading", { name: "Task filters" }),
         ).toBeNull();
+    });
+
+    it("places notifications preferences immediately below task visibility", async () => {
+        const { container } = render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(
+            screen.getByRole("button", { name: /Preferences/i }),
+        );
+
+        await screen.findByText("Notifications");
+        const sectionTitles = Array.from(
+            container.querySelectorAll(".settings-list-section-title"),
+        ).map((element) => element.textContent?.trim());
+
+        expect(sectionTitles).toEqual(
+            expect.arrayContaining(["Task visibility", "Notifications"]),
+        );
+        expect(
+            sectionTitles.indexOf("Notifications"),
+        ).toBe(sectionTitles.indexOf("Task visibility") + 1);
+    });
+
+    it("renders daily todo notification toggle off when the setting is false", async () => {
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
+        const dailyTodoSwitch = await screen.findByRole("switch", {
+            name: "Daily todo notification",
+        });
+
+        expect(dailyTodoSwitch).toHaveAttribute("aria-checked", "false");
+        expect(dailyTodoSwitch).not.toHaveClass("sidebar-switch-on");
+    });
+
+    it("renders daily todo notification toggle on when the setting is true", async () => {
+        mocks.settings = {
+            ...mocks.settings,
+            daily_todo_notification_enabled: true,
+        };
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
+        const dailyTodoSwitch = await screen.findByRole("switch", {
+            name: "Daily todo notification",
+        });
+
+        expect(dailyTodoSwitch).toHaveAttribute("aria-checked", "true");
+        expect(dailyTodoSwitch).toHaveClass("sidebar-switch-on");
+    });
+
+    it("persists enabling daily todo notification from preferences", async () => {
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
+        fireEvent.click(
+            await screen.findByRole("switch", {
+                name: "Daily todo notification",
+            }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.updateSettings).toHaveBeenCalledWith({
+                daily_todo_notification_enabled: true,
+            }),
+        );
+    });
+
+    it("persists disabling daily todo notification from preferences", async () => {
+        mocks.settings = {
+            ...mocks.settings,
+            daily_todo_notification_enabled: true,
+        };
+
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
+        fireEvent.click(
+            await screen.findByRole("switch", {
+                name: "Daily todo notification",
+            }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.updateSettings).toHaveBeenCalledWith({
+                daily_todo_notification_enabled: false,
+            }),
+        );
     });
 
     it("loads persisted working hours from localStorage", async () => {

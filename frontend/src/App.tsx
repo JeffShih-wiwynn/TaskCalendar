@@ -477,6 +477,10 @@ export function App() {
     const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
     const [workingHours, setWorkingHours] = useState(getInitialWorkingHours);
     const [weekStart, setWeekStart] = useState<WeekStart>("sunday");
+    const [
+        isDailyTodoNotificationEnabled,
+        setIsDailyTodoNotificationEnabled,
+    ] = useState(false);
     const [expandedPreferenceSection, setExpandedPreferenceSection] = useState<
         "week-start" | "working-hours" | null
     >(null);
@@ -817,6 +821,17 @@ export function App() {
         },
         [authToken],
     );
+    const updateDailyTodoNotificationEnabled = useCallback(
+        (value: boolean) => {
+            setIsDailyTodoNotificationEnabled(value);
+            if (authToken) {
+                void updateSettings({
+                    daily_todo_notification_enabled: value,
+                }).catch(() => undefined);
+            }
+        },
+        [authToken],
+    );
     const toggleCreateAccordionSection = useCallback(
         (section: TaskFormAccordionSectionId) => {
             setCreateAccordionSection((current) =>
@@ -867,6 +882,7 @@ export function App() {
             discord_webhook_url: "",
             discord_message_template: "",
         });
+        setIsDailyTodoNotificationEnabled(false);
         setWebhookTestMessage(null);
         setGoogleCalendarStatus(null);
         setGoogleCalendarError(null);
@@ -1290,6 +1306,9 @@ export function App() {
                 }));
             }
             setWeekStart(normalizeWeekStart(loadedSettings.week_start));
+            setIsDailyTodoNotificationEnabled(
+                loadedSettings.daily_todo_notification_enabled,
+            );
         } catch (error) {
             if (isAuthError(error)) {
                 handleAuthExpired();
@@ -5051,6 +5070,30 @@ export function App() {
                                                 onClick={() =>
                                                     setShowCompletedTasks(
                                                         (current) => !current,
+                                                    )
+                                                }
+                                            >
+                                                <span className="sidebar-switch-knob" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="settings-list-section">
+                                        <p className="settings-list-section-title">
+                                            Notifications
+                                        </p>
+                                        <div className="sidebar-settings-row preferences-toggle-row">
+                                            <span>Daily todo notification</span>
+                                            <button
+                                                type="button"
+                                                className={`sidebar-switch ${isDailyTodoNotificationEnabled ? "sidebar-switch-on" : ""}`}
+                                                role="switch"
+                                                aria-label="Daily todo notification"
+                                                aria-checked={
+                                                    isDailyTodoNotificationEnabled
+                                                }
+                                                onClick={() =>
+                                                    updateDailyTodoNotificationEnabled(
+                                                        !isDailyTodoNotificationEnabled,
                                                     )
                                                 }
                                             >

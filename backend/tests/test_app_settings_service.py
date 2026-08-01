@@ -11,6 +11,8 @@ from starlette.requests import Request
 
 import app.models  # noqa: F401
 from app.app_settings import service
+from app.app_settings.router import get_app_settings as route_get_app_settings
+from app.app_settings.router import update_app_settings as route_update_app_settings
 from app.app_settings.schemas import AppSettingsTestRequest, AppSettingsUpdate
 from app.auth.dependencies import get_current_user, oauth2_scheme
 from app.core.database import Base
@@ -52,6 +54,7 @@ def test_get_app_settings_creates_user_scoped_settings(db_session: Session) -> N
     assert settings.discord_message_template is None
     assert settings.working_hours_start == "08:00"
     assert settings.week_start == "sunday"
+    assert settings.daily_todo_notification_enabled is False
 
 
 def test_update_app_settings_trims_blank_values(db_session: Session) -> None:
@@ -64,6 +67,7 @@ def test_update_app_settings_trims_blank_values(db_session: Session) -> None:
             discord_message_template=" Task due: {title} ",
             working_hours_start="09:00",
             week_start="monday",
+            daily_todo_notification_enabled=True,
         ),
         user.id,
     )
@@ -72,18 +76,44 @@ def test_update_app_settings_trims_blank_values(db_session: Session) -> None:
     assert updated.discord_message_template == "Task due: {title}"
     assert updated.working_hours_start == "09:00"
     assert updated.week_start == "monday"
+    assert updated.daily_todo_notification_enabled is True
 
     reset = service.update_app_settings(
         db_session,
         AppSettingsUpdate(
             discord_webhook_url="",
             discord_message_template="   ",
+            daily_todo_notification_enabled=False,
         ),
         user.id,
     )
 
     assert reset.discord_webhook_url is None
     assert reset.discord_message_template is None
+    assert reset.daily_todo_notification_enabled is False
+
+
+def test_app_settings_routes_return_and_update_daily_todo_notification(
+    db_session: Session,
+) -> None:
+    user = create_user(db_session, "alice")
+
+    read_settings = route_get_app_settings(db_session, user)
+    assert read_settings.daily_todo_notification_enabled is False
+
+    enabled_settings = route_update_app_settings(
+        AppSettingsUpdate(daily_todo_notification_enabled=True),
+        db_session,
+        user,
+    )
+    assert enabled_settings.daily_todo_notification_enabled is True
+
+    disabled_settings = route_update_app_settings(
+        AppSettingsUpdate(daily_todo_notification_enabled=False),
+        db_session,
+        user,
+    )
+    assert disabled_settings.daily_todo_notification_enabled is False
 
 
 def test_send_test_notification_uses_draft_values(db_session: Session) -> None:

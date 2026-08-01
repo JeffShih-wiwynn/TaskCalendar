@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import socket
 import threading
+import uuid
 from datetime import datetime, time, timedelta
 from typing import Callable
 from urllib import error, request
@@ -16,18 +19,24 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.timezone import ensure_aware_datetime, get_app_timezone, now_in_app_timezone
 from app.models.scheduled_task import ScheduledTask
+from app.tasks.daily_notifications import (
+    ScannerResult,
+    enqueue_due_daily_todo_notifications,
+)
 
 logger = logging.getLogger(__name__)
 
 POLL_INTERVAL_SECONDS = 30
+DAILY_NOTIFICATION_MAX_JOBS_PER_LOOP = 5
 DISCORD_WEBHOOK_USER_AGENT = "CalendarWebhook/0.1"
 
 
 def start_notification_worker() -> tuple[threading.Event, threading.Thread]:
     stop_event = threading.Event()
+    worker_id = build_notification_worker_id()
     worker = threading.Thread(
         target=run_notification_worker,
-        args=(stop_event,),
+        args=(stop_event, worker_id),
         name="notification-worker",
         daemon=True,
     )
@@ -35,19 +44,100 @@ def start_notification_worker() -> tuple[threading.Event, threading.Thread]:
     return stop_event, worker
 
 
-def run_notification_worker(stop_event: threading.Event) -> None:
+def run_notification_worker(stop_event: threading.Event, worker_id: str | None = None) -> None:
+    worker_id = worker_id or build_notification_worker_id()
     while not stop_event.is_set():
-        try:
-            with SessionLocal() as db:
-                send_due_notifications(
-                    db,
-                    now=now_in_app_timezone(),
-                    webhook_url=None,
-                    app_base_url=settings.app_base_url,
-                )
-        except Exception:
-            logger.exception("Notification worker loop failed")
+        run_notification_worker_once(worker_id=worker_id)
         stop_event.wait(POLL_INTERVAL_SECONDS)
+
+
+def run_notification_worker_once(*, worker_id: str) -> None:
+    try:
+        with SessionLocal() as db:
+            send_due_notifications(
+                db,
+                now=now_in_app_timezone(),
+                webhook_url=None,
+                app_base_url=settings.app_base_url,
+            )
+    except Exception:
+        logger.exception("Per-task notification worker step failed")
+
+    try:
+        scanner_result = enqueue_due_daily_todo_notifications(SessionLocal)
+        log_daily_scanner_result(scanner_result)
+    except Exception:
+        logger.exception("Daily todo notification scanner step failed")
+
+    try:
+        from app.tasks.daily_todo_delivery import process_available_daily_todo_notifications
+
+        processing_result = process_available_daily_todo_notifications(
+            SessionLocal,
+            worker_id=worker_id,
+            max_jobs=DAILY_NOTIFICATION_MAX_JOBS_PER_LOOP,
+            app_url=get_notification_app_url(),
+        )
+        log_daily_processing_result(processing_result)
+    except Exception:
+        logger.exception("Daily todo notification processing step failed")
+
+
+def build_notification_worker_id() -> str:
+    hostname = socket.gethostname()[:40]
+    random_suffix = uuid.uuid4().hex[:12]
+    return f"notification-worker:{hostname}:{os.getpid()}:{random_suffix}"[:100]
+
+
+def get_notification_app_url() -> str | None:
+    app_url = settings.app_base_url.strip() if settings.app_base_url else ""
+    return app_url or None
+
+
+def log_daily_scanner_result(result: ScannerResult) -> None:
+    if not (
+        result.records_created
+        or result.invalid_timezone
+        or result.invalid_working_hours
+    ):
+        return
+
+    logger.info(
+        "Daily todo notification scanner result",
+        extra={
+            "users_examined": result.users_examined,
+            "records_created": result.records_created,
+            "duplicates_ignored": result.duplicates_ignored,
+            "before_schedule": result.before_schedule,
+            "outside_grace_window": result.outside_grace_window,
+            "invalid_timezone": result.invalid_timezone,
+            "invalid_working_hours": result.invalid_working_hours,
+        },
+    )
+
+
+def log_daily_processing_result(result) -> None:
+    if not (
+        result.claimed
+        or result.finalization_conflicts
+        or result.unexpected_errors
+    ):
+        return
+
+    logger.info(
+        "Daily todo notification processing result",
+        extra={
+            "claimed": result.claimed,
+            "sent": result.sent,
+            "skipped": result.skipped,
+            "cancelled": result.cancelled,
+            "failed": result.failed,
+            "dead": result.dead,
+            "claim_misses": result.claim_misses,
+            "finalization_conflicts": result.finalization_conflicts,
+            "unexpected_errors": result.unexpected_errors,
+        },
+    )
 
 
 def send_due_notifications(
@@ -200,7 +290,20 @@ def apply_message_template(template: str, values: dict[str, str]) -> str:
     return message.strip()
 
 
-def send_discord_notification(webhook_url: str, message: str) -> None:
+class DiscordWebhookError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        retryable: bool,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.retryable = retryable
+
+
+def send_discord_webhook_message(webhook_url: str, message: str) -> None:
     payload = json.dumps({"content": message}).encode("utf-8")
     request_obj = request.Request(
         webhook_url,
@@ -216,12 +319,32 @@ def send_discord_notification(webhook_url: str, message: str) -> None:
     try:
         with request.urlopen(request_obj, timeout=10) as response:
             if response.status >= 400:
-                raise RuntimeError(format_discord_webhook_error(response.status))
+                raise DiscordWebhookError(
+                    format_discord_webhook_error(response.status),
+                    status_code=response.status,
+                    retryable=is_retryable_discord_status(response.status),
+                )
     except error.HTTPError as exc:
         detail = read_discord_error_detail(exc)
-        raise RuntimeError(format_discord_webhook_error(exc.code, detail)) from exc
+        raise DiscordWebhookError(
+            format_discord_webhook_error(exc.code, detail),
+            status_code=exc.code,
+            retryable=is_retryable_discord_status(exc.code),
+        ) from exc
     except error.URLError as exc:
-        raise RuntimeError("Discord webhook request failed") from exc
+        raise DiscordWebhookError(
+            "Discord webhook request failed",
+            status_code=None,
+            retryable=True,
+        ) from exc
+
+
+def send_discord_notification(webhook_url: str, message: str) -> None:
+    send_discord_webhook_message(webhook_url, message)
+
+
+def is_retryable_discord_status(status_code: int) -> bool:
+    return status_code == 429 or status_code >= 500
 
 
 def format_discord_webhook_error(

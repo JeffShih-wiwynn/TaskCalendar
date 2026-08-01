@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -29,6 +29,10 @@ class AppSettings(Base):
     )
     working_hours_start: Mapped[str] = mapped_column(String(5), default="08:00")
     week_start: Mapped[str] = mapped_column(String(6), default="sunday")
+    daily_todo_notification_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
