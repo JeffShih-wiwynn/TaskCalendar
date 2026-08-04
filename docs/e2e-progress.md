@@ -18,6 +18,9 @@ Current progress for the Playwright end-to-end suite in `frontend/e2e/`.
 
 ## Pending High-Value Flows
 
+- Daily todo notification preference and digest behavior.
+- Week-start preference behavior across calendar views.
+- Undo snackbar behavior after update/delete and unavailable recurring-series actions.
 - Production Docker E2E.
 
 ## Guardrails

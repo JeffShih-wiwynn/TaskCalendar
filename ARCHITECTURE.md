@@ -18,7 +18,7 @@ This document describes the current shape of the codebase and the constraints fu
 - Migrations: Alembic.
 - Auth: username/password login with JWT access tokens.
 - Admin: first-user-admin bootstrap with Settings -> Admin user management.
-- Notifications: Discord webhook delivery from the backend notification worker thread.
+- Notifications: Discord webhook delivery from the backend notification worker thread, including per-task reminders and optional daily todo digests.
 - Google Calendar mirror: one-way mirror to a dedicated Google secondary calendar through a durable PostgreSQL outbox and worker process.
 - PWA: installable production build with standalone mode and a service worker that precaches built static assets only.
 
@@ -37,11 +37,12 @@ This document describes the current shape of the codebase and the constraints fu
 
 Tasks are the primary entity in the system. A task can exist without a calendar placement, or it can be scheduled into a concrete time range.
 
-- `ScheduledTask` stores completion state, optional calendar timing, recurrence fields, notification fields, and timestamps.
+- `ScheduledTask` stores completion state, optional calendar timing, optional `due_at`, all-day state, timezone, recurrence fields, notification fields, unscheduled ordering, priority, and timestamps.
 - There is no separate event entity.
 - Calendar blocks are representations of scheduled tasks, not independent objects.
 - Unscheduled tasks remain valid and appear in the `Inbox` / `No time tasks` views.
-- Manual ordering for unscheduled tasks is stored on the task rows themselves through `unscheduled_order`.
+- Due-only tasks can have `due_at` without a calendar block.
+- Manual ordering applies to tasks with no schedule and no due date, and is stored on the task rows themselves through `unscheduled_order`.
 
 ## Recurrence Model
 
@@ -57,6 +58,7 @@ Recurrence is stored in an RRULE-compatible string on the task.
 - Backend routes exist for registration, login, current-user lookup, password changes, and account deletion.
 - Passwords are stored as hashes, not plaintext.
 - JWT access tokens are issued by the backend and stored by the frontend for authenticated API requests.
+- User rows include an optional IANA timezone. Notification code prefers the user timezone and falls back to `APP_TIMEZONE`.
 - The frontend has login, register, logout, password-change, and account-deletion flows.
 - Public task, category, settings, backup, Google mirror, and admin routes are scoped to the authenticated user or current admin.
 - The first registered user becomes an admin when the users table is empty.
@@ -83,11 +85,12 @@ Future cleanup targets:
 - Environment-specific values such as the database URL, frontend origins, JWT secret, and Google OAuth credentials are configurable through environment variables.
 - In Docker deployment, only the web container is exposed on the host; backend, worker, and PostgreSQL stay internal.
 - The backend process also starts the in-process notification worker thread when it runs normally.
+- The Google Calendar mirror worker is a separate process; the backend notification worker handles Discord reminders and daily todo digest scanning/delivery.
 
 ## Backup And Restore
 
 - JSON export/import is scoped to the authenticated user's calendar data.
-- Exports include task lists/categories, tasks, recurrence fields, notification fields, unscheduled ordering, completed state, and notes.
+- Exports include task lists/categories, tasks, all-day state, due dates, timezone, recurrence fields, notification fields, unscheduled ordering, completed state, and notes.
 - Exports do not include user accounts, password hashes, JWT secrets, or Google OAuth secrets.
 - Restore replaces the current user's calendar data.
 - JSON backup/restore is separate from future ICS/VTODO interoperability export.
@@ -111,6 +114,7 @@ These are roadmap items, not current implementation goals.
 - Apply schema changes with `alembic upgrade head`.
 - Use `alembic stamp head` to adopt an existing database that already matches the baseline schema.
 - Configure backend behavior through environment variables in `backend/.env`.
+- The local `scripts/dev.sh` launcher injects local backend environment overrides directly while writing only `frontend/.env.local`.
 - Keep backend-first feature changes aligned with the existing API and service-layer structure.
 - Preserve current UX behavior unless a change is explicitly requested.
 

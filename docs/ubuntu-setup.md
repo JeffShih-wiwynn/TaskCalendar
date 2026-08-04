@@ -41,7 +41,7 @@ cp .env.example .env
 
 ## Run PostgreSQL For Local Development
 
-The supported local development flow is `./dev.sh` or `./scripts/dev.sh start`. It starts the dev PostgreSQL service, writes local env files, runs migrations, and starts the backend and frontend.
+The supported local development flow is `./dev.sh` or `./scripts/dev.sh start`. It starts the dev PostgreSQL service, writes the frontend local env file, runs migrations, injects local backend environment overrides, and starts the backend and frontend.
 
 The dev stack uses Compose project `calendar-dev`, container `calendar-dev-postgres`, database `calendar`, user `calendar`, and host port `127.0.0.1:5432`.
 
@@ -67,6 +67,7 @@ Health:   http://127.0.0.1:8000/health
 If port `5173` or `8000` is busy, stop the old process or run `./scripts/dev.sh stop` before restarting.
 
 `./scripts/dev.sh reset-db` stops local app processes, drops and recreates only the `calendar` database inside `calendar-dev-postgres`, and reruns local backend migrations. `./scripts/dev.sh destroy-db` requires typing `DESTROY` and removes the local dev PostgreSQL volume.
+`./scripts/dev.sh restart` stops and starts the local stack with the same startup flow.
 
 ## Build
 

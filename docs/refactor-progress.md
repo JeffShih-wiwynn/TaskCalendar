@@ -19,13 +19,13 @@ Persistent status for continuing [refactor-backlog.md](./refactor-backlog.md) sa
 - Clean up broad CSS selectors.
   - Notes: replaced broad `.task-form button` styling with explicit task-form button class selectors.
 - Extract `AdminSettingsPanel`.
-  - Commit: this commit.
+  - Commit: completed in the current refactor series.
   - Notes: moved the inline admin settings panel render branch into a focused component.
 - Consolidate settings subview state.
-  - Commit: this commit.
+  - Commit: completed in the current refactor series.
   - Notes: replaced separate settings panel booleans with one mutually exclusive `settingsView` state.
 - Finish shared frontend API request helper extraction.
-  - Commit: this commit.
+  - Commit: completed in the current refactor series.
   - Notes: added `requestJson` and routed API clients through the shared request helper while preserving per-client error behavior.
 
 ## Current
@@ -35,6 +35,7 @@ Persistent status for continuing [refactor-backlog.md](./refactor-backlog.md) sa
 ## Next Recommended
 
 - Extract task form sections after manual stable testing.
+- Separate daily todo notification UI/service concerns only if new behavior requires it.
 
 ## Pending
 

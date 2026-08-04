@@ -5,7 +5,7 @@ This repository documents a minimal Docker Compose production stack.
 ## Services
 
 - `postgres`: PostgreSQL 16 with a persistent volume.
-- `backend`: FastAPI API. The container entrypoint waits for PostgreSQL, runs `alembic upgrade head`, and then starts Uvicorn.
+- `backend`: FastAPI API. The container entrypoint waits for PostgreSQL, runs `alembic upgrade head`, and then starts Uvicorn. The backend process also runs the in-process Discord notification worker.
 - `worker`: Google Calendar sync worker. It uses the backend image, runs the same entrypoint migration step, and then starts `python -m app.google_calendar.worker`.
 - `web`: Caddy serving the built frontend and reverse proxying API routes to the backend.
 
@@ -98,7 +98,7 @@ If the database schema has already been migrated, the entrypoint still verifies 
 
 ## Backup And Restore
 
-JSON backup/restore is available from Settings for authenticated users. Exports include the current user's task lists/categories, tasks, recurrence fields, notification fields, unscheduled ordering, completed state, and notes. Exports do not include user accounts, password hashes, JWT secrets, Google OAuth secrets, or other auth secrets. Restore is replace-only for the current user's calendar data.
+JSON backup/restore is available from Settings for authenticated users. Exports include the current user's task lists/categories, tasks, all-day state, due dates, timezone, recurrence fields, notification fields, unscheduled ordering, completed state, and notes. Exports do not include user accounts, password hashes, JWT secrets, Google OAuth secrets, or other auth secrets. Restore is replace-only for the current user's calendar data.
 
 JSON backup/restore is not a full-instance backup. Back up PostgreSQL separately if you need to preserve users, admin state, app settings, and all account data.
 
@@ -134,3 +134,5 @@ docker compose -p calendar logs -f web
 docker compose -p calendar exec backend curl -fsS http://127.0.0.1:8000/health
 docker compose -p calendar exec web curl -fsS http://127.0.0.1/health
 ```
+
+Use `backend` logs for API requests, per-task Discord reminders, and daily todo digest processing. Use `worker` logs for Google Calendar mirror jobs only.

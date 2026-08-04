@@ -14,6 +14,8 @@ This roadmap starts from the current repository state and tracks the next phases
 - [x] Recurrence and notifications MVP.
 - [x] Google Calendar mirror with durable outbox and worker.
 - [x] Undo support.
+- [x] User-scoped settings for working-hours start, week start, Discord settings, and daily todo notification enablement.
+- [x] Daily todo Discord digest scanner and durable delivery state machine.
 
 ---
 
@@ -27,6 +29,7 @@ Goal: support interoperability with external calendar and task systems only.
 - [ ] Map notes to `DESCRIPTION`.
 - [ ] Map `scheduled_start` to `DTSTART`.
 - [ ] Map `scheduled_end` or `due_at` to `DUE`.
+- [ ] Preserve all-day task dates without introducing timezone drift.
 - [ ] Map `completed` to `STATUS:COMPLETED`.
 - [ ] Map `completed_at` to `COMPLETED`.
 - [ ] Map `id` to `UID`.
@@ -66,6 +69,15 @@ Goal: add a small, safe undo system for recent task changes.
 - [x] Keep undo in-memory only at first.
 - [x] Do not support undo after page refresh in the MVP.
 - [x] Do not implement full multi-step history yet.
+
+## Future Due-Date UI
+
+Goal: expose the existing `due_at` model in the task editor without weakening scheduled-task behavior.
+
+- [ ] Add a direct due-date editor for due-only tasks.
+- [ ] Keep due-only tasks distinct from scheduled calendar blocks.
+- [ ] Clear or reconcile `due_at` intentionally when a task is dragged onto the calendar.
+- [ ] Cover overdue and daily digest behavior before exposing the UI.
 
 ## Phase 14: Shared tasks
 

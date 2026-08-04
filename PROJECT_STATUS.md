@@ -9,8 +9,8 @@ This file summarizes the current repository state.
 - Database: PostgreSQL
 - Auth: JWT authentication with backend register/login/current-user endpoints and frontend login/logout flow
 - Admin: first registered user becomes admin; Settings -> Admin supports user listing and deletion with last-admin protection
-- Migration: Alembic workflow with baseline and ownership backfill migrations; FastAPI no longer mutates schema on startup
-- Notifications: Discord webhook notifications with per-task notification fields and an in-process backend worker thread
+- Migration: Alembic workflow with baseline, ownership, all-day, user timezone, app settings, Google mirror, and daily todo notification migrations; FastAPI no longer mutates schema on startup
+- Notifications: Discord webhook notifications with per-task reminder fields, optional daily todo digests, and an in-process backend worker thread
 - Google Calendar: one-way mirror through OAuth, a dedicated Google secondary calendar, a durable outbox, and a separate worker process
 - Timezone: application timezone is configurable with `APP_TIMEZONE`, defaulting to `UTC`
 - Deployment: non-Docker Ubuntu deployment and Docker Compose deployment are both documented
@@ -37,9 +37,11 @@ This file summarizes the current repository state.
 - Phase 1 PWA install support and phone-width responsive layout
 - Category rows in the category dropdown open edit mode directly, with switches reserved for filtering
 - Working-hours viewport toggle for week/day time-grid views
+- Preferences for working-hours start, week start, and daily todo notifications
 - Month view uses a clickable month title with a compact Month-Year picker
 - Desktop calendar events click reliably again; mobile calendar events stay tap-only with drag and resize disabled
 - Today view includes incomplete overdue all-day tasks
+- Due-only tasks are represented in the backend model and participate in overdue filtering and daily digest selection, though the current edit form hides direct due-date editing
 
 ## Recently Completed Work
 
@@ -60,10 +62,13 @@ This file summarizes the current repository state.
 - Docker Caddy proxies `/admin/*` so admin API requests do not fall through to the React app shell
 - Backup export/import now runs through user-scoped JSON payloads
 - PWA manifest and static-asset service worker support
+- User timezone storage and timezone-aware notification formatting
+- Daily todo notification records, scanner, claim/retry state machine, and Discord digest delivery
 
 ## Work Currently In Progress
 
 - Mobile ergonomics beyond the Phase 1 responsive baseline
+- Task form extraction and backend auth/admin service separation are documented refactor candidates
 
 ## Known Limitations
 
@@ -72,10 +77,12 @@ This file summarizes the current repository state.
 - No two-way Google Calendar sync
 - No offline sync
 - No push notifications
+- No email/password reset flow
+- No direct due-date editor in the current task form
 - Mobile calendar interactions are intentionally touch-first; desktop drag/resize remains available
 - Docker deployment is documented but not the only deployment path
 - Backend product routes are still split across `/api/*`, `/auth/*`, `/admin/*`, and `/backup/*`; future cleanup should normalize the product APIs under `/api/*`
 
 ## Next Recommended Priority
 
-Mobile ergonomics and production verification are the next major milestones.
+Mobile ergonomics, production verification, and lower-risk component/service extraction are the next major milestones.

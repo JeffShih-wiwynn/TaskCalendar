@@ -42,6 +42,7 @@ This document summarizes what is already in the repository snapshot and where th
 - [x] Overdue view
   - The sidebar includes an Overdue filter.
   - Overdue tasks are filtered client-side and supported by the backend list endpoint.
+  - Overdue filtering includes scheduled tasks, all-day tasks, and due-only tasks.
   - Completed tasks stay out of the overdue list.
 - [x] Recurring task MVP
   - Recurrence is stored as an RRULE-like string on tasks.
@@ -49,9 +50,15 @@ This document summarizes what is already in the repository snapshot and where th
   - The current implementation keeps recurrence simple and stops at a one-year horizon when no end date is provided.
 - [x] Discord notifications MVP
   - Tasks can opt into Discord notifications with an offset in minutes before `scheduled_start`.
+  - All-day task reminders use the configured working-hours start time.
   - The backend polls for due notifications and marks `notification_sent_at` after a successful send.
   - Discord webhook URL and message template can be configured from the sidebar settings button.
   - The webhook settings panel saves with `Done` and can send a one-off test message from the current draft values.
+- [x] Daily todo Discord notifications
+  - Users can enable or disable daily todo digests from Preferences.
+  - Digest records are created at the user's working-hours start time in the user's timezone, falling back to `APP_TIMEZONE`.
+  - Delivery uses a durable `daily_todo_notifications` table with claim, retry, skipped, cancelled, failed, and dead states.
+  - Digests include today's incomplete all-day/timed/due-only tasks and overdue incomplete tasks.
 - [x] Backup export/import foundation
   - Backup export is available from the sidebar settings button.
   - Backup import is available from the sidebar settings button and requires explicit confirmation before replacing current user data.
@@ -71,6 +78,10 @@ This document summarizes what is already in the repository snapshot and where th
   - Ubuntu production deployment is documented.
   - Docker/Compose production deployment is documented.
   - Environment variables, backup, Google mirror, and timezone behavior are described in the docs.
+- [x] User preferences and timezone persistence
+  - App settings are scoped per user.
+  - Working-hours start, week start, Discord settings, and daily todo notification enablement are stored in the backend.
+  - User rows include optional timezone for notification formatting and scheduling.
 - [x] Undo support
   - Recent task changes surface a compact floating undo control.
   - Undo remains single-step and in-memory only.
@@ -114,7 +125,7 @@ This document summarizes what is already in the repository snapshot and where th
 - Backup export and import are available from the sidebar settings menu, with import restricted to authenticated user data, guarded by an explicit confirmation step, and currently replace-only.
 - Undo is implemented as a floating icon-only control, stays single-step, and clears on newer task mutations so stale undo actions do not linger.
 - `due_at` still exists in the backend/data model, but the current edit form hides it.
-- Recurrence and notifications are in MVP form, but the series expansion horizon and webhook worker are intentionally limited.
+- Recurrence and notifications are in MVP form, but the series expansion horizon, notification polling, and digest worker loop are intentionally limited.
 
 ## Repository Snapshot
 
