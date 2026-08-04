@@ -4,7 +4,7 @@ This backlog is derived from the current codebase audit. It is intentionally nar
 
 ## Overview
 
-The main concentration of technical debt is in [`frontend/src/App.tsx`](../frontend/src/App.tsx), which currently owns auth, settings, admin, backup, task form state, recurrence, sidebar filtering, calendar synchronization, and mobile layout behavior in one component. The other recurring theme is route and proxy drift: backend routes are split across `/api/*`, `/auth/*`, `/admin/*`, and `/backup/*`, so Docker Caddy, the frontend PWA denylist, and API client helpers all need to stay aligned.
+The main concentration of technical debt is in [`frontend/src/App.tsx`](../frontend/src/App.tsx), which currently owns auth, settings, backup, task form state, recurrence, sidebar filtering, calendar synchronization, undo, and mobile layout behavior in one component. Admin settings and shared API request handling have already been extracted. The other recurring theme is route and proxy drift: backend routes are split across `/api/*`, `/auth/*`, `/admin/*`, and `/backup/*`, so Docker Caddy, the frontend PWA denylist, and API client helpers all need to stay aligned.
 
 The goal of the refactors below is not to normalize routes yet or to re-architect the app. The goal is to make the current behavior easier to maintain without increasing regression risk.
 
@@ -12,14 +12,15 @@ The goal of the refactors below is not to normalize routes yet or to re-architec
 
 | Priority | Area | Why |
 | --- | --- | --- |
-| Safe soon | Admin settings extraction | Fixes a self-contained sidebar branch and reduces rendering coupling. |
-| Safe soon | Settings subview consolidation | Replaces many booleans with one mutually exclusive state model. |
-| Safe soon | API helper + route constants | Centralizes request handling and reduces repeated route strings. |
-| Safe soon | Better non-JSON API error handling | Makes proxy/HTML fallback failures easier to diagnose. |
-| Safe soon | CSS selector specificity cleanup | Reduces style bleed from broad button selectors. |
-| Safe soon | Caddy/PWA route-family drift check | Catches proxy and denylist mismatches before deploy. |
+| Done | Admin settings extraction | The admin panel now lives in a focused component. |
+| Done | Settings subview consolidation | Settings use one mutually exclusive state model. |
+| Done | API helper + route constants | Request handling and route strings are centralized. |
+| Done | Better non-JSON API error handling | Proxy/HTML fallback failures now produce clearer errors. |
+| Done | CSS selector specificity cleanup | Broad task form button selectors have been narrowed. |
+| Done | Caddy/PWA route-family drift check | Static tests cover the current route families. |
 | After manual stable testing | Task form section extraction | Useful, but it touches a form that already had scroll and accordion regressions. |
 | After manual stable testing | Backend auth/admin service separation | Helpful for structure, but the current behavior is already correct. |
+| After manual stable testing | Daily notification settings extraction | Useful only if notification settings continue to grow. |
 | Later architectural cleanup | FullCalendar drag/drop sync refactor | High-risk state synchronization code that should stay stable until more test coverage exists. |
 | Later architectural cleanup | Recurrence flow refactor | High-risk because it spans frontend prompts, backend series updates, and delete/update semantics. |
 | Later architectural cleanup | Future route normalization under `/api/*` | Important, but should happen as a planned migration rather than an incidental refactor. |
@@ -42,7 +43,7 @@ The goal of the refactors below is not to normalize routes yet or to re-architec
 - Suggested refactor: move the admin branch into a dedicated component with explicit props for users, loading, errors, and delete handlers.
 - Benefit: clearer render boundaries and simpler tests.
 - Tests needed: admin visibility, hidden task list/content, back behavior, last-admin disabled state.
-- Timing: safe soon.
+- Status: done.
 
 ### Settings subview state consolidation
 - Problem: settings navigation is represented by many booleans.
@@ -50,7 +51,7 @@ The goal of the refactors below is not to normalize routes yet or to re-architec
 - Suggested refactor: replace the boolean set with a single union state such as `menu | admin | backup | webhook | account | working-hours`.
 - Benefit: mutually exclusive settings behavior becomes structural.
 - Tests needed: opening each subview, switching between them, leaving settings, and back navigation.
-- Timing: safe soon, if kept small and behavior-preserving.
+- Status: done.
 
 ### Task form section extraction
 - Problem: the create/edit form contains schedule, recurrence, categories, notes, action buttons, and accordion logic in one place.
@@ -82,7 +83,7 @@ The goal of the refactors below is not to normalize routes yet or to re-architec
 - Suggested refactor: add one shared request helper and centralized route constants for auth/admin/backup/tasks/settings.
 - Benefit: one place for headers, JSON parsing, and route composition.
 - Tests needed: success, 204, auth errors, validation errors, and HTML/non-JSON responses.
-- Timing: safe soon.
+- Status: done.
 
 ### Better non-JSON API error handling
 - Problem: API clients assume successful responses are JSON.
@@ -90,7 +91,7 @@ The goal of the refactors below is not to normalize routes yet or to re-architec
 - Suggested refactor: detect non-JSON content on success and throw a clear backend/proxy error.
 - Benefit: faster diagnosis when a route falls through to the app shell.
 - Tests needed: mocked `text/html` success response and standard JSON success/error cases.
-- Timing: safe soon.
+- Status: done.
 
 ### CSS selector specificity cleanup
 - Problem: broad selectors like `.task-form button` and similar grouped rules leak styling into nested controls.
@@ -98,7 +99,7 @@ The goal of the refactors below is not to normalize routes yet or to re-architec
 - Suggested refactor: reduce broad selectors and prefer explicit class-based variants.
 - Benefit: less style coupling and fewer one-off overrides.
 - Tests needed: targeted DOM/class assertions plus visual/manual checks.
-- Timing: safe soon.
+- Status: done.
 
 ### Caddy/PWA route-family drift check
 - Problem: Caddy proxy rules and the Vite PWA denylist must stay in sync with backend route families.
@@ -106,7 +107,15 @@ The goal of the refactors below is not to normalize routes yet or to re-architec
 - Suggested refactor: add a small static check or test that asserts `/api/*`, `/auth/*`, `/admin/*`, `/backup/*`, and `/health` are accounted for.
 - Benefit: catches proxy drift before deployment.
 - Tests needed: a lightweight config/assertion test.
-- Timing: safe soon.
+- Status: done.
+
+### Daily notification settings extraction
+- Problem: Discord webhook settings, per-task reminder settings, and daily todo digest enablement now share the same large settings/task form surface.
+- Why it matters: notification behavior spans frontend preferences, backend app settings, the in-process worker, and durable daily notification records.
+- Suggested refactor: only extract a focused notification settings component or service boundary when a new notification feature requires touching the same code.
+- Benefit: clearer ownership without changing notification semantics.
+- Tests needed: settings persistence, daily todo enable/disable, missing webhook skip behavior, and per-task reminder behavior.
+- Timing: after manual stable testing.
 
 ### Future route normalization under `/api/*`
 - Problem: the product API surface is still split across multiple top-level prefixes.
@@ -134,17 +143,10 @@ The goal of the refactors below is not to normalize routes yet or to re-architec
 
 ## Recommended Order
 
-### Safe Soon
-1. Extract `AdminSettingsPanel`.
-2. Consolidate settings subview state.
-3. Add shared frontend API helper and route constants.
-4. Improve non-JSON API error handling.
-5. Clean up broad CSS selectors.
-6. Add a Caddy/PWA route-family drift check.
-
 ### After Manual Stable Testing
 1. Extract task form sections.
 2. Separate backend auth and admin service concerns.
+3. Extract notification settings only if more notification UI is added.
 
 ### Later Architectural Cleanup
 1. Refactor FullCalendar drag/drop synchronization.

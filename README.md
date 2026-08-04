@@ -19,8 +19,9 @@ Calendar is licensed under the GNU Affero General Public License v3.0. See [LICE
 
 - Tasks can be unscheduled or placed on the calendar as concrete time blocks.
 - Current task views include Today, Upcoming, Inbox, Calendar, Completed, and All.
+- The sidebar also supports an Overdue filter for incomplete scheduled or due-only tasks.
 - Recurring tasks are materialized into concrete occurrences.
-- Categories, backup export/import, Discord notifications, and PWA install support are implemented.
+- Categories, backup export/import, Discord per-task reminders, daily todo Discord digests, and PWA install support are implemented.
 - Google Calendar mirror support is implemented as a one-way mirror from TaskCalendar to a dedicated Google secondary calendar.
 
 ## Requirements
@@ -38,6 +39,7 @@ Start the full local stack:
 ```
 
 That script starts the local PostgreSQL service, runs Alembic migrations from the local backend checkout, and launches the backend and frontend.
+It monitors both app processes and stops them when you press `Ctrl+C`. Use `./scripts/dev.sh stop` when the stack is already running in another shell.
 
 Default URLs:
 
@@ -54,6 +56,7 @@ DEV_HOST=<reachable-ip> ./scripts/dev.sh start
 ```
 
 Local development writes only `frontend/.env.local`. The backend reads `backend/.env` directly. Use `backend/.env.example` and `frontend/.env.example` as the public templates.
+For local dev, `scripts/dev.sh` also injects local backend environment values such as `DATABASE_URL`, `APP_BASE_URL`, `FRONTEND_ORIGINS`, and JWT settings directly into the Uvicorn process.
 
 The local PostgreSQL service uses the `calendar-dev` Compose project and `calendar-dev-postgres` container. It is separate from the production Compose stack.
 
@@ -119,6 +122,13 @@ See [docs/google-calendar.md](docs/google-calendar.md) for the OAuth and deploym
 ## PWA
 
 Production builds include install metadata, icons, standalone display mode, and a service worker that precaches built static assets only. API, auth, admin, backup, and health routes are not intentionally cached.
+
+## Notifications
+
+- Per-task Discord reminders are sent by the backend's in-process notification worker.
+- Daily todo Discord digests can be enabled per user from Preferences and are scheduled at the user's working-hours start time.
+- Daily digests include today's incomplete all-day/timed/due-only tasks and overdue incomplete tasks.
+- Google Calendar mirror sync uses a separate `python -m app.google_calendar.worker` process.
 
 ## Auth And Admin
 

@@ -136,6 +136,18 @@ Start the full local stack:
 ./dev.sh
 ```
 
+Equivalent explicit command:
+
+```sh
+./scripts/dev.sh start
+```
+
+Restart:
+
+```sh
+./scripts/dev.sh restart
+```
+
 Stop the background processes:
 
 ```sh
@@ -163,6 +175,7 @@ Permanently delete local dev database data:
 `scripts/dev.sh` is the public dispatcher for local development commands. Its implementation is split under `scripts/dev/` into config, Compose, env, process, database, backend, and frontend helpers.
 It writes logs and PID files to `.calendar-dev/`.
 The dev stack uses the `calendar-dev` Compose project and the production Docker stack uses the `calendar` project.
+The start command monitors the backend and frontend processes and stops them on `Ctrl+C`.
 
 Expected development endpoints:
 
@@ -181,6 +194,7 @@ http://127.0.0.1:8000/auth/login
 ## Backend Environment
 
 `APP_TIMEZONE` controls application datetime behavior and defaults to `UTC` when unset. It is used for task datetime serialization, recurrence handling, notification scheduling, and backup datetime import/export. Use an IANA timezone name such as `UTC` or `Asia/Taipei`.
+User rows can also store a timezone. Notification delivery prefers the user timezone when present and falls back to `APP_TIMEZONE`.
 
 For local development, set it when starting the stack so `scripts/dev.sh` passes the value directly to the backend process:
 
@@ -198,3 +212,4 @@ APP_TIMEZONE=Asia/Taipei ./scripts/dev.sh start
 - Inspect backend logs with `tail -f .calendar-dev/logs/backend.log`.
 - Inspect frontend logs with `tail -f .calendar-dev/logs/frontend.log`.
 - Inspect Google sync worker logs with the production `worker` container logs or `journalctl` in the non-Docker deployment.
+- Discord per-task reminders and daily todo digest processing run inside the backend process, so inspect backend logs for those worker steps.

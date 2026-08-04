@@ -45,6 +45,7 @@ Set these in the backend environment file used by `systemd`:
 - `JWT_ACCESS_TOKEN_EXPIRE_MINUTES`
 
 `APP_TIMEZONE` defaults to `UTC` when unset.
+User rows can store an optional timezone. Notification delivery uses the user timezone when present and falls back to `APP_TIMEZONE`.
 
 Example `/opt/calendar/backend/.env`:
 
@@ -159,7 +160,7 @@ sudo systemctl enable --now calendar-google-worker
 sudo systemctl status calendar-google-worker
 ```
 
-The backend process also starts the in-process Discord notification worker thread when it runs normally.
+The backend process also starts the in-process Discord notification worker thread when it runs normally. That worker handles per-task reminders and daily todo digest scanning/delivery. The separate `calendar-google-worker` service handles only Google Calendar mirror jobs.
 
 ## Caddy
 
@@ -221,7 +222,7 @@ git checkout <release-tag>
 
 ## Backups
 
-JSON backup/restore is user-scoped calendar data backup. It is separate from future ICS/VTODO export and does not include password hashes, JWT secrets, Google OAuth secrets, or user accounts.
+JSON backup/restore is user-scoped calendar data backup. It includes task lists/categories and task data such as all-day state, due dates, timezone, recurrence fields, notification fields, unscheduled ordering, completed state, and notes. It is separate from future ICS/VTODO export and does not include password hashes, JWT secrets, Google OAuth secrets, or user accounts.
 
 Back up PostgreSQL before upgrades:
 

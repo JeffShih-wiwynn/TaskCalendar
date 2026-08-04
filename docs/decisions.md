@@ -22,10 +22,14 @@ This file records the architecture decisions that should stay stable unless the 
 - Google Calendar mirror is one-way. TaskCalendar remains authoritative.
 - Google Calendar sync uses a dedicated secondary calendar, a durable outbox, and a background worker.
 - Google-side edits are not imported.
+- Per-task Discord reminders and daily todo Discord digests are notification features, not external calendar sync features.
+- Daily todo digests should use the user's timezone when present and fall back to `APP_TIMEZONE`.
+- Daily todo digest delivery should remain durable and idempotent through `daily_todo_notifications` rows rather than only in-memory timers.
 - Phase 1 PWA support should cache built static frontend assets only. API, auth, admin, backup, health, and Google mirror requests should continue to go to the backend normally until an explicit offline editing and conflict strategy exists.
 - Product APIs are currently split across `/api/*`, `/auth/*`, `/admin/*`, and `/backup/*`; route normalization under `/api/*` is future cleanup, not current behavior.
 - JSON backup/restore is user-scoped calendar data backup and should stay separate from future ICS/VTODO interoperability export.
 - The app should not seed a default admin/root account; the first registered user becomes admin when the users table is empty.
+- Route normalization and direct due-date editing are future work, not incidental cleanup.
 
 ## Implications
 

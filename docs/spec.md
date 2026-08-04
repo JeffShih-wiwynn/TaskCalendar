@@ -16,6 +16,7 @@ The current app is web-first:
 - Calendar-first task UI with FullCalendar.
 - Month, week, and day calendar views, with a single cycle button that advances Week -> Day -> Month.
 - Today, Upcoming, Inbox, Completed, and All task views.
+- Overdue filtering for incomplete scheduled and due-only tasks.
 - A `No time tasks` / Inbox sidebar view for unscheduled tasks that can be reordered and dragged into the calendar.
 - Task rows support a right-click menu with `Duplicate` and `Delete` actions.
 - Drag target cues distinguish no-time reorder from drag-to-calendar scheduling.
@@ -24,6 +25,7 @@ The current app is web-first:
 - Clickable month title that opens a compact Month-Year picker for jumping by month and year.
 - Draggable and resizable scheduled task events on desktop; mobile calendar events are tap/click-only and do not expose drag or resize affordances.
 - Week and day views default to the configured working-hours range and include a compact `Work` / `Full` viewport toggle for switching to the full-day time grid.
+- Preferences include working-hours start, week start, and daily todo notification enablement.
 - Task creation from selected calendar time ranges, including all-day slots.
 - Mobile calendar interactions use a quick action sheet for tap-to-edit; drag and resize are disabled on narrow screens.
 - Mobile month-view day previews use compact icon buttons for `Close` and `Add`.
@@ -46,6 +48,8 @@ The current app is web-first:
 - Category/task-list creation, color updates, and deletion.
 - Optional completed-task visibility toggle on the calendar while viewing completed tasks.
 - Optional scheduled start/end, so unscheduled tasks are valid.
+- Optional `due_at`, so due-only tasks can exist without a calendar block in the data model.
+- Optional all-day scheduled tasks with a date-based calendar representation.
 - Create/Edit task composer actions use compact icon buttons with a neutral cancel/close control and shared footer spacing.
 - Create/Edit task composer details are grouped into one-open accordion sections for Schedule, Categories, and Notes while title/basic info stays visible.
 - The Schedule section uses dedicated rows for `Clear schedule`, `To`, `Every`, `Until`, and `Remind`, while recurrence and reminder dropdowns use shared in-app menus.
@@ -56,6 +60,7 @@ The current app is web-first:
 - Backend admin endpoints under `/admin/*`.
 - Backend backup endpoints under `/backup/*`.
 - Google Calendar mirror endpoints under `/api/google-calendar/*`.
+- Settings endpoints under `/api/settings/*` include Discord webhook settings, working-hours start, week start, and daily todo notification settings.
 - Alembic-managed PostgreSQL schema migrations.
 - Phase 1 PWA support with a manifest, app icons, standalone display mode, and generated static asset service worker with app-shell fetch handling.
 - Basic responsive layout for phone-width browsers, with mobile bottom navigation and a fixed-nav-safe task list layout.
@@ -73,15 +78,16 @@ The current app is web-first:
 
 ## Data Model Assumptions
 
-- `User` stores username, password hash, admin flag, and timestamps.
+- `User` stores username, password hash, admin flag, optional timezone, and timestamps.
 - Public task, category, settings, backup, Google mirror, and admin routes are scoped to the authenticated user or current admin.
 - Some service functions still accept an omitted `user_id` for internal/backward-compatible direct service calls, but public API routes require authentication.
 - Backup export/import is user-scoped and restore replaces the current user's existing calendar data.
-- Backup payloads include task lists/categories, tasks, recurrence fields, notification fields, unscheduled ordering, completed state, and notes.
+- Backup payloads include task lists/categories, tasks, all-day state, due dates, timezone, recurrence fields, notification fields, unscheduled ordering, completed state, and notes.
 - Backup payloads exclude auth secrets, password hashes, Google OAuth secrets, and user accounts.
 - `TaskList` represents a category/list with a name and color.
-- `ScheduledTask` is the current task entity and includes both todo state and optional calendar timing.
+- `ScheduledTask` is the current task entity and includes todo state, optional calendar timing, optional `due_at`, all-day state, timezone, priority, recurrence, notifications, and timestamps.
 - A task can be unscheduled when `scheduled_start` and `scheduled_end` are null.
+- A task with neither schedule nor due date participates in manual no-time ordering through `unscheduled_order`.
 - A timed task should have `scheduled_end > scheduled_start`.
 - Completion belongs to the task, not only to a rendered calendar event.
 - Timestamps are modeled with timezone-aware SQLAlchemy `DateTime(timezone=True)` columns.
@@ -93,11 +99,12 @@ The current app is web-first:
 - All-day tasks: stored with an explicit `all_day` marker and rendered as all-day calendar events while preserving the selected calendar date. Incomplete overdue all-day tasks appear in Today.
 - Timed tasks: both start and end should be present for calendar range behavior. Backend validation rejects end times that are not after start times when both are provided.
 - Recurring tasks: the backend materializes concrete task rows for each occurrence and links them with `recurrence_series_id`. Deleting a recurring task can target only the current occurrence or the current and following occurrences. Switching a whole series to no recurrence removes the sibling occurrences and keeps only the edited task. All-day recurring tasks can use date-only starts.
-- Notifications: Discord delivery can be configured from the app UI through stored webhook settings, and message templates can include `{title}`, `{when}`, `{notes}`, and `{app_url}` placeholders.
+- Notifications: Discord delivery can be configured from the app UI through stored webhook settings, and per-task reminder message templates can include `{title}`, `{when}`, `{notes}`, and `{app_url}` placeholders. Daily todo digests are optional per user, run at working-hours start, and include today's incomplete all-day/timed/due-only tasks plus overdue incomplete tasks.
 - Completed tasks: completed tasks remain visible and retain calendar timing; completion state should stay task-level.
 - API routes: current product routes are split across `/api/*`, `/auth/*`, `/admin/*`, and `/backup/*`; future cleanup should normalize product APIs under `/api/*` while keeping `/health` root-level.
 - JSON backup/restore is separate from future ICS/VTODO export.
 - Sync conflicts: Google-side edits are not imported. Reconciliation overwrites mapped Google events from TaskCalendar data.
+- Due dates: `due_at` remains in the backend, API, backup, overdue filtering, and daily digest model, but the current task form does not expose direct due-date editing.
 
 ## Non-Goals For Now
 

@@ -75,6 +75,7 @@ Local development uses Compose project `calendar-dev`, container `calendar-dev-p
 `./scripts/dev.sh reset-db` drops and recreates only the local dev `calendar` database, then runs migrations from the local backend checkout. `./scripts/dev.sh destroy-db` requires typing `DESTROY` and removes the local dev PostgreSQL volume.
 
 Google Calendar mirror sync is one-way and uses a dedicated Google secondary calendar, a durable outbox, and the `python -m app.google_calendar.worker` worker process.
+Discord reminders and daily todo digests run in the backend's in-process notification worker thread.
 
 Google mirror environment variables live in `backend/.env.example`:
 
@@ -132,6 +133,7 @@ bash ./scripts/sanity.sh
 - Keep task and calendar logic easy to distinguish.
 - Prefer clear domain types over implicit object shapes.
 - Store timestamps in a timezone-safe way.
+- Preserve user timezone and `APP_TIMEZONE` fallback behavior in task serialization, recurrence, and notification code.
 - Keep comments short and useful.
 - Avoid broad refactors unrelated to the current task.
 - Preserve the current one-way Google Calendar mirror behavior unless a test proves a bug.
@@ -143,6 +145,7 @@ bash ./scripts/sanity.sh
 - Unscheduled tasks must remain valid.
 - For MVP, one scheduled block per task is acceptable, but preserve a path to split scheduled blocks later.
 - Validate scheduled ranges, including `scheduled_end > scheduled_start`.
+- Preserve optional `due_at`, `all_day`, `timezone`, and `priority` fields even when the current UI does not expose every field directly.
 - Preserve sync-friendly fields such as stable IDs, `created_at`, `updated_at`, and completion timestamps.
 - Do not implement CalDAV semantics in the MVP core model.
 
