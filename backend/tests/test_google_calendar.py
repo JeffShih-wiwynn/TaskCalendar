@@ -903,6 +903,46 @@ def test_batch_success_updates_mappings_and_serializes_event_shapes(
     assert timed_payload["start"]["timeZone"] == "UTC"
 
 
+def test_google_payload_uses_account_timezone_without_changing_instant(
+    db_session: Session,
+) -> None:
+    user = create_user(db_session)
+    user.timezone = "Europe/Berlin"
+    db_session.add(user)
+    db_session.commit()
+    connect_google_calendar(db_session, user)
+    task = create_task(
+        db_session,
+        user,
+        scheduled_start=datetime(2026, 7, 1, 7, 0, tzinfo=UTC),
+        scheduled_end=datetime(2026, 7, 1, 8, 0, tzinfo=UTC),
+    )
+    fake_client = FakeGoogleClient()
+    fake_client.existing_calendar = GoogleCalendarResource(
+        id="mirror-calendar-id",
+        summary="TaskCalendar Mirror — Read Only",
+    )
+
+    service.sync_reconcile_batch(
+        db_session,
+        user_id=user.id,
+        progress_state=None,
+        client=fake_client,
+    )
+
+    payload = next(
+        payload for payload in fake_client.created_event_payloads if payload["summary"] == task.title
+    )
+    assert payload["start"] == {
+        "dateTime": "2026-07-01T09:00:00+02:00",
+        "timeZone": "Europe/Berlin",
+    }
+    assert payload["end"] == {
+        "dateTime": "2026-07-01T10:00:00+02:00",
+        "timeZone": "Europe/Berlin",
+    }
+
+
 def test_reconcile_unchanged_mirrored_tasks_do_not_send_put_requests(
     db_session: Session,
 ) -> None:

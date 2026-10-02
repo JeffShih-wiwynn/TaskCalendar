@@ -13,6 +13,7 @@ from app.auth.schemas import (
     UpdateTimezoneRequest,
 )
 from app.auth.security import create_access_token, hash_password, verify_password
+from app.google_calendar.outbox import enqueue_user_reconciliation
 from app.models.app_settings import AppSettings
 from app.models.google_calendar import (
     GoogleCalendarConnection,
@@ -89,8 +90,11 @@ def update_timezone(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    timezone_changed = user.timezone != timezone
     user.timezone = timezone
     db.add(user)
+    if timezone_changed:
+        enqueue_user_reconciliation(db, user_id=user.id)
     db.commit()
     db.refresh(user)
     return user

@@ -7,6 +7,7 @@ import json
 import logging
 from datetime import UTC, datetime, timedelta
 from dataclasses import dataclass
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import HTTPException, status
 from sqlalchemy import select, update
@@ -38,6 +39,7 @@ from app.models.google_calendar import (
     GoogleOAuthState,
 )
 from app.models.scheduled_task import ScheduledTask
+from app.models.user import User
 
 OAUTH_STATE_TTL_MINUTES = 10
 SAFE_LAST_ERROR = "Google Calendar connection needs attention."
@@ -549,6 +551,7 @@ def reconcile_user_mirror(
         raise GoogleMirrorCalendarMissingError()
 
     eligible_tasks = list_eligible_tasks(db, user_id=user_id)
+    user_timezone = get_user_timezone(db, user_id=user_id)
     eligible_by_id = {task.id: task for task in eligible_tasks}
     mirrors = list_google_event_mirrors(db, user_id=user_id)
     mirrors_by_task_id = {
@@ -569,7 +572,7 @@ def reconcile_user_mirror(
         deleted_count += 1
 
     for task in eligible_tasks:
-        payload = build_event_payload(task)
+        payload = build_event_payload(task, timezone=user_timezone)
         payload_hash = hash_event_payload(payload)
         mirror = mirrors_by_task_id.get(task.id)
         if mirror is None:
@@ -710,7 +713,7 @@ def sync_one_task(
     if calendar_id is None:
         raise GoogleMirrorCalendarMissingError()
 
-    payload = build_event_payload(task)
+    payload = build_event_payload(task, timezone=get_user_timezone(db, user_id=user_id))
     payload_hash = hash_event_payload(payload)
     mirror = db.scalar(
         select(GoogleEventMirror).where(
@@ -952,6 +955,7 @@ def process_reconcile_upsert_batch(
     if phase == "delete":
         state = {"phase": "upsert"}
 
+    user_timezone = get_user_timezone(db, user_id=user_id)
     eligible_tasks = sorted(
         list_eligible_tasks(db, user_id=user_id),
         key=lambda task: str(task.id),
@@ -980,7 +984,7 @@ def process_reconcile_upsert_batch(
     requests: list[GoogleBatchEventRequest] = []
     skipped_unchanged_count = 0
     for task in eligible_tasks[:batch_size]:
-        payload = build_event_payload(task)
+        payload = build_event_payload(task, timezone=user_timezone)
         payload_hash = hash_event_payload(payload)
         mirror = mirrors_by_task_id.get(task.id)
         event_id = build_google_event_id(user_id=task.user_id, task_id=task.id)
@@ -1326,7 +1330,16 @@ def update_event_mirror(
     db.add(mirror)
 
 
-def build_event_payload(task: ScheduledTask) -> dict:
+def get_user_timezone(db: Session, *, user_id: uuid.UUID) -> ZoneInfo:
+    user = db.get(User, user_id)
+    timezone_name = user.timezone if user and user.timezone else get_app_timezone_name()
+    try:
+        return ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        return ZoneInfo(get_app_timezone_name())
+
+
+def build_event_payload(task: ScheduledTask, *, timezone: ZoneInfo) -> dict:
     payload = {
         "summary": task.title,
         "description": build_event_description(task.notes),
@@ -1338,24 +1351,24 @@ def build_event_payload(task: ScheduledTask) -> dict:
         },
     }
     if task.all_day:
-        local_start = to_app_timezone(ensure_aware_datetime(task.scheduled_start))
+        local_start = ensure_aware_datetime(task.scheduled_start).astimezone(timezone)
         payload["start"] = {"date": local_start.date().isoformat()}
         payload["end"] = {"date": (local_start.date() + timedelta(days=1)).isoformat()}
         return payload
 
-    local_start = to_app_timezone(ensure_aware_datetime(task.scheduled_start))
+    local_start = ensure_aware_datetime(task.scheduled_start).astimezone(timezone)
     local_end = (
-        to_app_timezone(ensure_aware_datetime(task.scheduled_end))
+        ensure_aware_datetime(task.scheduled_end).astimezone(timezone)
         if task.scheduled_end is not None
         else local_start + timedelta(minutes=30)
     )
     payload["start"] = {
         "dateTime": local_start.isoformat(),
-        "timeZone": get_app_timezone_name(),
+        "timeZone": timezone.key,
     }
     payload["end"] = {
         "dateTime": local_end.isoformat(),
-        "timeZone": get_app_timezone_name(),
+        "timeZone": timezone.key,
     }
     if task.scheduled_end is None:
         payload["endTimeUnspecified"] = True

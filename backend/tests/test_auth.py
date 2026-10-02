@@ -22,6 +22,7 @@ from app.auth.schemas import (
     UpdateTimezoneRequest,
 )
 from app.core.database import Base
+from app.models.google_calendar import GoogleCalendarConnection, GoogleSyncOutbox
 from app.models.user import User
 from app.task_lists import service as task_list_service
 from app.task_lists.schemas import TaskListCreate
@@ -147,6 +148,33 @@ def test_update_current_user_timezone_persists_valid_timezone(
 
     assert response.timezone == "Asia/Taipei"
     assert db_session.query(User).filter_by(username="alice").one().timezone == "Asia/Taipei"
+
+
+def test_update_current_user_timezone_queues_google_reconciliation(
+    db_session: Session,
+) -> None:
+    credentials = AuthCredentials(username="alice", password="secret-password")
+    register(credentials, db_session)
+    current_user = get_current_user(login(credentials, db_session).access_token, db_session)
+    db_session.add(
+        GoogleCalendarConnection(
+            user_id=current_user.id,
+            google_calendar_id="mirror-calendar-id",
+            status="connected",
+        )
+    )
+    db_session.commit()
+
+    update_current_user_timezone(
+        UpdateTimezoneRequest(timezone="Europe/Berlin"),
+        db_session,
+        current_user=current_user,
+    )
+
+    job = db_session.query(GoogleSyncOutbox).one()
+    assert job.user_id == current_user.id
+    assert job.operation == "reconcile_user"
+    assert job.status == "pending"
 
 
 def test_update_current_user_timezone_rejects_invalid_timezone(

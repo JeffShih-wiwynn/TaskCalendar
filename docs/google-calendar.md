@@ -124,6 +124,13 @@ The settings panel shows the mirror status, last successful sync, pending sync i
 
 ## What Is Mirrored
 
+Timed mirror events use the connected TaskCalendar account's saved IANA time
+zone. The event keeps the same absolute instant when the account time zone
+changes, while Google Calendar displays the event in each viewer's own local
+time zone. If the account has not saved a time zone, the backend falls back to
+`APP_TIMEZONE`. Changing the account time zone queues a full mirror
+reconciliation so existing Google events are updated.
+
 Automatic sync and background `Sync now` reconciliation mirror only tasks that are:
 
 - scheduled;
