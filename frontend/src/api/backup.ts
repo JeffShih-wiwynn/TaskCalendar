@@ -1,4 +1,4 @@
-import { getAuthHeaders } from "./auth";
+import { AuthError, getAuthHeaders } from "./auth";
 import { API_ROUTES, requestJson } from "./base";
 
 export type BackupExportPayload = {
@@ -25,8 +25,10 @@ export async function fetchBackupExport(): Promise<BackupExportPayload> {
             ...getAuthHeaders(),
         },
     }, {
+        createUnauthorizedError: (message) => new AuthError(message),
         readErrorMessage: async (response) =>
             `Request failed with ${response.status}`,
+        notifyUnauthorized: true,
     });
 }
 
@@ -40,7 +42,9 @@ export async function importBackup(
         },
         body: JSON.stringify(payload),
     }, {
+        createUnauthorizedError: (message) => new AuthError(message),
         readErrorMessage,
+        notifyUnauthorized: true,
     });
 }
 

@@ -45,5 +45,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }, {
     createUnauthorizedError: (message) => new AuthError(message),
     readErrorMessage: async (response) => `Request failed with ${response.status}`,
+    notifyUnauthorized: true,
   });
 }

@@ -80,7 +80,7 @@ This file summarizes the current repository state.
 - No email/password reset flow
 - No direct due-date editor in the current task form
 - Mobile calendar interactions are intentionally touch-first; desktop drag/resize remains available
-- Docker deployment is documented but not the only deployment path
+- Container deployment is documented but not the only deployment path; this host uses rootless Podman Quadlet for production runtime
 - Backend product routes are still split across `/api/*`, `/auth/*`, `/admin/*`, and `/backup/*`; future cleanup should normalize the product APIs under `/api/*`
 
 ## Next Recommended Priority

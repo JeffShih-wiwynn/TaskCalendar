@@ -1,5 +1,12 @@
 const rawBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
+export const AUTH_SESSION_EXPIRED_EVENT = "calendar-auth-session-expired";
+
+export type AuthSessionExpiredDetail = {
+    kind: "application" | "cloudflare-access";
+    path: string;
+};
+
 export const API_BASE_URL =
     typeof rawBaseUrl === "string" ? rawBaseUrl.trim() : "";
 
@@ -53,6 +60,7 @@ type RequestJsonOptions = {
     readErrorMessage?: (response: Response) => Promise<string>;
     createUnauthorizedError?: (message: string) => Error;
     includeContentType?: boolean;
+    notifyUnauthorized?: boolean;
 };
 
 export async function requestJson<T>(
@@ -64,6 +72,7 @@ export async function requestJson<T>(
         readErrorMessage = readDefaultErrorMessage,
         createUnauthorizedError,
         includeContentType = true,
+        notifyUnauthorized = false,
     } = options;
     const response = await fetch(resolveApiUrl(path), {
         ...init,
@@ -73,7 +82,15 @@ export async function requestJson<T>(
         },
     });
 
+    if (notifyUnauthorized && isCloudflareAccessRedirect(response)) {
+        notifySessionExpired({ kind: "cloudflare-access", path });
+        throw new Error("Cloudflare Access session expired");
+    }
+
     if (response.status === 401 && createUnauthorizedError) {
+        if (notifyUnauthorized) {
+            notifySessionExpired({ kind: "application", path });
+        }
         throw createUnauthorizedError(await readErrorMessage(response));
     }
 
@@ -86,6 +103,29 @@ export async function requestJson<T>(
     }
 
     return parseJsonResponse<T>(response);
+}
+
+function isCloudflareAccessRedirect(response: Response): boolean {
+    if (!response.redirected) {
+        return false;
+    }
+
+    const responseUrl = response.url.toLowerCase();
+    return (
+        responseUrl.includes("/cdn-cgi/access/login") ||
+        responseUrl.includes(".cloudflareaccess.com/")
+    );
+}
+
+function notifySessionExpired(detail: AuthSessionExpiredDetail): void {
+    if (typeof window !== "undefined") {
+        window.dispatchEvent(
+            new CustomEvent<AuthSessionExpiredDetail>(
+                AUTH_SESSION_EXPIRED_EVENT,
+                { detail },
+            ),
+        );
+    }
 }
 
 export async function parseJsonResponse<T>(response: Response): Promise<T> {

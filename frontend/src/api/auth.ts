@@ -110,6 +110,7 @@ async function requestAuth<T>(path: string, init?: RequestInit): Promise<T> {
     return requestJson<T>(path, init, {
         createUnauthorizedError: (message) => new AuthError(message),
         readErrorMessage,
+        notifyUnauthorized: path === API_ROUTES.auth.me,
     });
 }
 

@@ -58,7 +58,7 @@ DEV_HOST=<reachable-ip> ./scripts/dev.sh start
 Local development writes only `frontend/.env.local`. The backend reads `backend/.env` directly. Use `backend/.env.example` and `frontend/.env.example` as the public templates.
 For local dev, `scripts/dev.sh` also injects local backend environment values such as `DATABASE_URL`, `APP_BASE_URL`, `FRONTEND_ORIGINS`, and JWT settings directly into the Uvicorn process.
 
-The local PostgreSQL service uses the `calendar-dev` Compose project and `calendar-dev-postgres` container. It is separate from the production Compose stack.
+The local PostgreSQL service uses the `calendar-dev` Compose project and `calendar-dev-postgres` container. It is separate from the production Quadlet stack.
 
 Run migrations manually from the backend checkout if needed:
 
@@ -85,11 +85,13 @@ Troubleshooting:
 The repository documents two production paths:
 
 - [docs/ubuntu-production.md](docs/ubuntu-production.md) for the non-Docker Ubuntu path.
-- [docs/docker-production.md](docs/docker-production.md) for the Compose deployment path.
+- [docs/docker-production.md](docs/docker-production.md) for the container image and production Quadlet path.
 
-The Compose deployment uses the `calendar` project. Only the `web` container is exposed on the host; `postgres`, `backend`, and `worker` stay private on the Compose network.
+On this host, rootless Podman Quadlet manages `calendar-postgres`, `calendar-backend`,
+`calendar-worker`, and `calendar-web`; only the web container is exposed on host port
+`8088`, while the other containers stay private on the `calendar_default` network.
 
-Docker deployment:
+Container image build and deployment:
 
 ```sh
 cp backend/.env.example backend/.env
@@ -99,7 +101,7 @@ bash ./scripts/docker-build.sh
 bash ./scripts/docker-deploy.sh
 ```
 
-The backend container waits for PostgreSQL, runs Alembic migrations automatically from `backend/docker-entrypoint.sh`, and then starts Uvicorn. The separate `worker` container runs the Google Calendar sync worker.
+The backend container waits for PostgreSQL, runs Alembic migrations automatically from `backend/docker-entrypoint.sh`, and then starts Uvicorn. The separate `worker` container runs the Google Calendar sync worker. Production lifecycle is controlled by the Quadlet-generated user units, not by Compose.
 
 ## Backup
 

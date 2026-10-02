@@ -1,4 +1,4 @@
-import { getAuthHeaders } from "./auth";
+import { AuthError, getAuthHeaders } from "./auth";
 import { API_ROUTES, requestJson } from "./base";
 
 export type AdminUser = {
@@ -17,6 +17,9 @@ export type ActionResponse = {
 export async function listAdminUsers(): Promise<AdminUser[]> {
     return requestJson<AdminUser[]>(API_ROUTES.admin.users, {
         headers: getAuthHeaders(),
+    }, {
+        createUnauthorizedError: (message) => new AuthError(message),
+        notifyUnauthorized: true,
     });
 }
 
@@ -24,5 +27,8 @@ export async function deleteAdminUser(userId: string): Promise<ActionResponse> {
     return requestJson<ActionResponse>(API_ROUTES.admin.user(userId), {
         method: "DELETE",
         headers: getAuthHeaders(),
+    }, {
+        createUnauthorizedError: (message) => new AuthError(message),
+        notifyUnauthorized: true,
     });
 }

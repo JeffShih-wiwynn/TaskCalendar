@@ -1,6 +1,9 @@
 # Docker Production Deployment
 
-This repository documents a minimal Docker Compose production stack.
+This repository documents the container images and Compose-compatible service
+layout. On the Ubuntu host, production runtime is managed by rootless Podman
+Quadlet units under the Self-host repository; Compose remains useful for local
+development and image builds.
 
 ## Services
 
@@ -11,7 +14,9 @@ This repository documents a minimal Docker Compose production stack.
 
 Only `web` is exposed on the host. `backend`, `worker`, and `postgres` stay private on the Compose network.
 
-Docker deployment uses Compose project `calendar`, container `calendar-postgres`, and volume `calendar_postgres_data`.
+The production Quadlet deployment uses containers `calendar-postgres`,
+`calendar-backend`, `calendar-worker`, and `calendar-web`, plus the
+`calendar_default` network and `calendar_postgres_data` volume.
 Local development uses Compose project `calendar-dev`, container `calendar-dev-postgres`, and volume `calendar-dev_postgres_data`.
 
 ## Environment
@@ -54,7 +59,11 @@ bash ./scripts/docker-build.sh
 bash ./scripts/docker-deploy.sh
 ```
 
-Manual Compose command:
+The deployment script reloads the user systemd manager and restarts the
+Quadlet-owned `calendar-web.service` and `calendar-worker.service`; their
+dependencies start automatically.
+
+Manual Compose command for a separate development or disposable environment:
 
 ```sh
 docker compose -p calendar up -d --build
@@ -105,13 +114,13 @@ JSON backup/restore is not a full-instance backup. Back up PostgreSQL separately
 Before deploying a new release, take a PostgreSQL backup first. One copy-pasteable option is:
 
 ```sh
-docker compose -p calendar exec -T postgres pg_dump -U calendar -d calendar > <backup-file>
+podman exec calendar-postgres pg_dump -U calendar -d calendar > <backup-file>
 ```
 
 Restore the dump by recreating the target database contents:
 
 ```sh
-cat <backup-file> | docker compose -p calendar exec -T postgres psql -U calendar -d calendar
+cat <backup-file> | podman exec -i calendar-postgres psql -U calendar -d calendar
 ```
 
 ## Before Exposing Publicly
@@ -127,12 +136,13 @@ cat <backup-file> | docker compose -p calendar exec -T postgres psql -U calendar
 ## Useful Checks
 
 ```sh
-docker compose -p calendar ps
-docker compose -p calendar logs -f backend
-docker compose -p calendar logs -f worker
-docker compose -p calendar logs -f web
-docker compose -p calendar exec backend curl -fsS http://127.0.0.1:8000/health
-docker compose -p calendar exec web curl -fsS http://127.0.0.1/health
+systemctl --user status calendar-postgres.service calendar-backend.service calendar-worker.service calendar-web.service
+podman ps --filter name=calendar-
+podman logs -f calendar-backend
+podman logs -f calendar-worker
+podman logs -f calendar-web
+podman exec calendar-backend curl -fsS http://127.0.0.1:8000/health
+podman exec calendar-web curl -fsS http://127.0.0.1/health
 ```
 
 Use `backend` logs for API requests, per-task Discord reminders, and daily todo digest processing. Use `worker` logs for Google Calendar mirror jobs only.

@@ -21,7 +21,7 @@ Current progress for the Playwright end-to-end suite in `frontend/e2e/`.
 - Daily todo notification preference and digest behavior.
 - Week-start preference behavior across calendar views.
 - Undo snackbar behavior after update/delete and unavailable recurring-series actions.
-- Production Docker E2E.
+- Production container E2E.
 
 ## Guardrails
 
