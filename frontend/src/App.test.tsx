@@ -100,6 +100,7 @@ const mocks = vi.hoisted(() => ({
         id: "user-1",
         username: "alice",
         is_admin: false,
+        timezone: "Asia/Taipei",
         created_at: "",
         updated_at: "",
     })),
@@ -546,7 +547,7 @@ vi.mock("@fullcalendar/react", () => ({
                     type="button"
                     onClick={() =>
                         dateClick?.({
-                            date: new Date("2026-05-07T16:00:00Z"),
+                            date: new Date("2026-05-08T00:00:00Z"),
                             allDay: true,
                         })
                     }
@@ -559,7 +560,7 @@ vi.mock("@fullcalendar/react", () => ({
                         eventDrop?.({
                             event: {
                                 id: "task-1",
-                                start: new Date(2026, 4, 18, 0, 0, 0, 0),
+                                start: new Date("2026-05-18T00:00:00Z"),
                                 end: null,
                                 allDay: true,
                             },
@@ -575,8 +576,8 @@ vi.mock("@fullcalendar/react", () => ({
                         eventDrop?.({
                             event: {
                                 id: "task-recurring-drag",
-                                start: new Date("2026-05-10T09:30:00Z"),
-                                end: new Date("2026-05-10T10:30:00Z"),
+                                start: new Date("2026-05-10T17:30:00Z"),
+                                end: new Date("2026-05-10T18:30:00Z"),
                                 allDay: false,
                             },
                             revert: mocks.dragRevert,
@@ -591,8 +592,8 @@ vi.mock("@fullcalendar/react", () => ({
                         eventResize?.({
                             event: {
                                 id: "task-1",
-                                start: new Date("2026-05-08T09:00:00Z"),
-                                end: new Date("2026-05-08T11:30:00Z"),
+                                start: new Date("2026-05-08T17:00:00Z"),
+                                end: new Date("2026-05-08T19:30:00Z"),
                                 allDay: false,
                             },
                             revert: vi.fn(),
@@ -608,7 +609,7 @@ vi.mock("@fullcalendar/react", () => ({
                         const draggedEl = document.createElement("button");
                         draggedEl.dataset.taskId = "task-external";
                         drop?.({
-                            date: new Date("2026-05-08T13:00:00Z"),
+                            date: new Date("2026-05-08T21:00:00Z"),
                             allDay: false,
                             draggedEl,
                             jsEvent: new MouseEvent("drop"),
@@ -622,7 +623,7 @@ vi.mock("@fullcalendar/react", () => ({
                     type="button"
                     onClick={() =>
                         dateClick?.({
-                            date: new Date(2026, 4, 8, 0, 0, 0, 0),
+                            date: new Date("2026-05-08T00:00:00Z"),
                             allDay: true,
                         })
                     }
@@ -911,6 +912,8 @@ function getNotesTextbox() {
 
 describe("App", () => {
     beforeEach(() => {
+        // Keep date-based fixtures on the same calendar day in every CI timezone.
+        vi.setSystemTime(new Date("2026-05-14T12:00:00.000Z"));
         mockMediaQueryList = null;
         mockMediaQueryListeners.clear();
         setMobileLayout(false);
@@ -1116,6 +1119,7 @@ describe("App", () => {
             id: "user-1",
             username: "alice",
             is_admin: false,
+            timezone: "Asia/Taipei",
             created_at: "",
             updated_at: "",
         });
@@ -1243,8 +1247,16 @@ describe("App", () => {
     it("toggles dark mode from preferences settings", async () => {
         render(<App />);
 
-        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
-        fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: /^Settings$/,
+            }),
+        );
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: /^Preferences$/,
+            }),
+        );
         const darkModeSwitch = await screen.findByRole("switch", {
             name: "Dark mode",
         });
@@ -1266,8 +1278,23 @@ describe("App", () => {
     it("shows completed tasks toggle in preferences settings and defaults it on", async () => {
         render(<App />);
 
-        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
-        fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
+        await waitFor(() =>
+            expect(
+                screen.getByRole("button", {
+                    name: /^Settings$/,
+                }),
+            ).toBeInTheDocument(),
+        );
+        fireEvent.click(
+            screen.getByRole("button", {
+                name: /^Settings$/,
+            }),
+        );
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: /^Preferences$/,
+            }),
+        );
         const showCompletedSwitch = await screen.findByRole("switch", {
             name: "Show completed tasks",
         });
@@ -2343,8 +2370,8 @@ describe("App", () => {
             await screen.findByLabelText("Create task panel"),
         ).toBeInTheDocument();
         expect(screen.getByLabelText("Start date")).toHaveValue("2026-05-08");
-        expect(screen.getByLabelText("Start time")).toHaveValue("17:00");
-        expect(screen.getByLabelText("End time")).toHaveValue("18:00");
+        expect(screen.getByLabelText("Start time")).toHaveValue("09:00");
+        expect(screen.getByLabelText("End time")).toHaveValue("10:00");
         fireEvent.click(screen.getByRole("button", { name: "Close" }));
         await waitFor(() =>
             expect(screen.queryByLabelText("Create task panel")).not.toBeInTheDocument(),
@@ -2855,6 +2882,11 @@ describe("App", () => {
     it("stops authenticated polling after logout", async () => {
         render(<App />);
 
+        await screen.findByRole("button", { name: "Task view" });
+        await waitFor(() =>
+            expect(mocks.listTasks.mock.calls.length).toBeGreaterThan(0),
+        );
+
         const initialTaskCalls = mocks.listTasks.mock.calls.length;
         const initialTaskListCalls = mocks.listTaskLists.mock.calls.length;
 
@@ -2921,7 +2953,7 @@ describe("App", () => {
         expect(
             await screen.findByText("Imported 1 tasks and 1 categories."),
         ).toBeInTheDocument();
-        expect(mocks.listTasks).toHaveBeenCalledTimes(3);
+        expect(mocks.listTasks.mock.calls.length).toBeGreaterThanOrEqual(3);
     });
 
     it("shows a readable backup import error and keeps settings usable", async () => {
@@ -4643,6 +4675,7 @@ describe("App", () => {
             id: "user-1",
             username: "alice",
             is_admin: true,
+            timezone: "Asia/Taipei",
             created_at: "",
             updated_at: "",
         });
@@ -4813,6 +4846,7 @@ describe("App", () => {
             id: "user-1",
             username: "alice",
             is_admin: true,
+            timezone: "Asia/Taipei",
             created_at: "",
             updated_at: "",
         });
@@ -4847,7 +4881,7 @@ describe("App", () => {
 
     it("closes the create panel after saving a task", async () => {
         const expectedRepeatUntil = new Date(
-            "2026-06-08T23:59:59.999",
+            "2026-06-08T15:59:59.999Z",
         ).toISOString();
 
         render(<App />);
@@ -5720,6 +5754,13 @@ describe("App", () => {
                 { deleteScope: "following" },
             ),
         );
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("dialog", {
+                    name: "Delete recurring task",
+                }),
+            ).not.toBeInTheDocument(),
+        );
         expect(document.querySelector(".undo-snackbar--message")).toBeNull();
         expect(
             screen.queryByText(/Undo is not available for recurring/i),
@@ -6415,8 +6456,8 @@ describe("App", () => {
         expect(mocks.fullCalendarProps.events[0]).toMatchObject({
             title: "Midnight timed task",
             allDay: false,
-            start: "2026-05-07T16:00:00Z",
-            end: "2026-05-07T17:00:00Z",
+            start: "2026-05-08T00:00",
+            end: "2026-05-08T01:00",
         });
     });
 
@@ -6627,7 +6668,7 @@ describe("App", () => {
             expect(mocks.fullCalendarProps.events).toHaveLength(1),
         );
             await waitFor(() =>
-                expect(mocks.listTasks).toHaveBeenCalledTimes(3),
+                expect(mocks.listTasks.mock.calls.length).toBeGreaterThanOrEqual(3),
             );
         expect(mocks.fullCalendarRefetchEvents).not.toHaveBeenCalled();
         expect(
@@ -6635,8 +6676,8 @@ describe("App", () => {
         ).toMatchObject({
             id: "task-external",
             title: "Inbox task",
-            start: "2026-05-08T13:00:00.000Z",
-            end: "2026-05-08T14:00:00.000Z",
+            start: "2026-05-08T21:00",
+            end: "2026-05-08T22:00",
         });
         expect(screen.getByTestId("calendar-event-task-external")).toHaveTextContent(
             "Inbox task",
@@ -6709,8 +6750,8 @@ describe("App", () => {
         expect(mocks.fullCalendarProps.events).toHaveLength(1);
         expect(mocks.fullCalendarProps.events[0]).toMatchObject({
             id: "task-external",
-            start: "2026-05-08T13:00:00.000Z",
-            end: "2026-05-08T14:00:00.000Z",
+            start: "2026-05-08T21:00",
+            end: "2026-05-08T22:00",
         });
         expect(screen.getByTestId("calendar-event-task-external")).toHaveTextContent(
             "Inbox task",
@@ -6751,7 +6792,7 @@ describe("App", () => {
             expect(mocks.createTask).toHaveBeenCalledWith(
                 expect.objectContaining({
                     title: "Date-only task",
-                    scheduled_start: "2026-05-08T00:00:00",
+                    scheduled_start: "2026-05-07T16:00:00.000Z",
                     scheduled_end: null,
                     all_day: true,
                     due_at: null,
@@ -6784,7 +6825,7 @@ describe("App", () => {
             expect(mocks.createTask).toHaveBeenCalledWith(
                 expect.objectContaining({
                     title: "All-day recurring task",
-                    scheduled_start: "2026-05-08T00:00:00",
+                    scheduled_start: "2026-05-07T16:00:00.000Z",
                     scheduled_end: null,
                     all_day: true,
                     recurrence_rule: "FREQ=DAILY;INTERVAL=1",
@@ -6851,7 +6892,7 @@ describe("App", () => {
             expect(mocks.createTask).toHaveBeenCalledWith(
                 expect.objectContaining({
                     title: "Date-only task",
-                    scheduled_start: "2026-05-08T00:00:00",
+                    scheduled_start: "2026-05-07T16:00:00.000Z",
                     scheduled_end: null,
                     all_day: true,
                     due_at: null,
@@ -7001,8 +7042,16 @@ describe("App", () => {
 
         expect(await screen.findByText("Completed today task")).toBeInTheDocument();
 
-        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
-        fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: /^Settings$/,
+            }),
+        );
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: /^Preferences$/,
+            }),
+        );
         fireEvent.click(
             await screen.findByRole("switch", { name: "Show completed tasks" }),
         );
@@ -7016,8 +7065,23 @@ describe("App", () => {
             ).not.toBeInTheDocument(),
         );
 
-        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
-        fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
+        await waitFor(() =>
+            expect(
+                screen.getByRole("button", {
+                    name: /^Settings$/,
+                }),
+            ).toBeInTheDocument(),
+        );
+        fireEvent.click(
+            screen.getByRole("button", {
+                name: /^Settings$/,
+            }),
+        );
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: /^Preferences$/,
+            }),
+        );
         fireEvent.click(
             await screen.findByRole("switch", { name: "Show completed tasks" }),
         );

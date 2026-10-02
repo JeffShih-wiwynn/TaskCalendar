@@ -1,12 +1,13 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import HTTPException, status
 from sqlalchemy import Select, and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.timezone import now_in_app_timezone, to_app_timezone
+from app.core.timezone import get_app_timezone_name, now_in_app_timezone, to_app_timezone
 from app.google_calendar.outbox import (
     enqueue_task_delete,
     enqueue_task_upsert,
@@ -130,6 +131,8 @@ def create_task(
 ) -> ScheduledTask:
     task_data = data.model_dump()
     task_data["user_id"] = user_id or task_data["user_id"] or get_or_create_default_user(db).id
+    owner = db.get(User, task_data["user_id"])
+    task_data["timezone"] = owner.timezone if owner and owner.timezone else get_app_timezone_name()
     ensure_task_list_belongs_to_user(db, task_data.get("list_id"), task_data["user_id"])
     if task_data.get("notification_enabled") is None:
         task_data["notification_enabled"] = False
@@ -187,6 +190,8 @@ def update_task(
 ) -> ScheduledTask:
     task = get_task_or_404(db, task_id, user_id=user_id)
     updates = data.model_dump(exclude_unset=True)
+    owner = db.get(User, task.user_id)
+    updates["timezone"] = owner.timezone if owner and owner.timezone else get_app_timezone_name()
     ensure_task_list_belongs_to_user(db, updates.get("list_id"), task.user_id)
     validate_recurrence_until_not_before_start(
         updates.get("recurrence_rule", task.recurrence_rule),
@@ -583,7 +588,17 @@ def normalize_all_day_schedule(values: dict) -> None:
         values["all_day"] = False
         return
 
-    local_start = to_app_timezone(ensure_aware_datetime(scheduled_start))
+    if scheduled_start.tzinfo is None:
+        # Naive all-day values represent a calendar date, not an APP_TIMEZONE
+        # instant. Preserve that date when an existing task is updated.
+        local_start = scheduled_start
+    else:
+        try:
+            local_start = scheduled_start.astimezone(
+                ZoneInfo(values.get("timezone") or get_app_timezone_name())
+            )
+        except ZoneInfoNotFoundError:
+            local_start = to_app_timezone(ensure_aware_datetime(scheduled_start))
     values["scheduled_start"] = local_start.replace(
         hour=0,
         minute=0,

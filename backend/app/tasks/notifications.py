@@ -223,17 +223,29 @@ def get_notification_start(
     *,
     working_hours_start: str | None = None,
 ) -> datetime:
-    start = ensure_aware_datetime(task.scheduled_start)
     if not task.all_day:
-        return start
+        return ensure_aware_datetime(task.scheduled_start)
 
-    local_start = start.astimezone(get_app_timezone())
+    notification_timezone = get_notification_timezone(task)
+    scheduled_start = task.scheduled_start
+    if scheduled_start.tzinfo is None:
+        local_date = scheduled_start.date()
+    else:
+        local_date = scheduled_start.astimezone(notification_timezone).date()
     reminder_time = parse_working_hours_start(working_hours_start)
     return datetime.combine(
-        local_start.date(),
+        local_date,
         reminder_time,
-        tzinfo=get_app_timezone(),
+        tzinfo=notification_timezone,
     )
+
+
+def get_notification_timezone(task: ScheduledTask) -> ZoneInfo:
+    timezone_name = get_effective_notification_timezone(task)
+    try:
+        return ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        return get_app_timezone()
 
 
 def parse_working_hours_start(value: str | None) -> time:

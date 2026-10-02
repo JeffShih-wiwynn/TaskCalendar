@@ -15,9 +15,14 @@ Current progress for the Playwright end-to-end suite in `frontend/e2e/`.
 - Completed-task visibility toggle for scheduled tasks in the Today list and calendar, including reload persistence.
 - Category/list management for creating a category, assigning a task, filtering by category, and reload persistence.
 - Multi-session consistency for one account across independent browser contexts after reload, covering create, edit, and delete.
+- Public `/privacy` access without authentication.
+- Saved timezone selection and UTC offset display.
+- Reminder and repeating-task indicators.
+- Mobile calendar screen smoke coverage on Chromium mobile emulation.
 
 ## Pending High-Value Flows
 
+- Calendar display and drag/resize behavior under a user-selected timezone, including DST boundary coverage.
 - Daily todo notification preference and digest behavior.
 - Week-start preference behavior across calendar views.
 - Undo snackbar behavior after update/delete and unavailable recurring-series actions.

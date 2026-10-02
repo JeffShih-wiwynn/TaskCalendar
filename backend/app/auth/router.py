@@ -11,6 +11,7 @@ from app.auth.schemas import (
     ChangePasswordRequest,
     DeleteAccountRequest,
     TokenResponse,
+    UpdateTimezoneRequest,
     UserRead,
 )
 from app.core.database import get_db
@@ -35,6 +36,15 @@ def login(credentials: AuthCredentials, db: DbSession) -> TokenResponse:
 @router.get("/me", response_model=UserRead)
 def read_current_user(current_user: CurrentUser) -> UserRead:
     return current_user
+
+
+@router.patch("/me/timezone", response_model=UserRead)
+def update_current_user_timezone(
+    data: UpdateTimezoneRequest,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> UserRead:
+    return service.update_timezone(db, current_user=current_user, data=data)
 
 
 @router.patch("/password", response_model=ActionResponse)

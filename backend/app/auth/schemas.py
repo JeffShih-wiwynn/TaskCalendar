@@ -9,6 +9,10 @@ class AuthCredentials(BaseModel):
     password: str = Field(min_length=1)
 
 
+class UpdateTimezoneRequest(BaseModel):
+    timezone: str | None = Field(default=None, max_length=100)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

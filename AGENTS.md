@@ -70,7 +70,14 @@ Background stack helpers:
 ./scripts/dev.sh status
 ```
 
-For remote testing, use `DEV_HOST=<reachable-ip> ./scripts/dev.sh start`. The default `DEV_HOST` is `127.0.0.1`.
+For remote testing, use `DEV_HOST=<reachable-ip> ./scripts/dev.sh start`. The default `DEV_HOST` is `127.0.0.1`, which is only suitable for a browser on this host. For remote testing over Tailscale, stop the existing stack and use the current Tailscale address `100.64.0.1`:
+
+```sh
+./scripts/dev.sh stop
+DEV_HOST=100.64.0.1 ./scripts/dev.sh start
+```
+
+Open `http://100.64.0.1:5173` from the testing device. The frontend API URL must use the same reachable address; otherwise a remote browser will resolve `127.0.0.1` on its own device and report `Failed to fetch`.
 Local development uses Compose project `calendar-dev`, container `calendar-dev-postgres`, database `calendar`, and host port `127.0.0.1:5432`. On this Ubuntu host, production containers are managed by rootless Podman Quadlet units in `/home/jeff/Self-host/quadlets`; Compose remains for local development, disposable environments, and image builds.
 `./scripts/dev.sh reset-db` drops and recreates only the local dev `calendar` database, then runs migrations from the local backend checkout. `./scripts/dev.sh destroy-db` requires typing `DESTROY` and removes the local dev PostgreSQL volume.
 

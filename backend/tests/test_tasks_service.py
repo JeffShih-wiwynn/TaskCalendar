@@ -461,6 +461,34 @@ def test_create_recurring_task_materializes_occurrences(
     assert task.recurrence_rule == "FREQ=DAILY;INTERVAL=2;UNTIL=2026-05-12T09:00:00+00:00"
 
 
+def test_create_recurring_task_keeps_local_time_across_dst(
+    db_session: Session, user_id: uuid.UUID
+) -> None:
+    user = db_session.get(User, user_id)
+    assert user is not None
+    user.timezone = "America/Los_Angeles"
+    db_session.add(user)
+    db_session.commit()
+
+    service.create_task(
+        db_session,
+        ScheduledTaskCreate(
+            user_id=user_id,
+            title="DST-safe recurring task",
+            scheduled_start=parse_dt("2026-03-07T17:00:00+00:00"),
+            recurrence_rule="FREQ=DAILY;INTERVAL=1;UNTIL=2026-03-09T16:00:00+00:00",
+        ),
+    )
+
+    tasks = service.list_tasks(db_session)
+
+    assert [item.scheduled_start for item in tasks] == [
+        parse_dt("2026-03-07T17:00:00+00:00").replace(tzinfo=None),
+        parse_dt("2026-03-08T16:00:00+00:00").replace(tzinfo=None),
+        parse_dt("2026-03-09T16:00:00+00:00").replace(tzinfo=None),
+    ]
+
+
 def test_update_recurring_task_rejects_until_before_start(
     db_session: Session, user_id: uuid.UUID
 ) -> None:
@@ -1687,6 +1715,60 @@ def test_all_day_on_time_reminder_uses_working_hours_start(
     )
     assert sent_count == 1
     assert sent_messages == ["Task due: All-day on time\nWhen: 2026-05-08 00:00"]
+
+
+def test_all_day_reminder_uses_user_timezone_for_working_hours(
+    db_session: Session,
+    user_id: uuid.UUID,
+) -> None:
+    user = db_session.get(User, user_id)
+    assert user is not None
+    user.timezone = "America/Los_Angeles"
+    db_session.add(user)
+    db_session.add(AppSettings(user_id=user_id, working_hours_start="09:00"))
+    db_session.commit()
+
+    task = create_task(
+        db_session,
+        user_id,
+        title="All-day timezone reminder",
+        scheduled_start=parse_dt("2026-05-08T07:00:00+00:00"),
+        all_day=True,
+        notification_enabled=True,
+        notification_offset_minutes=0,
+        notification_channel="discord",
+    )
+
+    assert get_notify_at(task, working_hours_start="09:00") == parse_dt(
+        "2026-05-08T16:00:00+00:00",
+    )
+
+
+def test_updating_all_day_task_preserves_its_calendar_date(
+    db_session: Session,
+    user_id: uuid.UUID,
+) -> None:
+    user = db_session.get(User, user_id)
+    assert user is not None
+    user.timezone = "America/Los_Angeles"
+    db_session.add(user)
+    db_session.commit()
+
+    task = create_task(
+        db_session,
+        user_id,
+        title="All-day date",
+        scheduled_start=parse_dt("2026-05-08T00:00:00"),
+        all_day=True,
+    )
+
+    updated = service.update_task(
+        db_session,
+        task.id,
+        ScheduledTaskUpdate(title="Renamed all-day date"),
+    )
+
+    assert updated.scheduled_start == parse_dt("2026-05-08T00:00:00")
 
 
 def test_all_day_before_days_reminder_uses_working_hours_start(

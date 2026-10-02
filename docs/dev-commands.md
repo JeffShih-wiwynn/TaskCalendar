@@ -196,7 +196,7 @@ http://127.0.0.1:8000/auth/login
 ## Backend Environment
 
 `APP_TIMEZONE` controls application datetime behavior and defaults to `UTC` when unset. It is used for task datetime serialization, recurrence handling, notification scheduling, and backup datetime import/export. Use an IANA timezone name such as `UTC` or `Asia/Taipei`.
-User rows can also store a timezone. Notification delivery prefers the user timezone when present and falls back to `APP_TIMEZONE`.
+Users can update their saved timezone from Preferences. Calendar display and task date/time editing use the saved user timezone; recurrence expansion preserves the local wall-clock time across DST changes; notification delivery, including all-day reminder scheduling, prefers the user timezone and falls back to `APP_TIMEZONE`. A user without a saved timezone uses the browser-detected timezone until one is selected.
 
 For local development, set it when starting the stack so `scripts/dev.sh` passes the value directly to the backend process:
 

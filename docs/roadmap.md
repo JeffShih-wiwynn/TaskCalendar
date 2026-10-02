@@ -29,7 +29,7 @@ Goal: support interoperability with external calendar and task systems only.
 - [ ] Map notes to `DESCRIPTION`.
 - [ ] Map `scheduled_start` to `DTSTART`.
 - [ ] Map `scheduled_end` or `due_at` to `DUE`.
-- [ ] Preserve all-day task dates without introducing timezone drift.
+- [x] Preserve all-day task dates without introducing timezone drift.
 - [ ] Map `completed` to `STATUS:COMPLETED`.
 - [ ] Map `completed_at` to `COMPLETED`.
 - [ ] Map `id` to `UID`.

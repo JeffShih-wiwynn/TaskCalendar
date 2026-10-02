@@ -225,6 +225,15 @@ async function openPreferences(page: Page): Promise<void> {
 }
 
 test.describe('Calendar E2E', () => {
+  test('serves the privacy policy publicly without authentication', async ({ page }) => {
+    await page.goto(`${APP_BASE_URL}/privacy`);
+
+    await expect(page.getByRole('heading', { name: 'TaskCalendar Privacy Policy' })).toBeVisible();
+    await expect(page.getByText(/Google user data is not sold or shared/i)).toBeVisible();
+    await expect(page.getByText('Last updated: October 2026')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Welcome back' })).toHaveCount(0);
+  });
+
   test('registers, logs in, logs out, and logs back in', async ({ page }) => {
     const username = uniqueName('auth');
 
@@ -571,6 +580,58 @@ test.describe('Calendar E2E', () => {
 
     await expect(page.getByLabel('Start time')).toHaveValue('08:00');
     await expect(page.getByLabel('End time')).toHaveValue('17:00');
+  });
+
+  test('persists the selected timezone and displays UTC offset', async ({ page, request }) => {
+    const user = await registerUser(request, 'timezone');
+    await openAuthenticatedApp(page, user);
+
+    await openPreferences(page);
+    await page.locator('button.preferences-summary-row').filter({ hasText: 'Time zone' }).click();
+    await page.getByRole('button', { name: 'Time zone', exact: true }).click();
+
+    const timezoneOptions = page.getByRole('listbox', { name: 'Time zone options' });
+    await expect(timezoneOptions).toBeVisible();
+    const taipeiOption = timezoneOptions.getByRole('option', { name: /Taipei.*UTC\+08:00/ });
+    await expect(taipeiOption).toBeVisible();
+
+    const timezoneResponse = page.waitForResponse((response) => (
+      response.url().includes('/auth/me/timezone') &&
+      response.request().method() === 'PATCH' &&
+      response.ok()
+    ));
+    await taipeiOption.click();
+    await timezoneResponse;
+
+    await expect(page.locator('button.timezone-dropdown-trigger')).toContainText('Taipei');
+    await expect(page.locator('button.timezone-dropdown-trigger')).toContainText('UTC+08:00');
+
+    await page.reload();
+    await expect(page.getByText(`Hello, ${user.username}`)).toBeVisible();
+    await openPreferences(page);
+    await expect(page.locator('button.preferences-summary-row').filter({ hasText: 'Asia/Taipei' })).toBeVisible();
+  });
+
+  test('shows reminder and repeating indicators for scheduled tasks', async ({ page, request }) => {
+    const user = await registerUser(request, 'indicators');
+    const title = uniqueName('reminder-repeat');
+    const { start, end } = localIsoForHour(10);
+
+    await createTaskViaApi(request, user, {
+      title,
+      scheduled_start: start,
+      scheduled_end: end,
+      recurrence_rule: 'FREQ=DAILY;INTERVAL=1',
+      notification_enabled: true,
+      notification_offset_minutes: 15,
+      notification_channel: 'discord',
+    });
+
+    await openAuthenticatedApp(page, user);
+    const row = taskRow(page, title);
+    await expect(row).toBeVisible();
+    await expect(row.locator('.task-indicator--reminder')).toBeVisible();
+    await expect(row.locator('.task-indicator--recurring')).toBeVisible();
   });
 
   test('toggles completed task visibility', async ({ page, request }) => {

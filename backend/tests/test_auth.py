@@ -7,8 +7,20 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.auth.dependencies import get_current_user
-from app.auth.router import change_password, delete_account, login, read_current_user, register
-from app.auth.schemas import AuthCredentials, ChangePasswordRequest, DeleteAccountRequest
+from app.auth.router import (
+    change_password,
+    delete_account,
+    login,
+    read_current_user,
+    register,
+    update_current_user_timezone,
+)
+from app.auth.schemas import (
+    AuthCredentials,
+    ChangePasswordRequest,
+    DeleteAccountRequest,
+    UpdateTimezoneRequest,
+)
 from app.core.database import Base
 from app.models.user import User
 from app.task_lists import service as task_list_service
@@ -118,6 +130,41 @@ def test_me_returns_authenticated_current_user(db_session: Session) -> None:
     response = read_current_user(current_user)
 
     assert response.username == "alice"
+
+
+def test_update_current_user_timezone_persists_valid_timezone(
+    db_session: Session,
+) -> None:
+    credentials = AuthCredentials(username="alice", password="secret-password")
+    register(credentials, db_session)
+    current_user = get_current_user(login(credentials, db_session).access_token, db_session)
+
+    response = update_current_user_timezone(
+        UpdateTimezoneRequest(timezone="Asia/Taipei"),
+        db_session,
+        current_user=current_user,
+    )
+
+    assert response.timezone == "Asia/Taipei"
+    assert db_session.query(User).filter_by(username="alice").one().timezone == "Asia/Taipei"
+
+
+def test_update_current_user_timezone_rejects_invalid_timezone(
+    db_session: Session,
+) -> None:
+    credentials = AuthCredentials(username="alice", password="secret-password")
+    register(credentials, db_session)
+    current_user = get_current_user(login(credentials, db_session).access_token, db_session)
+
+    with pytest.raises(HTTPException) as exc_info:
+        update_current_user_timezone(
+            UpdateTimezoneRequest(timezone="Not/A_Timezone"),
+            db_session,
+            current_user=current_user,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "timezone must be a valid IANA timezone"
 
 
 def test_change_password_requires_current_password(db_session: Session) -> None:

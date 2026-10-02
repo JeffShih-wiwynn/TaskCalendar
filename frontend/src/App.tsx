@@ -57,6 +57,7 @@ import {
     isAuthError,
     login,
     register,
+    updateTimezone,
     type AuthUser,
 } from "./api/auth";
 import { AUTH_SESSION_EXPIRED_EVENT } from "./api/base";
@@ -99,12 +100,14 @@ import {
 import {
     IconArrowDown,
     IconArrowUp,
+    IconAlarm,
     IconCheck,
     IconChevronDown,
     IconClose,
     IconEdit,
     IconMinus,
     IconPlus,
+    IconRepeat,
     IconSave,
     IconTrash,
 } from "./components/icons";
@@ -123,6 +126,48 @@ type TaskView =
     | "overdue"
     | "completed"
     | "all";
+
+function TaskIndicators({
+    task,
+    categoryColor,
+}: {
+    task: ScheduledTask;
+    categoryColor: string;
+}) {
+    const hasReminder = task.notification_enabled;
+    const isRecurring = Boolean(
+        task.recurrence_rule || task.recurrence_series_id,
+    );
+
+    if (!hasReminder && !isRecurring) {
+        return null;
+    }
+
+    return (
+        <span
+            className="task-indicators"
+            aria-hidden="true"
+            style={{ color: complementaryColor(categoryColor) }}
+        >
+            {hasReminder && (
+                <span
+                    className="task-indicator task-indicator--reminder"
+                    title="Has reminder"
+                >
+                    <IconAlarm />
+                </span>
+            )}
+            {isRecurring && (
+                <span
+                    className="task-indicator task-indicator--recurring"
+                    title="Repeating task"
+                >
+                    <IconRepeat />
+                </span>
+            )}
+        </span>
+    );
+}
 type ThemeMode = "light" | "dark";
 type CalendarView = "dayGridMonth" | "timeGridWeek" | "timeGridDay";
 type WeekStart = "sunday" | "monday";
@@ -134,6 +179,24 @@ type WorkingHoursSettings = {
     start: string;
     end: string;
 };
+
+const commonTimezoneOptions = [
+    "UTC",
+    "Asia/Taipei",
+    "Asia/Tokyo",
+    "Asia/Seoul",
+    "Asia/Singapore",
+    "Asia/Bangkok",
+    "Asia/Kolkata",
+    "Australia/Sydney",
+    "Europe/London",
+    "Europe/Paris",
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Los_Angeles",
+    "Pacific/Auckland",
+];
 const defaultSidebarWidth = 300;
 
 function getAdminUserDisplayName(user: AdminUser): string {
@@ -255,6 +318,7 @@ type SettingsView =
     | "google-calendar"
     | "backup";
 type TaskFormAccordionSectionId = "schedule" | "organization" | "notes";
+type PreferenceSectionId = "week-start" | "working-hours" | "timezone";
 type TaskRowDragEvent =
     | ReactMouseEvent<HTMLElement>
     | ReactPointerEvent<HTMLElement>;
@@ -420,6 +484,78 @@ function isNarrowScreen(): boolean {
     );
 }
 
+function getBrowserTimezone(): string {
+    try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    } catch {
+        return "UTC";
+    }
+}
+
+function getTimezoneCity(timezone: string): string {
+    const timezoneParts = timezone.split("/");
+    return (timezoneParts[timezoneParts.length - 1] ?? timezone).replace(
+        /_/g,
+        " ",
+    );
+}
+
+function formatTimezoneOffset(timezone: string): string {
+    try {
+        const offsetPart = new Intl.DateTimeFormat("en-US", {
+            timeZone: timezone,
+            timeZoneName: "longOffset",
+        })
+            .formatToParts(new Date())
+            .find((part) => part.type === "timeZoneName")?.value;
+        if (offsetPart) {
+            return offsetPart.replace("GMT", "UTC");
+        }
+    } catch {
+        // Keep the IANA timezone usable even if the browser lacks its data.
+    }
+
+    return "UTC";
+}
+
+function formatTimezoneLabel(timezone: string): string {
+    return `${getTimezoneCity(timezone)} (${formatTimezoneOffset(timezone)})`;
+}
+
+function getTimezoneOffsetMinutes(timezone: string): number {
+    try {
+        const offsetPart = new Intl.DateTimeFormat("en-US", {
+            timeZone: timezone,
+            timeZoneName: "longOffset",
+        })
+            .formatToParts(new Date())
+            .find((part) => part.type === "timeZoneName")?.value;
+        if (!offsetPart || offsetPart === "GMT" || offsetPart === "UTC") {
+            return 0;
+        }
+
+        const match = offsetPart.match(/GMT([+-])(\d{2}):?(\d{2})?/);
+        if (!match) {
+            return 0;
+        }
+
+        const totalMinutes = Number(match[2]) * 60 + Number(match[3] ?? 0);
+        return match[1] === "-" ? -totalMinutes : totalMinutes;
+    } catch {
+        return 0;
+    }
+}
+
+function compareTimezonesByUtc(left: string, right: string): number {
+    const offsetDifference =
+        getTimezoneOffsetMinutes(left) - getTimezoneOffsetMinutes(right);
+    if (offsetDifference !== 0) {
+        return offsetDifference;
+    }
+
+    return formatTimezoneLabel(left).localeCompare(formatTimezoneLabel(right));
+}
+
 function shouldIgnoreCalendarSwipeTarget(target: EventTarget | null): boolean {
     if (!(target instanceof Element)) {
         return true;
@@ -478,13 +614,15 @@ export function App() {
     const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
     const [workingHours, setWorkingHours] = useState(getInitialWorkingHours);
     const [weekStart, setWeekStart] = useState<WeekStart>("sunday");
+    const [isTimezoneSaving, setIsTimezoneSaving] = useState(false);
+    const [timezoneError, setTimezoneError] = useState<string | null>(null);
+    const [isTimezoneMenuOpen, setIsTimezoneMenuOpen] = useState(false);
     const [
         isDailyTodoNotificationEnabled,
         setIsDailyTodoNotificationEnabled,
     ] = useState(false);
-    const [expandedPreferenceSection, setExpandedPreferenceSection] = useState<
-        "week-start" | "working-hours" | null
-    >(null);
+    const [expandedPreferenceSection, setExpandedPreferenceSection] =
+        useState<PreferenceSectionId | null>(null);
     const [isFullDayTimelineVisible, setIsFullDayTimelineVisible] =
         useState(false);
     const [taskState, setTaskState] = useState<TaskState>({
@@ -621,6 +759,7 @@ export function App() {
         useState<CalendarView>("timeGridWeek");
     const [calendarTitle, setCalendarTitle] = useState("");
     const [calendarDate, setCalendarDate] = useState(new Date());
+    const [isTodayInCalendarView, setIsTodayInCalendarView] = useState(true);
     const [isMobileLayout, setIsMobileLayout] = useState(isNarrowScreen);
     const [mobileMonthPreviewDate, setMobileMonthPreviewDate] =
         useState<Date | null>(null);
@@ -668,6 +807,8 @@ export function App() {
     const categoryNameInputRef = useRef<HTMLInputElement | null>(null);
     const monthYearPickerRef = useRef<HTMLDivElement | null>(null);
     const monthYearPickerTriggerRef = useRef<HTMLButtonElement | null>(null);
+    const timezoneDropdownRef = useRef<HTMLDivElement | null>(null);
+    const timezoneDropdownTriggerRef = useRef<HTMLButtonElement | null>(null);
     const timeGridScrollTopRef = useRef<number | null>(null);
     const calendarSwipeStateRef = useRef<CalendarSwipeState | null>(null);
     const suppressNextCalendarTapRef = useRef(false);
@@ -676,6 +817,8 @@ export function App() {
     const calendarResizeRafRef = useRef<number | null>(null);
     const calendarResizeRaf2Ref = useRef<number | null>(null);
 
+    const browserTimezone = getBrowserTimezone();
+    const effectiveTimezone = currentUser?.timezone ?? browserTimezone;
     const tasks = taskState.tasks;
     const isInitialTaskLoad =
         taskState.status === "loading" && tasks.length === 0;
@@ -704,11 +847,13 @@ export function App() {
                 categoryVisibility,
                 upcomingDays,
                 showCompletedTasks,
+                effectiveTimezone,
             ),
         [
             activeView,
             areAllCategoriesVisible,
             categoryVisibility,
+            effectiveTimezone,
             showCompletedTasks,
             tasks,
             upcomingDays,
@@ -764,8 +909,12 @@ export function App() {
     const calendarInteractionMode = isMobileLayout ? "mobile" : "desktop";
 
     const events = useMemo<EventInput[]>(() => {
-        return mapTasksToCalendarEvents(calendarTasks, categoryColorById);
-    }, [calendarTasks, categoryColorById]);
+        return mapTasksToCalendarEvents(
+            calendarTasks,
+            categoryColorById,
+            effectiveTimezone,
+        );
+    }, [calendarTasks, categoryColorById, effectiveTimezone]);
     const mobileMonthPreviewTasks = useMemo(() => {
         if (!mobileMonthPreviewDate) {
             return [];
@@ -777,13 +926,15 @@ export function App() {
                     return false;
                 }
 
-                return isSameLocalDay(
-                    parseTaskDate(task.scheduled_start),
-                    mobileMonthPreviewDate,
+                return (
+                    getTimezoneDateKey(
+                        parseTaskDate(task.scheduled_start),
+                        effectiveTimezone,
+                    ) === getCalendarDateKey(mobileMonthPreviewDate)
                 );
             })
             .sort(compareTasksByScheduledStart);
-    }, [calendarTasks, mobileMonthPreviewDate]);
+    }, [calendarTasks, effectiveTimezone, mobileMonthPreviewDate]);
     const calendarSlotMinTime = isFullDayTimelineVisible
         ? "00:00:00"
         : `${workingHours.start}:00`;
@@ -818,6 +969,29 @@ export function App() {
                 void updateSettings({
                     week_start: value,
                 }).catch(() => undefined);
+            }
+        },
+        [authToken],
+    );
+    const handleTimezoneChange = useCallback(
+        async (timezone: string | null) => {
+            if (!authToken) {
+                return;
+            }
+
+            setIsTimezoneSaving(true);
+            setTimezoneError(null);
+            try {
+                const updatedUser = await updateTimezone({ timezone });
+                setCurrentUser(updatedUser);
+            } catch (error) {
+                setTimezoneError(
+                    error instanceof Error
+                        ? error.message
+                        : "Unable to update time zone",
+                );
+            } finally {
+                setIsTimezoneSaving(false);
             }
         },
         [authToken],
@@ -1129,6 +1303,7 @@ export function App() {
 
         const recurrenceState = parseRecurrenceRule(
             selectedTask.recurrence_rule,
+            effectiveTimezone,
         );
 
         setEditState({
@@ -1137,8 +1312,14 @@ export function App() {
             scheduled_start:
                 Boolean(selectedTask.all_day) && selectedTask.scheduled_start
                     ? toAllDayCalendarDate(selectedTask.scheduled_start)
-                    : toDateTimeLocalValue(selectedTask.scheduled_start),
-            scheduled_end: toDateTimeLocalValue(selectedTask.scheduled_end),
+                    : toDateTimeLocalValue(
+                          selectedTask.scheduled_start,
+                          effectiveTimezone,
+                      ),
+            scheduled_end: toDateTimeLocalValue(
+                selectedTask.scheduled_end,
+                effectiveTimezone,
+            ),
             completed: selectedTask.completed,
             list_id: selectedTask.list_id ?? "",
             recurrence_frequency: recurrenceState.frequency,
@@ -1153,7 +1334,7 @@ export function App() {
         });
         setEditAccordionSection(getInitialEditAccordionSection(selectedTask));
         editStateSyncTaskIdRef.current = selectedTask.id;
-    }, [detailPanelMode, selectedTask]);
+    }, [detailPanelMode, effectiveTimezone, selectedTask]);
 
     const refreshTasks = useCallback(async (options?: { silent?: boolean }) => {
         setTaskState((current) => ({
@@ -1808,9 +1989,17 @@ export function App() {
             setCalendarDate(
                 calendarRef.current?.getApi().getDate() ?? dateInfo.start,
             );
+            setIsTodayInCalendarView(
+                isDateWithinCalendarRange(
+                    new Date(),
+                    dateInfo.start,
+                    dateInfo.end,
+                    effectiveTimezone,
+                ),
+            );
             void refreshTasks();
         },
-        [refreshTasks],
+        [effectiveTimezone, refreshTasks],
     );
 
     const reloadTasks = useCallback(() => {
@@ -2204,7 +2393,7 @@ export function App() {
     const toggleMonthYearPicker = useCallback(() => {
         setIsMonthYearPickerOpen((current) => {
             if (!current) {
-                setMonthYearPickerYear(calendarDate.getFullYear());
+                setMonthYearPickerYear(calendarDate.getUTCFullYear());
             }
             return !current;
         });
@@ -2212,14 +2401,12 @@ export function App() {
 
     const selectCalendarMonth = useCallback(
         (monthIndex: number) => {
-            const nextDate = new Date(calendarDate);
-            nextDate.setDate(1);
-            nextDate.setFullYear(monthYearPickerYear, monthIndex, 1);
+            const nextDate = new Date(Date.UTC(monthYearPickerYear, monthIndex, 1));
             startCalendarTransition("today");
             calendarRef.current?.getApi().gotoDate(nextDate);
             setIsMonthYearPickerOpen(false);
         },
-        [calendarDate, monthYearPickerYear, startCalendarTransition],
+        [monthYearPickerYear, startCalendarTransition],
     );
 
     const handleEventDrop = useCallback(
@@ -2232,7 +2419,11 @@ export function App() {
             const task = tasksRef.current.find(
                 (item) => item.id === dropInfo.event.id,
             );
-            const updates = getCalendarEventScheduleUpdate(dropInfo.event, task);
+            const updates = getCalendarEventScheduleUpdate(
+                dropInfo.event,
+                task,
+                effectiveTimezone,
+            );
             clearUndoState();
 
             if (task && shouldPromptRecurringTaskEdit(task, updates)) {
@@ -2273,6 +2464,7 @@ export function App() {
         [
             clearUndoState,
             isMobileLayout,
+            effectiveTimezone,
             reloadTasks,
             showTaskSnackbarMessage,
             showTaskUndo,
@@ -2289,7 +2481,11 @@ export function App() {
             const task = tasksRef.current.find(
                 (item) => item.id === resizeInfo.event.id,
             );
-            const updates = getCalendarEventScheduleUpdate(resizeInfo.event);
+            const updates = getCalendarEventScheduleUpdate(
+                resizeInfo.event,
+                undefined,
+                effectiveTimezone,
+            );
             clearUndoState();
 
             if (task && shouldPromptRecurringTaskEdit(task, updates)) {
@@ -2330,6 +2526,7 @@ export function App() {
         [
             clearUndoState,
             isMobileLayout,
+            effectiveTimezone,
             reloadTasks,
             showTaskSnackbarMessage,
             showTaskUndo,
@@ -2354,8 +2551,8 @@ export function App() {
             setFormState({
                 ...initialFormState,
                 list_id: selectedListIdForForms,
-                scheduled_start: dateToDateTimeLocalValue(start),
-                scheduled_end: dateToDateTimeLocalValue(end),
+                scheduled_start: calendarDateToDateTimeLocalValue(start),
+                scheduled_end: calendarDateToDateTimeLocalValue(end),
             });
             window.setTimeout(() => {
                 createFormRef.current?.scrollIntoView?.({
@@ -2386,7 +2583,7 @@ export function App() {
             setFormState({
                 ...initialFormState,
                 list_id: selectedListIdForForms,
-                scheduled_start: dateToDateInputValue(date),
+                scheduled_start: calendarDateToDateInputValue(date),
                 scheduled_end: "",
             });
             window.setTimeout(() => {
@@ -2697,14 +2894,14 @@ export function App() {
             return (
                 <span className="mobile-week-day-header">
                     <span className="mobile-week-day-label">
-                        {new Intl.DateTimeFormat(undefined, {
+                        {formatCalendarWallClockDate(dayHeaderInfo.date, {
                             weekday: "short",
-                        }).format(dayHeaderInfo.date)}
+                        })}
                     </span>
                     <span className="mobile-week-date-label">
-                        {new Intl.DateTimeFormat(undefined, {
+                        {formatCalendarWallClockDate(dayHeaderInfo.date, {
                             day: "2-digit",
-                        }).format(dayHeaderInfo.date)}
+                        })}
                     </span>
                 </span>
             );
@@ -2714,9 +2911,10 @@ export function App() {
 
     const mobileCalendarPeriodLabel = useMemo(
         () =>
-            `${calendarDate.getFullYear()} ${new Intl.DateTimeFormat(undefined, {
-                month: "short",
-            }).format(calendarDate)}`,
+            `${calendarDate.getUTCFullYear()} ${formatCalendarWallClockDate(
+                calendarDate,
+                { month: "short" },
+            )}`,
         [calendarDate],
     );
 
@@ -2730,7 +2928,7 @@ export function App() {
                 return slotLabelInfo.text;
             }
 
-            return String(slotLabelInfo.date.getHours()).padStart(2, "0");
+            return String(slotLabelInfo.date.getUTCHours()).padStart(2, "0");
         },
         [isMobileLayout],
     );
@@ -2775,6 +2973,13 @@ export function App() {
                                     : "calendar-task-title task-title"
                             }
                         >
+                            <TaskIndicators
+                                task={task}
+                                categoryColor={taskCategoryColor(
+                                    task,
+                                    categoryColorById,
+                                )}
+                            />
                             {task.title}
                         </span>
                     </div>
@@ -2810,12 +3015,24 @@ export function App() {
                         animate={{ opacity: task.completed ? 0.72 : 1 }}
                         transition={completionTransition}
                     >
+                        <TaskIndicators
+                            task={task}
+                            categoryColor={taskCategoryColor(
+                                task,
+                                categoryColorById,
+                            )}
+                        />
                         {task.title}
                     </motion.span>
                 </div>
             );
         },
-        [completionTransition, handleCheckboxChange, isMobileLayout],
+        [
+            categoryColorById,
+            completionTransition,
+            handleCheckboxChange,
+            isMobileLayout,
+        ],
     );
 
     const handleEventClick = useCallback((clickInfo: EventClickArg) => {
@@ -3183,7 +3400,11 @@ export function App() {
                 return;
             }
 
-            const updates = getCalendarDropScheduleUpdate(task, dropInfo);
+            const updates = getCalendarDropScheduleUpdate(
+                task,
+                dropInfo,
+                effectiveTimezone,
+            );
 
             if (shouldPromptRecurringTaskEdit(task, updates)) {
                 setPendingTaskEdit({
@@ -3221,6 +3442,7 @@ export function App() {
         },
         [
             endScheduleDragHighlight,
+            effectiveTimezone,
             isMobileLayout,
             refreshTasks,
             replaceTaskInState,
@@ -3361,6 +3583,7 @@ export function App() {
 
         const dateOnlyScheduledStart = getDateOnlyScheduledStartIso(
             formState.scheduled_start,
+            effectiveTimezone,
         );
         const isDateOnlyTask =
             Boolean(dateOnlyScheduledStart) && !formState.scheduled_end;
@@ -3405,6 +3628,7 @@ export function App() {
             formState.recurrence_frequency,
             formState.recurrence_until,
             formState.scheduled_start,
+            effectiveTimezone,
         );
         if (recurrenceUntilError) {
             setFormError(recurrenceUntilError);
@@ -3425,13 +3649,17 @@ export function App() {
                 notes: formState.notes.trim() || null,
                 scheduled_start: isDateOnlyTask
                     ? dateOnlyScheduledStart
-                    : toIsoOrNull(formState.scheduled_start),
+                    : toIsoOrNull(
+                          formState.scheduled_start,
+                          effectiveTimezone,
+                      ),
                 scheduled_end: isDateOnlyTask
                     ? null
-                    : toIsoOrNull(formState.scheduled_end),
+                    : toIsoOrNull(formState.scheduled_end, effectiveTimezone),
                 all_day: isDateOnlyTask,
                 due_at: null,
-                recurrence_rule: buildRecurrenceRule(formState),
+                timezone: effectiveTimezone,
+                recurrence_rule: buildRecurrenceRule(formState, effectiveTimezone),
                 notification_enabled: notificationSettings.enabled,
                 notification_offset_minutes:
                     notificationSettings.offsetMinutes,
@@ -3510,6 +3738,7 @@ export function App() {
 
         const dateOnlyScheduledStart = getDateOnlyScheduledStartIso(
             editState.scheduled_start,
+            effectiveTimezone,
         );
         const isDateOnlyTask =
             Boolean(dateOnlyScheduledStart) && !editState.scheduled_end;
@@ -3554,13 +3783,18 @@ export function App() {
             editState.recurrence_frequency,
             editState.recurrence_until,
             editState.scheduled_start,
+            effectiveTimezone,
         );
         if (recurrenceUntilError) {
             setFormError(recurrenceUntilError);
             return;
         }
 
-        const updates = buildTaskUpdates(selectedTask, editState);
+        const updates = buildTaskUpdates(
+            selectedTask,
+            editState,
+            effectiveTimezone,
+        );
         if (Object.keys(updates).length === 0) {
             closeDetailPanel();
             return;
@@ -4292,6 +4526,39 @@ export function App() {
             mobileQuickActionTask.scheduled_start &&
             mobileQuickActionTask.scheduled_end,
     );
+    const timezoneOptions = [
+        ...new Set([browserTimezone, ...commonTimezoneOptions]),
+    ].sort(compareTimezonesByUtc);
+
+    useEffect(() => {
+        if (!isTimezoneMenuOpen) {
+            return;
+        }
+
+        const handlePointerDown = (event: PointerEvent) => {
+            const target = event.target;
+            if (
+                target instanceof Node &&
+                timezoneDropdownRef.current?.contains(target)
+            ) {
+                return;
+            }
+            setIsTimezoneMenuOpen(false);
+        };
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                setIsTimezoneMenuOpen(false);
+                timezoneDropdownTriggerRef.current?.focus();
+            }
+        };
+
+        document.addEventListener("pointerdown", handlePointerDown);
+        document.addEventListener("keydown", handleKeyDown);
+        return () => {
+            document.removeEventListener("pointerdown", handlePointerDown);
+            document.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [isTimezoneMenuOpen]);
 
     if (!authToken) {
         return (
@@ -5054,6 +5321,167 @@ export function App() {
                                                         }
                                                     />
                                                 </label>
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                    <div className="settings-list-section">
+                                        <p className="settings-list-section-title">
+                                            Time zone
+                                        </p>
+                                        <button
+                                            type="button"
+                                            className="settings-navigation-row preferences-summary-row"
+                                            aria-expanded={
+                                                expandedPreferenceSection ===
+                                                "timezone"
+                                            }
+                                            aria-controls="timezone-preference-editor"
+                                            onClick={() =>
+                                                setExpandedPreferenceSection(
+                                                    (current) =>
+                                                        current === "timezone"
+                                                            ? null
+                                                            : "timezone",
+                                                )
+                                            }
+                                        >
+                                            <span className="settings-navigation-row-copy">
+                                                <span className="settings-navigation-row-title">
+                                                    Time zone
+                                                </span>
+                                            </span>
+                                            <span className="preferences-summary-row-trailing">
+                                                <span className="preferences-summary-value">
+                                                    {effectiveTimezone}
+                                                </span>
+                                                <span
+                                                    className="settings-navigation-row-chevron"
+                                                    aria-hidden="true"
+                                                >
+                                                    ›
+                                                </span>
+                                            </span>
+                                        </button>
+                                        {expandedPreferenceSection ===
+                                        "timezone" ? (
+                                            <div
+                                                id="timezone-preference-editor"
+                                                className="preferences-inline-editor preferences-timezone-editor"
+                                            >
+                                                <div
+                                                    className="timezone-dropdown"
+                                                    ref={timezoneDropdownRef}
+                                                >
+                                                    <button
+                                                        ref={
+                                                            timezoneDropdownTriggerRef
+                                                        }
+                                                        type="button"
+                                                        className="timezone-dropdown-trigger"
+                                                        aria-label="Time zone"
+                                                        aria-haspopup="listbox"
+                                                        aria-expanded={
+                                                            isTimezoneMenuOpen
+                                                        }
+                                                        disabled={
+                                                            isTimezoneSaving
+                                                        }
+                                                        onClick={() =>
+                                                            setIsTimezoneMenuOpen(
+                                                                (current) =>
+                                                                    !current,
+                                                            )
+                                                        }
+                                                    >
+                                                        <span>
+                                                            {getTimezoneCity(
+                                                                effectiveTimezone,
+                                                            )}
+                                                        </span>
+                                                        <span>
+                                                            {formatTimezoneOffset(
+                                                                effectiveTimezone,
+                                                            )}
+                                                        </span>
+                                                        <span
+                                                            className="timezone-dropdown-chevron"
+                                                            aria-hidden="true"
+                                                        />
+                                                    </button>
+                                                    {isTimezoneMenuOpen ? (
+                                                        <div
+                                                            className="timezone-dropdown-menu"
+                                                            role="listbox"
+                                                            aria-label="Time zone options"
+                                                        >
+                                                            {timezoneOptions.map(
+                                                                (timezone) => (
+                                                                    <button
+                                                                        key={
+                                                                            timezone
+                                                                        }
+                                                                        type="button"
+                                                                        role="option"
+                                                                        aria-selected={
+                                                                            timezone ===
+                                                                            effectiveTimezone
+                                                                        }
+                                                                        className="timezone-dropdown-option"
+                                                                        onClick={() => {
+                                                                            setIsTimezoneMenuOpen(
+                                                                                false,
+                                                                            );
+                                                                            void handleTimezoneChange(
+                                                                                timezone,
+                                                                            );
+                                                                        }}
+                                                                    >
+                                                                        <span>
+                                                                            {getTimezoneCity(
+                                                                                timezone,
+                                                                            )}
+                                                                        </span>
+                                                                        <span>
+                                                                            {formatTimezoneOffset(
+                                                                                timezone,
+                                                                            )}
+                                                                        </span>
+                                                                    </button>
+                                                                ),
+                                                            )}
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    className="settings-action-button settings-action-button-neutral"
+                                                    disabled={
+                                                        isTimezoneSaving ||
+                                                        currentUser?.timezone ===
+                                                            browserTimezone
+                                                    }
+                                                    onClick={() =>
+                                                        void handleTimezoneChange(
+                                                            browserTimezone,
+                                                        )
+                                                    }
+                                                >
+                                                    {isTimezoneSaving
+                                                        ? "Saving..."
+                                                        : "Use browser time zone"}
+                                                </button>
+                                                {currentUser?.timezone == null && (
+                                                    <p className="muted">
+                                                        Detected from this browser
+                                                        until you choose a time
+                                                        zone.
+                                                    </p>
+                                                )}
+                                                {timezoneError && (
+                                                    <p className="form-error">
+                                                        {timezoneError}
+                                                    </p>
+                                                )}
                                             </div>
                                         ) : null}
                                     </div>
@@ -6389,7 +6817,10 @@ export function App() {
                                         />
                                         <ReminderComposer
                                             state={formState}
-                                            allDay={isAllDayFormTask(formState)}
+                                            allDay={isAllDayFormTask(
+                                                formState,
+                                                effectiveTimezone,
+                                            )}
                                             onChange={(updates) =>
                                                 setFormState({
                                                     ...formState,
@@ -6545,7 +6976,10 @@ export function App() {
                                         />
                                         <ReminderComposer
                                             state={editState}
-                                            allDay={isAllDayFormTask(editState)}
+                                            allDay={isAllDayFormTask(
+                                                editState,
+                                                effectiveTimezone,
+                                            )}
                                             onChange={(updates) =>
                                                 setEditState({
                                                     ...editState,
@@ -6683,7 +7117,7 @@ export function App() {
                                                               }
                                                             : undefined
                                                     }
-                                                    className={`task-row ${activeView === "unscheduled" ? "task-row--reorderable" : ""} ${!task.completed && isOverdueTask(task, new Date()) ? "task-row--overdue" : ""} ${selectedTaskId === task.id ? "selected" : ""}`}
+                                                            className={`task-row ${activeView === "unscheduled" ? "task-row--reorderable" : ""} ${!task.completed && isOverdueTask(task, new Date(), effectiveTimezone) ? "task-row--overdue" : ""} ${selectedTaskId === task.id ? "selected" : ""}`}
                                                     data-task-index={taskIndex}
                                                     style={{
                                                         borderLeftColor:
@@ -6840,11 +7274,19 @@ export function App() {
                                                                 completionTransition
                                                             }
                                                         >
+                                                            <TaskIndicators
+                                                                task={task}
+                                                                categoryColor={taskCategoryColor(
+                                                                    task,
+                                                                    categoryColorById,
+                                                                )}
+                                                            />
                                                             {task.title}
                                                         </motion.span>
                                                         <span className="task-meta">
                                                             {formatTaskMeta(
                                                                 task,
+                                                                effectiveTimezone,
                                                             )}
                                                         </span>
                                                     </span>
@@ -7172,7 +7614,18 @@ export function App() {
                         )}
                         <button
                             type="button"
-                            className="calendar-toolbar-button"
+                            className={`calendar-toolbar-button ${isTodayInCalendarView ? "" : "calendar-toolbar-button--today-outside"}`}
+                            aria-label="Today"
+                            aria-description={
+                                isTodayInCalendarView
+                                    ? "Go to today"
+                                    : "Today is outside the current view"
+                            }
+                            title={
+                                isTodayInCalendarView
+                                    ? "Go to today"
+                                    : "Today is outside the current view"
+                            }
                             onClick={goToToday}
                         >
                             Today
@@ -7191,10 +7644,10 @@ export function App() {
                                         aria-expanded={isMonthYearPickerOpen}
                                         onClick={toggleMonthYearPicker}
                                     >
-                                        {new Intl.DateTimeFormat(undefined, {
-                                            month: "long",
-                                            year: "numeric",
-                                        }).format(calendarDate)}
+                                        {formatCalendarWallClockDate(
+                                            calendarDate,
+                                            { month: "long", year: "numeric" },
+                                        )}
                                         <span aria-hidden="true">▼</span>
                                     </button>
                                     <AnimatePresence initial={false}>
@@ -7246,9 +7699,9 @@ export function App() {
                                                         (month) => {
                                                             const isSelected =
                                                                 monthYearPickerYear ===
-                                                                    calendarDate.getFullYear() &&
+                                                                    calendarDate.getUTCFullYear() &&
                                                                 month.monthIndex ===
-                                                                    calendarDate.getMonth();
+                                                                    calendarDate.getUTCMonth();
 
                                                             return (
                                                                 <button
@@ -7334,6 +7787,7 @@ export function App() {
                         plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
                         initialView={calendarView}
                         initialDate={calendarDate}
+                        timeZone={effectiveTimezone}
                         fixedMirrorParent={document.body}
                         headerToolbar={false}
                         firstDay={calendarFirstDay}
@@ -7429,7 +7883,14 @@ export function App() {
                         <div className="mobile-month-task-preview-header">
                             <h2>
                                 {mobileMonthPreviewDate
-                                    ? formatDateFromDate(mobileMonthPreviewDate)
+                                    ? formatCalendarWallClockDate(
+                                          mobileMonthPreviewDate,
+                                          {
+                                              month: "short",
+                                              day: "numeric",
+                                              year: "numeric",
+                                          },
+                                      )
                                     : "Select a day"}
                             </h2>
                             {mobileMonthPreviewDate && (
@@ -7518,10 +7979,20 @@ export function App() {
                                                     : "task-title"
                                             }
                                         >
+                                            <TaskIndicators
+                                                task={task}
+                                                categoryColor={taskCategoryColor(
+                                                    task,
+                                                    categoryColorById,
+                                                )}
+                                            />
                                             {task.title}
                                         </span>
                                         <span className="task-meta">
-                                            {formatTaskMeta(task)}
+                                            {formatTaskMeta(
+                                                task,
+                                                effectiveTimezone,
+                                            )}
                                         </span>
                                     </span>
                                 </button>
@@ -7549,6 +8020,7 @@ export function App() {
                                 <span>
                                     {formatQuickActionRange(
                                         mobileQuickActionTask,
+                                        effectiveTimezone,
                                     )}
                                 </span>
                             </span>
@@ -8658,6 +9130,7 @@ function LabeledSelect({
 function buildTaskUpdates(
     selectedTask: ScheduledTask,
     editState: EditFormState,
+    timezone: string,
 ): Parameters<typeof updateTask>[1] {
     const updates: Parameters<typeof updateTask>[1] = {};
     const title = editState.title.trim();
@@ -8665,16 +9138,17 @@ function buildTaskUpdates(
     const notes = editState.notes.trim() || null;
     const dateOnlyScheduledStart = getDateOnlyScheduledStartIso(
         editState.scheduled_start,
+        timezone,
     );
-    const isDateOnlyTask = isAllDayFormTask(editState);
+    const isDateOnlyTask = isAllDayFormTask(editState, timezone);
     const scheduledStart = isDateOnlyTask
         ? dateOnlyScheduledStart
-        : toIsoOrNull(editState.scheduled_start);
+        : toIsoOrNull(editState.scheduled_start, timezone);
     const scheduledEnd = isDateOnlyTask
         ? null
-        : toIsoOrNull(editState.scheduled_end);
+        : toIsoOrNull(editState.scheduled_end, timezone);
     const allDay = isDateOnlyTask;
-    const recurrenceRule = buildRecurrenceRule(editState);
+    const recurrenceRule = buildRecurrenceRule(editState, timezone);
     const notificationSettings = getNotificationSettings(editState, allDay);
     const notificationEnabled = notificationSettings.enabled;
     const notificationOffsetMinutes = notificationSettings.offsetMinutes;
@@ -8722,9 +9196,10 @@ function buildTaskUpdates(
 
 function isAllDayFormTask(
     state: Pick<TaskFormState, "scheduled_start" | "scheduled_end">,
+    timezone: string,
 ): boolean {
     return (
-        Boolean(getDateOnlyScheduledStartIso(state.scheduled_start)) &&
+        Boolean(getDateOnlyScheduledStartIso(state.scheduled_start, timezone)) &&
         !state.scheduled_end
     );
 }
@@ -9099,6 +9574,7 @@ function filterTasksForView(
     categoryVisibility: CategoryVisibilityState,
     upcomingDays: number,
     showCompletedTasks: boolean,
+    timezone: string,
 ): ScheduledTask[] {
     const now = new Date();
     const filteredTasks = tasks.filter((task) => {
@@ -9130,7 +9606,7 @@ function filterTasksForView(
         }
 
         if (activeView === "overdue") {
-            return isOverdueTask(task, now);
+            return isOverdueTask(task, now, timezone);
         }
 
         if (task.completed && !showCompletedTasks) {
@@ -9141,8 +9617,8 @@ function filterTasksForView(
 
         if (activeView === "today") {
             return taskDate
-                ? isSameLocalDay(parseTaskDate(taskDate), now) ||
-                      isOverdueTask(task, now)
+                ? isSameLocalDay(parseTaskDate(taskDate), now, timezone) ||
+                      isOverdueTask(task, now, timezone)
                 : false;
         }
 
@@ -9152,6 +9628,7 @@ function filterTasksForView(
                       parseTaskDate(taskDate),
                       now,
                       upcomingDays,
+                      timezone,
                   )
                 : false;
         }
@@ -9418,23 +9895,83 @@ function areStringArraysEqual(left: string[], right: string[]): boolean {
     );
 }
 
-function toIsoOrNull(value: string): string | null {
+function toIsoOrNull(value: string, timezone: string): string | null {
     return isCompleteDateTimeValue(value)
-        ? new Date(value).toISOString()
+        ? zonedDateTimeToIso(value, timezone)
         : null;
 }
 
-function toDateTimeLocalValue(value: string | null): string {
+function toDateTimeLocalValue(value: string | null, timezone: string): string {
     if (!value) {
         return "";
     }
 
-    return dateToDateTimeLocalValue(parseTaskDate(value));
+    return dateToDateTimeLocalValue(parseTaskDate(value), timezone);
 }
 
-function dateToDateTimeLocalValue(date: Date): string {
-    const offsetMs = date.getTimezoneOffset() * 60_000;
-    return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+function dateToDateTimeLocalValue(date: Date, timezone: string): string {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+    }).formatToParts(date);
+    const getPart = (type: string) =>
+        parts.find((part) => part.type === type)?.value ?? "00";
+    return `${getPart("year")}-${getPart("month")}-${getPart("day")}T${getPart("hour")}:${getPart("minute")}`;
+}
+
+function calendarDateToDateTimeLocalValue(date: Date): string {
+    const pad = (value: number) => String(value).padStart(2, "0");
+    return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}T${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`;
+}
+
+function calendarDateToDateInputValue(date: Date): string {
+    return calendarDateToDateTimeLocalValue(date).slice(0, 10);
+}
+
+function dateTimeToCalendarWallClock(value: string, timezone: string): string {
+    return dateToDateTimeLocalValue(parseTaskDate(value), timezone);
+}
+
+function getTimezoneOffsetMilliseconds(date: Date, timezone: string): number {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hourCycle: "h23",
+    }).formatToParts(date);
+    const getPart = (type: string) =>
+        Number(parts.find((part) => part.type === type)?.value ?? 0);
+    return (
+        Date.UTC(
+            getPart("year"),
+            getPart("month") - 1,
+            getPart("day"),
+            getPart("hour"),
+            getPart("minute"),
+            getPart("second"),
+        ) - date.getTime()
+    );
+}
+
+function zonedDateTimeToIso(value: string, timezone: string): string {
+    const [datePart, timePart] = value.split("T");
+    const [year, month, day] = datePart.split("-").map(Number);
+    const [hour, minute, second = 0] = timePart.split(":").map(Number);
+    const wallClockMs = Date.UTC(year, month - 1, day, hour, minute, second);
+    let utcMs = wallClockMs;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+        utcMs = wallClockMs - getTimezoneOffsetMilliseconds(new Date(utcMs), timezone);
+    }
+    return new Date(utcMs).toISOString();
 }
 
 function isValidTimeRange(start: string, end: string): boolean {
@@ -9445,55 +9982,80 @@ function isValidTimeRange(start: string, end: string): boolean {
     );
 }
 
-function isSameLocalDay(left: Date, right: Date): boolean {
-    return (
-        left.getFullYear() === right.getFullYear() &&
-        left.getMonth() === right.getMonth() &&
-        left.getDate() === right.getDate()
-    );
+function getTimezoneDateKey(value: Date, timezone: string): string {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).formatToParts(value);
+    const year = parts.find((part) => part.type === "year")?.value ?? "0000";
+    const month = parts.find((part) => part.type === "month")?.value ?? "01";
+    const day = parts.find((part) => part.type === "day")?.value ?? "01";
+    return `${year}-${month}-${day}`;
 }
 
-function isBeforeLocalDay(left: Date, right: Date): boolean {
-    const leftDay = new Date(left.getFullYear(), left.getMonth(), left.getDate());
-    const rightDay = new Date(
-        right.getFullYear(),
-        right.getMonth(),
-        right.getDate(),
-    );
-    return leftDay < rightDay;
+function addTimezoneDateKey(value: string, days: number): string {
+    const [year, month, day] = value.split("-").map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day + days));
+    return date.toISOString().slice(0, 10);
 }
 
-function isWithinUpcomingDays(value: Date, now: Date, days: number): boolean {
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const end = addLocalDays(start, Math.max(1, days));
-    return value >= start && value < end;
+function isSameLocalDay(left: Date, right: Date, timezone: string): boolean {
+    return getTimezoneDateKey(left, timezone) === getTimezoneDateKey(right, timezone);
 }
 
-function formatScheduledRange(task: ScheduledTask): string {
+function isBeforeLocalDay(left: Date, right: Date, timezone: string): boolean {
+    return getTimezoneDateKey(left, timezone) < getTimezoneDateKey(right, timezone);
+}
+
+function isWithinUpcomingDays(
+    value: Date,
+    now: Date,
+    days: number,
+    timezone: string,
+): boolean {
+    const start = getTimezoneDateKey(now, timezone);
+    const end = addTimezoneDateKey(start, Math.max(1, days));
+    const valueDate = getTimezoneDateKey(value, timezone);
+    return valueDate >= start && valueDate < end;
+}
+
+function formatScheduledRange(task: ScheduledTask, timezone: string): string {
     if (!task.scheduled_start) {
         return "";
     }
 
     if (task.all_day) {
-        return formatDateOnlyLabel(toAllDayCalendarDate(task.scheduled_start));
+        return formatDateOnlyLabel(
+            toAllDayCalendarDate(task.scheduled_start),
+            timezone,
+        );
     }
 
-    const start = formatDateTime(task.scheduled_start);
-    const end = task.scheduled_end ? formatDateTime(task.scheduled_end) : "";
+    const start = formatDateTime(task.scheduled_start, timezone);
+    const end = task.scheduled_end
+        ? formatDateTime(task.scheduled_end, timezone)
+        : "";
     return end ? `${start} - ${end}` : start;
 }
 
-function formatQuickActionRange(task: ScheduledTask): string {
+function formatQuickActionRange(task: ScheduledTask, timezone: string): string {
     if (!task.scheduled_start) {
         return "No scheduled time";
     }
 
     if (task.all_day) {
-        return formatDateOnlyLabel(toAllDayCalendarDate(task.scheduled_start));
+        return formatDateOnlyLabel(
+            toAllDayCalendarDate(task.scheduled_start),
+            timezone,
+        );
     }
 
-    const start = formatTimeOnly(task.scheduled_start);
-    const end = task.scheduled_end ? formatTimeOnly(task.scheduled_end) : "";
+    const start = formatTimeOnly(task.scheduled_start, timezone);
+    const end = task.scheduled_end
+        ? formatTimeOnly(task.scheduled_end, timezone)
+        : "";
     return end ? `${start}-${end}` : start;
 }
 
@@ -9507,17 +10069,20 @@ function canShortenQuickActionTask(task: ScheduledTask): boolean {
     return end.getTime() - start.getTime() > 15 * 60 * 1000;
 }
 
-function formatTaskMeta(task: ScheduledTask): string {
+function formatTaskMeta(task: ScheduledTask, timezone: string): string {
     const parts: string[] = [];
-    const scheduledRange = formatScheduledRange(task);
+    const scheduledRange = formatScheduledRange(task, timezone);
     if (scheduledRange) {
         parts.push(scheduledRange);
     }
     if (task.due_at) {
-        parts.push(`Due ${formatDateTime(task.due_at)}`);
+        parts.push(`Due ${formatDateTime(task.due_at, timezone)}`);
     }
 
-    const recurrenceLabel = formatRecurrenceRule(task.recurrence_rule);
+    const recurrenceLabel = formatRecurrenceRule(
+        task.recurrence_rule,
+        timezone,
+    );
     if (recurrenceLabel) {
         parts.push(recurrenceLabel);
     }
@@ -9525,12 +10090,15 @@ function formatTaskMeta(task: ScheduledTask): string {
     return parts.join(" • ");
 }
 
-function formatRecurrenceRule(recurrenceRule: string | null): string {
+function formatRecurrenceRule(
+    recurrenceRule: string | null,
+    timezone: string,
+): string {
     if (!recurrenceRule) {
         return "";
     }
 
-    const parsed = parseRecurrenceRule(recurrenceRule);
+    const parsed = parseRecurrenceRule(recurrenceRule, timezone);
     if (!parsed.frequency) {
         return "";
     }
@@ -9539,12 +10107,17 @@ function formatRecurrenceRule(recurrenceRule: string | null): string {
     const interval = Number.parseInt(parsed.interval, 10);
     const intervalLabel =
         interval === 1 ? frequencyLabel : `${frequencyLabel}s`;
-    const untilLabel = parsed.until ? ` until ${formatDate(parsed.until)}` : "";
+    const untilLabel = parsed.until
+        ? ` until ${formatDate(parsed.until, timezone)}`
+        : "";
 
     return `Repeats every ${interval} ${intervalLabel}${untilLabel}`;
 }
 
-function parseRecurrenceRule(recurrenceRule: string | null): {
+function parseRecurrenceRule(
+    recurrenceRule: string | null,
+    timezone: string,
+): {
     frequency: RecurrenceFrequency;
     interval: string;
     until: string;
@@ -9570,7 +10143,7 @@ function parseRecurrenceRule(recurrenceRule: string | null): {
     return {
         frequency: (parts.FREQ as RecurrenceFrequency) ?? "",
         interval: parts.INTERVAL ?? "1",
-        until: parts.UNTIL ? toDateInputValue(parts.UNTIL) : "",
+        until: parts.UNTIL ? toDateInputValue(parts.UNTIL, timezone) : "",
     };
 }
 
@@ -9578,7 +10151,7 @@ function buildRecurrenceRule(state: {
     recurrence_frequency: RecurrenceFrequency;
     recurrence_interval: string;
     recurrence_until: string;
-}): string | null {
+}, timezone: string): string | null {
     if (!state.recurrence_frequency) {
         return null;
     }
@@ -9594,7 +10167,9 @@ function buildRecurrenceRule(state: {
     ];
 
     if (state.recurrence_until) {
-        segments.push(`UNTIL=${endOfLocalDateToIso(state.recurrence_until)}`);
+        segments.push(
+            `UNTIL=${endOfLocalDateToIso(state.recurrence_until, timezone)}`,
+        );
     }
 
     return segments.join(";");
@@ -9604,12 +10179,16 @@ function validateRecurrenceUntil(
     recurrenceFrequency: RecurrenceFrequency,
     recurrenceUntil: string,
     scheduledStart: string,
+    timezone: string,
 ): string | null {
     if (!recurrenceFrequency || !recurrenceUntil || !scheduledStart) {
         return null;
     }
 
-    if (new Date(endOfLocalDateToIso(recurrenceUntil)) < new Date(scheduledStart)) {
+    if (
+        new Date(endOfLocalDateToIso(recurrenceUntil, timezone)) <
+        new Date(zonedDateTimeToIso(scheduledStart, timezone))
+    ) {
         return "Repeat until must be on or after the start date";
     }
 
@@ -9621,13 +10200,21 @@ function parsePositiveIntegerOrZero(value: string): number {
     return Number.isNaN(parsed) || parsed < 0 ? 0 : parsed;
 }
 
-function isOverdueTask(task: ScheduledTask, now: Date): boolean {
+function isOverdueTask(
+    task: ScheduledTask,
+    now: Date,
+    timezone: string,
+): boolean {
     if (task.completed) {
         return false;
     }
 
     if (task.all_day && task.scheduled_start) {
-        return isBeforeLocalDay(parseTaskDate(task.scheduled_start), now);
+        return isBeforeLocalDay(
+            parseTaskDate(task.scheduled_start),
+            now,
+            timezone,
+        );
     }
 
     if (task.scheduled_end) {
@@ -9637,46 +10224,53 @@ function isOverdueTask(task: ScheduledTask, now: Date): boolean {
     return task.due_at ? parseTaskDate(task.due_at) < now : false;
 }
 
-function formatDateTime(value: string): string {
+function formatDateTime(value: string, timezone: string): string {
     return new Intl.DateTimeFormat(undefined, {
         month: "short",
         day: "numeric",
         hour: "2-digit",
         minute: "2-digit",
         hour12: false,
+        timeZone: timezone,
     }).format(parseTaskDate(value));
 }
 
-function formatTimeOnly(value: string): string {
+function formatTimeOnly(value: string, timezone: string): string {
     return new Intl.DateTimeFormat(undefined, {
         hour: "2-digit",
         minute: "2-digit",
         hour12: false,
+        timeZone: timezone,
     }).format(parseTaskDate(value));
 }
 
-function formatDate(value: string): string {
+function formatDate(value: string, timezone: string): string {
     return new Intl.DateTimeFormat(undefined, {
         month: "short",
         day: "numeric",
         year: "numeric",
+        timeZone: timezone,
     }).format(parseTaskDate(value));
 }
 
-function formatDateOnlyLabel(value: string): string {
+function formatDateOnlyLabel(value: string, timezone: string): string {
+    void timezone;
     const [year, month, day] = value.split("-").map(Number);
     return new Intl.DateTimeFormat(undefined, {
         month: "short",
         day: "numeric",
         year: "numeric",
-    }).format(new Date(year, month - 1, day));
+        timeZone: "UTC",
+    }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 
-function formatDateFromDate(value: Date): string {
+function formatCalendarWallClockDate(
+    value: Date,
+    options: Intl.DateTimeFormatOptions,
+): string {
     return new Intl.DateTimeFormat(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
+        ...options,
+        timeZone: "UTC",
     }).format(value);
 }
 
@@ -9746,31 +10340,41 @@ function hasIncompleteDateTimeValue(value: string): boolean {
     return !isCompleteDateTimeValue(value);
 }
 
-function toDateInputValue(value: string): string {
+function toDateInputValue(value: string, timezone = getBrowserTimezone()): string {
     const date = parseTaskDate(value);
-    return dateToDateInputValue(date);
+    return getTimezoneDateKey(date, timezone);
 }
 
-function dateToDateInputValue(date: Date): string {
-    const offsetMs = date.getTimezoneOffset() * 60_000;
-    return new Date(date.getTime() - offsetMs).toISOString().slice(0, 10);
+function getCalendarDateKey(date: Date): string {
+    const pad = (value: number) => String(value).padStart(2, "0");
+    return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
 }
 
 function dateOnlyToApiDateTime(value: string): string {
     return `${value}T00:00:00`;
 }
 
-function getDateOnlyScheduledStartIso(value: string): string | null {
+function getDateOnlyScheduledStartIso(
+    value: string,
+    timezone: string,
+): string | null {
     const { datePart, timePart } = splitDateTimeInputValue(value);
-    return datePart && !timePart ? dateOnlyToApiDateTime(datePart) : null;
+    return datePart && !timePart
+        ? zonedDateTimeToIso(`${datePart}T00:00`, timezone)
+        : null;
 }
 
-function endOfLocalDateToIso(value: string): string {
-    const date = new Date(`${value}T23:59:59.999`);
-    return date.toISOString();
+function endOfLocalDateToIso(value: string, timezone: string): string {
+    return new Date(
+        zonedDateTimeToIso(`${value}T23:59:59`, timezone),
+    ).toISOString().replace(".000Z", ".999Z");
 }
 
-function getCalendarEventScheduleUpdate(event: EventApi, task?: ScheduledTask): {
+function getCalendarEventScheduleUpdate(
+    event: EventApi,
+    task: ScheduledTask | undefined,
+    timezone: string,
+): {
     scheduled_start: string | null;
     scheduled_end: string | null;
     all_day: boolean;
@@ -9783,7 +10387,7 @@ function getCalendarEventScheduleUpdate(event: EventApi, task?: ScheduledTask): 
     if (event.allDay) {
         return {
             scheduled_start: dateOnlyToApiDateTime(
-                dateToDateInputValue(event.start),
+                calendarDateToDateInputValue(event.start),
             ),
             scheduled_end: null,
             all_day: true,
@@ -9792,8 +10396,16 @@ function getCalendarEventScheduleUpdate(event: EventApi, task?: ScheduledTask): 
     }
 
     return {
-        scheduled_start: event.start.toISOString(),
-        scheduled_end: event.end?.toISOString() ?? null,
+        scheduled_start: zonedDateTimeToIso(
+            calendarDateToDateTimeLocalValue(event.start),
+            timezone,
+        ),
+        scheduled_end: event.end
+            ? zonedDateTimeToIso(
+                  calendarDateToDateTimeLocalValue(event.end),
+                  timezone,
+              )
+            : null,
         all_day: false,
         ...(task?.due_at ? { due_at: null } : {}),
     };
@@ -9802,6 +10414,7 @@ function getCalendarEventScheduleUpdate(event: EventApi, task?: ScheduledTask): 
 function getCalendarDropScheduleUpdate(
     task: ScheduledTask,
     dropInfo: DropArg,
+    timezone: string,
 ): {
     scheduled_start: string | null;
     scheduled_end: string | null;
@@ -9811,7 +10424,9 @@ function getCalendarDropScheduleUpdate(
     const start = dropInfo.date;
     if (dropInfo.allDay) {
         return {
-            scheduled_start: dateOnlyToApiDateTime(dateToDateInputValue(start)),
+            scheduled_start: dateOnlyToApiDateTime(
+                calendarDateToDateInputValue(start),
+            ),
             scheduled_end: null,
             all_day: true,
             ...(task.due_at ? { due_at: null } : {}),
@@ -9819,10 +10434,14 @@ function getCalendarDropScheduleUpdate(
     }
 
     const durationMinutes = getTaskDragDurationMinutes(task, dropInfo.allDay);
-    const end = new Date(start.getTime() + durationMinutes * 60_000);
+    const startValue = calendarDateToDateTimeLocalValue(start);
+    const startIso = zonedDateTimeToIso(startValue, timezone);
+    const end = new Date(
+        Date.parse(startIso) + durationMinutes * 60_000,
+    );
 
     return {
-        scheduled_start: start.toISOString(),
+        scheduled_start: startIso,
         scheduled_end: end.toISOString(),
         all_day: false,
         ...(task.due_at ? { due_at: null } : {}),
@@ -9893,18 +10512,44 @@ function toAllDayCalendarDate(value: string): string {
 
 function addCalendarDateDays(value: string, days: number): string {
     const [year, month, day] = value.split("-").map(Number);
-    const date = new Date(year, month - 1, day);
-    date.setDate(date.getDate() + days);
-    return dateToDateInputValue(date);
+    return new Date(Date.UTC(year, month - 1, day + days))
+        .toISOString()
+        .slice(0, 10);
+}
+
+function isDateWithinCalendarRange(
+    date: Date,
+    rangeStart: Date,
+    rangeEnd: Date | undefined,
+    timezone: string,
+): boolean {
+    if (!rangeEnd) {
+        return false;
+    }
+
+    const dateKey = getTimezoneDateKey(date, timezone);
+    return (
+        dateKey >= getCalendarDateKey(rangeStart) &&
+        dateKey < getCalendarDateKey(rangeEnd)
+    );
 }
 
 function mapTaskToCalendarEvent(
     task: ScheduledTask,
     categoryColorById: Map<string, string>,
+    timezone: string,
 ): EventInput {
     const color = taskCategoryColor(task, categoryColorById);
     const scheduledStart = task.scheduled_start;
     const allDay = Boolean(task.all_day);
+    const timedStart =
+        !allDay && scheduledStart
+            ? dateTimeToCalendarWallClock(scheduledStart, timezone)
+            : undefined;
+    const timedEnd =
+        !allDay && task.scheduled_end
+            ? dateTimeToCalendarWallClock(task.scheduled_end, timezone)
+            : undefined;
     const allDayStart =
         allDay && scheduledStart
             ? toAllDayCalendarDate(scheduledStart)
@@ -9917,7 +10562,7 @@ function mapTaskToCalendarEvent(
         id: task.id,
         title: task.title,
         start:
-            allDayStart ?? scheduledStart ?? undefined,
+            allDayStart ?? timedStart ?? undefined,
         end:
             allDay && !task.scheduled_end
                 ? allDayStart
@@ -9925,7 +10570,7 @@ function mapTaskToCalendarEvent(
                     : undefined
                 : allDay && task.scheduled_end
                   ? toAllDayCalendarDate(task.scheduled_end)
-                  : (task.scheduled_end ?? undefined),
+                  : (timedEnd ?? undefined),
         allDay,
         display: "block",
         editable: true,
@@ -9944,10 +10589,11 @@ function mapTaskToCalendarEvent(
 function mapTasksToCalendarEvents(
     tasks: ScheduledTask[],
     categoryColorById: Map<string, string>,
+    timezone: string,
 ): EventInput[] {
     return tasks
         .filter((task) => task.scheduled_start)
-        .map((task) => mapTaskToCalendarEvent(task, categoryColorById));
+        .map((task) => mapTaskToCalendarEvent(task, categoryColorById, timezone));
 }
 
 function readableTextColor(hexColor: string): string {
@@ -9956,6 +10602,15 @@ function readableTextColor(hexColor: string): string {
     const blue = Number.parseInt(hexColor.slice(5, 7), 16);
     const brightness = (red * 299 + green * 587 + blue * 114) / 1000;
     return brightness > 145 ? "#182026" : "#ffffff";
+}
+
+function complementaryColor(hexColor: string): string {
+    const red = Number.parseInt(hexColor.slice(1, 3), 16);
+    const green = Number.parseInt(hexColor.slice(3, 5), 16);
+    const blue = Number.parseInt(hexColor.slice(5, 7), 16);
+    return `#${[red, green, blue]
+        .map((channel) => (255 - channel).toString(16).padStart(2, "0"))
+        .join("")}`;
 }
 
 function withAlpha(hexColor: string, alpha: number): string {
