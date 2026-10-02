@@ -1,11 +1,17 @@
 import uuid
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import HTTPException, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.auth.schemas import AuthCredentials, ChangePasswordRequest, DeleteAccountRequest
+from app.auth.schemas import (
+    AuthCredentials,
+    ChangePasswordRequest,
+    DeleteAccountRequest,
+    UpdateTimezoneRequest,
+)
 from app.auth.security import create_access_token, hash_password, verify_password
 from app.models.app_settings import AppSettings
 from app.models.google_calendar import (
@@ -57,6 +63,37 @@ def authenticate_user(db: Session, credentials: AuthCredentials) -> str:
         )
 
     return create_access_token(str(user.id))
+
+
+def update_timezone(
+    db: Session,
+    *,
+    current_user: User,
+    data: UpdateTimezoneRequest,
+) -> User:
+    timezone = data.timezone.strip() if data.timezone else None
+    if timezone:
+        try:
+            ZoneInfo(timezone)
+        except ZoneInfoNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="timezone must be a valid IANA timezone",
+            ) from exc
+
+    user = db.get(User, current_user.id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user.timezone = timezone
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 def change_password(

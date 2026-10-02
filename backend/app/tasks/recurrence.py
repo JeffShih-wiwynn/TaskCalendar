@@ -4,10 +4,11 @@ import uuid
 from calendar import monthrange
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import HTTPException, status
 
-from app.core.timezone import ensure_aware_datetime
+from app.core.timezone import ensure_aware_datetime, get_app_timezone
 
 
 @dataclass(frozen=True)
@@ -92,6 +93,8 @@ def build_recurrence_payloads(task_data: dict) -> list[dict]:
             detail="Recurring tasks require scheduled_start",
         )
     scheduled_start = ensure_aware_datetime(scheduled_start)
+    recurrence_timezone = get_recurrence_timezone(task_data.get("timezone"))
+    local_next_start = scheduled_start.astimezone(recurrence_timezone)
 
     task_data = dict(task_data)
     task_data["scheduled_start"] = scheduled_start
@@ -115,7 +118,12 @@ def build_recurrence_payloads(task_data: dict) -> list[dict]:
     next_start = scheduled_start
 
     while True:
-        next_start = advance_datetime(next_start, spec.frequency, spec.interval)
+        local_next_start = advance_datetime(
+            local_next_start,
+            spec.frequency,
+            spec.interval,
+        )
+        next_start = local_next_start.astimezone(UTC)
         if next_start > horizon_end:
             break
 
@@ -127,6 +135,13 @@ def build_recurrence_payloads(task_data: dict) -> list[dict]:
         payloads.append(next_payload)
 
     return payloads
+
+
+def get_recurrence_timezone(timezone_name: str | None) -> ZoneInfo:
+    try:
+        return ZoneInfo(timezone_name or get_app_timezone().key)
+    except ZoneInfoNotFoundError:
+        return get_app_timezone()
 
 
 def advance_datetime(value: datetime, frequency: str, interval: int) -> datetime:

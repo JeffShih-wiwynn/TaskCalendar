@@ -15,8 +15,13 @@ jobs:
   playwright:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    strategy:
+      matrix:
+        timezone:
+          - UTC
+          - Asia/Taipei
     env:
-      TZ: Asia/Taipei
+      TZ: ${{ matrix.timezone }}
 
     steps:
       - name: Check out repository

@@ -55,6 +55,19 @@ Health:   http://127.0.0.1:8000/health
 DEV_HOST=<reachable-ip> ./scripts/dev.sh start
 ```
 
+For remote testing over this host's Tailscale network, use the Tailscale address
+for both the frontend URL and the API URL. The current Tailscale address is
+`100.64.0.1`:
+
+```sh
+./scripts/dev.sh stop
+DEV_HOST=100.64.0.1 ./scripts/dev.sh start
+```
+
+Then open `http://100.64.0.1:5173` from the testing device. Do not use the
+default `127.0.0.1` frontend configuration for a remote browser, because it
+would make the browser look for the API on the remote device itself.
+
 Local development writes only `frontend/.env.local`. The backend reads `backend/.env` directly. Use `backend/.env.example` and `frontend/.env.example` as the public templates.
 For local dev, `scripts/dev.sh` also injects local backend environment values such as `DATABASE_URL`, `APP_BASE_URL`, `FRONTEND_ORIGINS`, and JWT settings directly into the Uvicorn process.
 

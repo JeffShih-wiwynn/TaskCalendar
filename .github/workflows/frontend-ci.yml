@@ -7,8 +7,13 @@ on:
 jobs:
   frontend:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        timezone:
+          - UTC
+          - Asia/Taipei
     env:
-      TZ: Asia/Taipei
+      TZ: ${{ matrix.timezone }}
 
     defaults:
       run:

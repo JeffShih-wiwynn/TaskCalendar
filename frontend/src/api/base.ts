@@ -19,6 +19,7 @@ export const API_ROUTES = {
         login: "/auth/login",
         register: "/auth/register",
         me: "/auth/me",
+        timezone: "/auth/me/timezone",
         password: "/auth/password",
     },
     backup: {

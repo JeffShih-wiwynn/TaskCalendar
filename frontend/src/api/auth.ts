@@ -10,8 +10,13 @@ export type AuthUser = {
     id: string;
     username: string;
     is_admin: boolean;
+    timezone: string | null;
     created_at: string;
     updated_at: string;
+};
+
+export type UpdateTimezoneInput = {
+    timezone: string | null;
 };
 
 export type ChangePasswordInput = {
@@ -83,6 +88,16 @@ export async function register(credentials: AuthCredentials): Promise<AuthUser> 
 export async function getCurrentUser(): Promise<AuthUser> {
     return requestAuth<AuthUser>(API_ROUTES.auth.me, {
         headers: getAuthHeaders(),
+    });
+}
+
+export async function updateTimezone(
+    input: UpdateTimezoneInput,
+): Promise<AuthUser> {
+    return requestAuth<AuthUser>(API_ROUTES.auth.timezone, {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(input),
     });
 }
 

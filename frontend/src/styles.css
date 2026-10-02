@@ -23,6 +23,58 @@
   --micro-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.privacy-page {
+  box-sizing: border-box;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top, rgb(23 107 88 / 12%), transparent 34%),
+    var(--page-bg);
+}
+
+.privacy-card {
+  box-sizing: border-box;
+  width: min(100%, 720px);
+  padding: clamp(28px, 6vw, 56px);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--panel-bg);
+  box-shadow: 0 18px 44px var(--shadow);
+}
+
+.privacy-eyebrow {
+  margin: 0 0 12px;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.privacy-card h1 {
+  margin: 0 0 28px;
+  color: var(--text);
+  font-size: clamp(1.8rem, 5vw, 2.6rem);
+  line-height: 1.1;
+}
+
+.privacy-card p {
+  margin: 0 0 18px;
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+.privacy-card .privacy-updated {
+  margin-top: 32px;
+  margin-bottom: 0;
+  color: var(--subtle);
+  font-size: 0.9rem;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -604,6 +656,97 @@ body {
 
 .preferences-inline-editor {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.preferences-timezone-editor {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.timezone-dropdown {
+  position: relative;
+  min-width: 0;
+}
+
+.timezone-dropdown-trigger,
+.timezone-dropdown-option {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+.timezone-dropdown-trigger {
+  grid-template-columns: minmax(0, 1fr) auto 18px;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  padding: 9px 38px 9px 10px;
+  background: var(--panel-bg);
+  cursor: pointer;
+}
+
+.timezone-dropdown-trigger > span:nth-child(2),
+.timezone-dropdown-option > span:nth-child(2) {
+  white-space: nowrap;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.timezone-dropdown-chevron {
+  position: absolute;
+  right: 12px;
+  width: 8px;
+  height: 8px;
+  color: var(--muted);
+  pointer-events: none;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+
+.timezone-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  z-index: 30;
+  max-height: 280px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-bg);
+  box-shadow: 0 14px 30px rgb(24 32 38 / 24%);
+}
+
+.timezone-dropdown-option {
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 0;
+  background: var(--panel-bg);
+  cursor: pointer;
+}
+
+.timezone-dropdown-option:hover,
+.timezone-dropdown-option:focus-visible,
+.timezone-dropdown-option[aria-selected="true"] {
+  background: color-mix(in srgb, var(--panel-bg) 88%, var(--accent) 12%);
+}
+
+.timezone-dropdown-option[aria-selected="true"] {
+  color: color-mix(in srgb, var(--accent) 76%, var(--text));
+}
+
+.preferences-timezone-editor .settings-action-button {
+  width: 100%;
+  min-height: 44px;
+  white-space: normal;
 }
 
 .preferences-inline-editor label {
@@ -1989,6 +2132,28 @@ h2 {
     opacity var(--micro-duration-medium) ease;
 }
 
+.task-indicators {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-right: 5px;
+  vertical-align: -0.12em;
+  color: var(--subtle);
+  text-decoration: none;
+}
+
+.task-indicator {
+  display: inline-flex;
+  width: 0.9em;
+  height: 0.9em;
+  flex: 0 0 auto;
+}
+
+.task-indicator svg {
+  width: 100%;
+  height: 100%;
+}
+
 .task-title::after {
   content: "";
   position: absolute;
@@ -3347,6 +3512,36 @@ input[type="checkbox"].task-checkbox:checked {
   border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
   color: var(--accent);
   background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
+}
+
+.calendar-toolbar-button--today-outside {
+  border-color: #d97706;
+  color: #9a4f00;
+  background: #fff4d6;
+  box-shadow: inset 0 0 0 1px rgb(217 119 6 / 14%);
+}
+
+.calendar-toolbar-button--today-outside:hover,
+.calendar-toolbar-button--today-outside:focus-visible {
+  border-color: #b45309;
+  color: #7c3f00;
+  background: #ffedb3;
+  box-shadow: inset 0 0 0 1px rgb(217 119 6 / 18%);
+}
+
+.app-shell.dark .calendar-toolbar-button--today-outside {
+  border-color: color-mix(in srgb, var(--warning) 70%, var(--border));
+  color: color-mix(in srgb, var(--warning) 88%, #ffffff 12%);
+  background: color-mix(in srgb, var(--warning) 16%, var(--panel-bg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warning) 18%, transparent);
+}
+
+.app-shell.dark .calendar-toolbar-button--today-outside:hover,
+.app-shell.dark .calendar-toolbar-button--today-outside:focus-visible {
+  border-color: color-mix(in srgb, var(--warning) 86%, var(--border));
+  color: color-mix(in srgb, var(--warning) 94%, #ffffff 6%);
+  background: color-mix(in srgb, var(--warning) 24%, var(--panel-bg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warning) 24%, transparent);
 }
 
 .settings-toggle:hover:not(:disabled),

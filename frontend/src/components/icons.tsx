@@ -153,3 +153,33 @@ export function IconClose() {
         </svg>
     );
 }
+
+export function IconAlarm() {
+    return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+                d="M7 4 4 6m13-2 3 2M12 7a6 6 0 0 0-6 6v3h12v-3a6 6 0 0 0-6-6Zm-3 9-2 3m8-3 2 3M12 10v3l2 1"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.8"
+            />
+        </svg>
+    );
+}
+
+export function IconRepeat() {
+    return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+                d="M8 5a7 7 0 0 1 10.5 2L20 9.5M20 9.5v-4M20 9.5h-4M16 19a7 7 0 0 1-10.5-2L4 14.5M4 14.5v4M4 14.5h4"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.8"
+            />
+        </svg>
+    );
+}

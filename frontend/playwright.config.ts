@@ -23,7 +23,7 @@ export default defineConfig({
       DEV_HOST: e2eHost,
     },
     url: `${baseURL}/`,
-    reuseExistingServer: false,
+    reuseExistingServer: true,
     timeout: 120_000,
   },
   projects: [
@@ -34,6 +34,15 @@ export default defineConfig({
         baseURL,
         viewport: { width: 1440, height: 900 },
       },
+      testMatch: /calendar\.spec\.ts/,
+    },
+    {
+      name: 'mobile-chromium',
+      use: {
+        ...devices['Pixel 7'],
+        baseURL,
+      },
+      testMatch: /mobile\.spec\.ts/,
     },
   ],
 });

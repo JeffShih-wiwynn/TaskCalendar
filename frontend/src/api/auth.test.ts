@@ -51,6 +51,41 @@ describe("auth api", () => {
         );
     });
 
+    it("updates the current user's time zone with the bearer token", async () => {
+        window.localStorage.setItem("calendar-auth-token", "test-token");
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () =>
+                new Response(
+                    JSON.stringify({
+                        id: "user-id",
+                        username: "alice",
+                        is_admin: false,
+                        timezone: "Asia/Taipei",
+                        created_at: "2026-01-01T00:00:00Z",
+                        updated_at: "2026-01-01T00:00:00Z",
+                    }),
+                    {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" },
+                    },
+                ),
+            ) as typeof fetch,
+        );
+
+        await expect(
+            authApi.updateTimezone({ timezone: "Asia/Taipei" }),
+        ).resolves.toMatchObject({ timezone: "Asia/Taipei" });
+
+        expect(fetch).toHaveBeenCalledWith(
+            "/auth/me/timezone",
+            expect.objectContaining({
+                method: "PATCH",
+                body: JSON.stringify({ timezone: "Asia/Taipei" }),
+            }),
+        );
+    });
+
     it("sends an account deletion request with the bearer token", async () => {
         window.localStorage.setItem("calendar-auth-token", "test-token");
         vi.stubGlobal(
