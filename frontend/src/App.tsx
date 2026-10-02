@@ -59,6 +59,7 @@ import {
     register,
     type AuthUser,
 } from "./api/auth";
+import { AUTH_SESSION_EXPIRED_EVENT } from "./api/base";
 import {
     downloadBackupPayload,
     fetchBackupExport,
@@ -912,6 +913,31 @@ export function App() {
         setAuthError("Session expired. Please log in again.");
         resetAppData();
     }, [resetAppData]);
+
+    useEffect(() => {
+        const handleSessionExpired = (event: Event) => {
+            const detail = (event as CustomEvent<{ kind?: string }>).detail;
+
+            if (detail?.kind === "cloudflare-access") {
+                window.location.reload();
+                return;
+            }
+
+            handleAuthExpired();
+        };
+
+        window.addEventListener(
+            AUTH_SESSION_EXPIRED_EVENT,
+            handleSessionExpired,
+        );
+
+        return () => {
+            window.removeEventListener(
+                AUTH_SESSION_EXPIRED_EVENT,
+                handleSessionExpired,
+            );
+        };
+    }, [handleAuthExpired]);
 
     const handleLogout = useCallback(() => {
         clearStoredAuthToken();

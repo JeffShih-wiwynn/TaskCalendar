@@ -79,11 +79,11 @@ Future cleanup targets:
 
 ## Deployment Assumptions
 
-- Docker Compose is supported for local PostgreSQL startup and production deployment.
+- Docker/Podman images are supported for local PostgreSQL startup, image builds, and container deployment.
 - Local development without Docker should continue to work.
 - Ubuntu deployment is a target environment.
 - Environment-specific values such as the database URL, frontend origins, JWT secret, and Google OAuth credentials are configurable through environment variables.
-- In Docker deployment, only the web container is exposed on the host; backend, worker, and PostgreSQL stay internal.
+- In production Quadlet deployment, only the web container is exposed on the host; backend, worker, and PostgreSQL stay internal.
 - The backend process also starts the in-process notification worker thread when it runs normally.
 - The Google Calendar mirror worker is a separate process; the backend notification worker handles Discord reminders and daily todo digest scanning/delivery.
 

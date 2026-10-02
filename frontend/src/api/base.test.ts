@@ -60,6 +60,75 @@ describe("parseJsonResponse", () => {
 });
 
 describe("requestJson", () => {
+    it("notifies the app when an authenticated request returns 401", async () => {
+        const events: CustomEvent[] = [];
+        const handleEvent = (event: Event) => {
+            events.push(event as CustomEvent);
+        };
+        window.addEventListener("calendar-auth-session-expired", handleEvent);
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () =>
+                new Response(JSON.stringify({ detail: "Expired" }), {
+                    status: 401,
+                    headers: { "Content-Type": "application/json" },
+                }),
+            ),
+        );
+
+        await expect(
+            baseApi.requestJson(
+                "/api/tasks",
+                {},
+                {
+                    createUnauthorizedError: (message) => new Error(message),
+                    notifyUnauthorized: true,
+                },
+            ),
+        ).rejects.toThrow("Expired");
+
+        window.removeEventListener("calendar-auth-session-expired", handleEvent);
+        expect(events).toHaveLength(1);
+        expect(events[0].detail).toEqual({
+            kind: "application",
+            path: "/api/tasks",
+        });
+    });
+
+    it("recognizes a Cloudflare Access login redirect", async () => {
+        const events: CustomEvent[] = [];
+        const handleEvent = (event: Event) => {
+            events.push(event as CustomEvent);
+        };
+        window.addEventListener("calendar-auth-session-expired", handleEvent);
+        const accessResponse = new Response("<html>login</html>", {
+            status: 200,
+            headers: { "Content-Type": "text/html" },
+        });
+        Object.defineProperties(accessResponse, {
+            redirected: { value: true },
+            url: {
+                value: "https://team.cloudflareaccess.com/cdn-cgi/access/login",
+            },
+        });
+        vi.stubGlobal("fetch", vi.fn(async () => accessResponse));
+
+        await expect(
+            baseApi.requestJson(
+                "/api/tasks",
+                {},
+                { notifyUnauthorized: true },
+            ),
+        ).rejects.toThrow("Cloudflare Access session expired");
+
+        window.removeEventListener("calendar-auth-session-expired", handleEvent);
+        expect(events).toHaveLength(1);
+        expect(events[0].detail).toEqual({
+            kind: "cloudflare-access",
+            path: "/api/tasks",
+        });
+    });
+
     it("adds JSON content type by default and parses JSON responses", async () => {
         const fetchMock = vi.fn(async () =>
             new Response(JSON.stringify({ ok: true }), {
