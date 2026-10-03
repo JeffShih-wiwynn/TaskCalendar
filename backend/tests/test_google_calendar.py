@@ -9,7 +9,7 @@ import pytest
 from cryptography.fernet import Fernet
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 from starlette.requests import Request
@@ -46,12 +46,14 @@ from app.google_calendar.worker import process_available_jobs, process_claimed_j
 from app.main import create_app
 from app.models.google_calendar import (
     GoogleCalendarConnection,
+    GoogleCategoryCalendar,
     GoogleEventMirror,
     GoogleOAuthState,
     GoogleSyncOutbox,
 )
 from app.models.scheduled_task import ScheduledTask
 from app.models.user import User
+from app.models.task_list import TaskList
 from app.task_lists import service as task_list_service
 from app.task_lists.schemas import TaskListCreate, TaskListUpdate
 from app.tasks import service as task_service
@@ -109,9 +111,47 @@ def create_task(
     all_day: bool = False,
     completed: bool = False,
     notes: str | None = None,
+    list_id=None,
 ) -> ScheduledTask:
+    if list_id is None:
+        task_list = db_session.scalar(
+            select(TaskList).where(
+                TaskList.user_id == user.id,
+                TaskList.name == "Google test category",
+            )
+        )
+        if task_list is None:
+            task_list = TaskList(
+                user_id=user.id,
+                name="Google test category",
+                color="#2f80ed",
+                google_sync_enabled=True,
+            )
+            db_session.add(task_list)
+            db_session.flush()
+        list_id = task_list.id
+        connection = db_session.scalar(
+            select(GoogleCalendarConnection).where(
+                GoogleCalendarConnection.user_id == user.id,
+            )
+        )
+        if connection is not None and db_session.scalar(
+            select(GoogleCategoryCalendar).where(
+                GoogleCategoryCalendar.user_id == user.id,
+                GoogleCategoryCalendar.task_list_id == task_list.id,
+            )
+        ) is None:
+            db_session.add(
+                GoogleCategoryCalendar(
+                    user_id=user.id,
+                    task_list_id=task_list.id,
+                    google_calendar_id=connection.google_calendar_id,
+                    google_calendar_summary=connection.google_calendar_summary,
+                )
+            )
     task = ScheduledTask(
         user_id=user.id,
+        list_id=list_id,
         title=title,
         completed=completed,
         scheduled_start=scheduled_start,
@@ -136,7 +176,7 @@ def connect_google_calendar(
     *,
     calendar_id: str = "mirror-calendar-id",
 ) -> GoogleCalendarConnection:
-    return service.upsert_connection(
+    connection = service.upsert_connection(
         db_session,
         user_id=user.id,
         refresh_token="refresh-token",
@@ -145,6 +185,47 @@ def connect_google_calendar(
             summary="TaskCalendar Mirror — Read Only",
         ),
     )
+    task_list = db_session.scalar(
+        select(TaskList).where(
+            TaskList.user_id == user.id,
+            TaskList.name == "Google test category",
+        )
+    )
+    if task_list is not None and db_session.scalar(
+        select(GoogleCategoryCalendar).where(
+            GoogleCategoryCalendar.user_id == user.id,
+            GoogleCategoryCalendar.task_list_id == task_list.id,
+        )
+    ) is None:
+        db_session.add(
+            GoogleCategoryCalendar(
+                user_id=user.id,
+                task_list_id=task_list.id,
+                google_calendar_id=calendar_id,
+                google_calendar_summary="TaskCalendar Mirror — Read Only",
+            )
+        )
+        db_session.commit()
+    return connection
+
+
+def google_test_category_id(db_session: Session, user: User):
+    task_list = db_session.scalar(
+        select(TaskList).where(
+            TaskList.user_id == user.id,
+            TaskList.name == "Google test category",
+        )
+    )
+    if task_list is None:
+        task_list = TaskList(
+            user_id=user.id,
+            name="Google test category",
+            color="#2f80ed",
+            google_sync_enabled=True,
+        )
+        db_session.add(task_list)
+        db_session.commit()
+    return task_list.id
 
 
 class FakeGoogleClient:
@@ -153,6 +234,7 @@ class FakeGoogleClient:
         self.deleted_calendars = 0
         self.exchanged_codes: list[str] = []
         self.existing_calendar: GoogleCalendarResource | None = None
+        self.find_calendar_result: GoogleCalendarResource | None = None
         self.created_calendar = GoogleCalendarResource(
             id="mirror-calendar-id",
             summary="TaskCalendar Mirror — Read Only",
@@ -208,6 +290,15 @@ class FakeGoogleClient:
         if self.existing_calendar is None:
             return None
         return self.existing_calendar
+
+    def find_calendar_by_summary(
+        self,
+        *,
+        access_token: str,
+        summary: str,
+    ) -> GoogleCalendarResource | None:
+        assert access_token == "access-token"
+        return self.find_calendar_result
 
     def create_mirror_calendar(self, *, access_token: str) -> GoogleCalendarResource:
         if self.create_error is not None:
@@ -1710,6 +1801,93 @@ def test_sync_now_migrates_stale_mapping_to_current_calendar_without_duplicate(
     assert len(fake_client.created_event_payloads) == 1
 
 
+def test_sync_task_reuses_existing_same_name_category_calendar(
+    db_session: Session,
+) -> None:
+    user = create_user(db_session)
+    connect_google_calendar(db_session, user, calendar_id="mirror-calendar-id")
+    task = create_task(
+        db_session,
+        user,
+        title="Reuse category calendar",
+        scheduled_start=datetime.now(UTC) + timedelta(hours=1),
+        scheduled_end=datetime.now(UTC) + timedelta(hours=2),
+    )
+    db_session.query(GoogleCategoryCalendar).filter_by(
+        user_id=user.id,
+        task_list_id=task.list_id,
+    ).delete()
+    db_session.commit()
+
+    fake_client = FakeGoogleClient()
+    fake_client.find_calendar_result = GoogleCalendarResource(
+        id="existing-go-out-calendar",
+        summary="TaskCalendar — Google test category",
+    )
+
+    result = service.sync_task_now(
+        db_session,
+        user_id=user.id,
+        task_id=task.id,
+        client=fake_client,
+    )
+
+    mapping = db_session.scalar(
+        select(GoogleCategoryCalendar).where(
+            GoogleCategoryCalendar.user_id == user.id,
+            GoogleCategoryCalendar.task_list_id == task.list_id,
+        )
+    )
+    assert result["created_count"] == 1
+    assert mapping is not None
+    assert mapping.google_calendar_id == "existing-go-out-calendar"
+    assert fake_client.created_calendars == 0
+
+
+def test_category_mapping_persists_when_first_event_sync_fails(
+    db_session: Session,
+) -> None:
+    user = create_user(db_session)
+    connect_google_calendar(db_session, user, calendar_id="mirror-calendar-id")
+    task = create_task(
+        db_session,
+        user,
+        title="Persist category mapping",
+        scheduled_start=datetime.now(UTC) + timedelta(hours=1),
+        scheduled_end=datetime.now(UTC) + timedelta(hours=2),
+    )
+    db_session.query(GoogleCategoryCalendar).filter_by(
+        user_id=user.id,
+        task_list_id=task.list_id,
+    ).delete()
+    db_session.commit()
+
+    fake_client = FakeGoogleClient()
+    fake_client.created_calendar = GoogleCalendarResource(
+        id="new-category-calendar",
+        summary="TaskCalendar — Google test category",
+    )
+    fake_client.event_error = GoogleProviderError("rate limited", status_code=429)
+
+    with pytest.raises(GoogleProviderError):
+        service.sync_task_now(
+            db_session,
+            user_id=user.id,
+            task_id=task.id,
+            client=fake_client,
+        )
+
+    mapping = db_session.scalar(
+        select(GoogleCategoryCalendar).where(
+            GoogleCategoryCalendar.user_id == user.id,
+            GoogleCategoryCalendar.task_list_id == task.list_id,
+        )
+    )
+    assert mapping is not None
+    assert mapping.google_calendar_id == "new-category-calendar"
+    assert fake_client.created_calendars == 1
+
+
 def test_sync_now_cleans_stale_mapping_for_ineligible_task(
     db_session: Session,
 ) -> None:
@@ -2397,9 +2575,10 @@ def test_normal_task_mutation_job_is_processed_by_worker(
     connect_google_calendar(db_session, user)
     task = task_service.create_task(
         db_session,
-        ScheduledTaskCreate(
-            title="Automatic create",
-            scheduled_start=datetime.now(UTC) + timedelta(hours=1),
+            ScheduledTaskCreate(
+                title="Automatic create",
+                list_id=google_test_category_id(db_session, user),
+                scheduled_start=datetime.now(UTC) + timedelta(hours=1),
             scheduled_end=datetime.now(UTC) + timedelta(hours=2),
         ),
         user_id=user.id,
@@ -2425,9 +2604,10 @@ def test_completion_and_undo_jobs_delete_and_recreate_google_event(
     connect_google_calendar(db_session, user)
     task = task_service.create_task(
         db_session,
-        ScheduledTaskCreate(
-            title="Automatic completion",
-            scheduled_start=datetime.now(UTC) + timedelta(hours=1),
+            ScheduledTaskCreate(
+                title="Automatic completion",
+                list_id=google_test_category_id(db_session, user),
+                scheduled_start=datetime.now(UTC) + timedelta(hours=1),
             scheduled_end=datetime.now(UTC) + timedelta(hours=2),
         ),
         user_id=user.id,
@@ -3034,7 +3214,7 @@ def test_worker_logs_safe_failure_classification(
     assert "access-token-secret" not in record.message
 
 
-def test_worker_missing_mirror_calendar_marks_error(db_session: Session) -> None:
+def test_worker_uses_category_calendar_when_legacy_mirror_is_missing(db_session: Session) -> None:
     user = create_user(db_session)
     connect_google_calendar(db_session, user)
     task = create_task(
@@ -3055,9 +3235,8 @@ def test_worker_missing_mirror_calendar_marks_error(db_session: Session) -> None
     connection = service.get_connection(db_session, user_id=user.id)
 
     assert connection is not None
-    assert connection.status == "error"
-    assert job.status == "dead"
-    assert job.last_error == "Google mirror calendar is missing"
+    assert connection.status == "connected"
+    assert job.status == "done"
 
 
 def test_pending_job_count_is_status_scoped_per_user(db_session: Session) -> None:

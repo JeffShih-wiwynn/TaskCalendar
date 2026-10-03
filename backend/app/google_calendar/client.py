@@ -152,10 +152,56 @@ class GoogleCalendarClient:
             raise
         return parse_calendar_resource(response)
 
-    def create_mirror_calendar(self, *, access_token: str) -> GoogleCalendarResource:
+    def find_calendar_by_summary(
+        self,
+        *,
+        access_token: str,
+        summary: str,
+    ) -> GoogleCalendarResource | None:
+        """Find an existing app-created calendar before creating a duplicate."""
+        page_token: str | None = None
+        while True:
+            params = {
+                "maxResults": "250",
+                "showDeleted": "false",
+            }
+            if page_token:
+                params["pageToken"] = page_token
+            try:
+                response = get_json(
+                    f"{GOOGLE_CALENDAR_API_BASE_URL}/users/me/calendarList?{parse.urlencode(params)}",
+                    access_token=access_token,
+                )
+            except GoogleProviderError as exc:
+                # calendar.app.created can create and use app-owned calendars,
+                # but may not grant calendarList.list. Treat that as an
+                # unavailable lookup and let the caller create a new mapping.
+                if exc.status_code == status.HTTP_403_FORBIDDEN:
+                    return None
+                raise
+            items = response.get("items", [])
+            if isinstance(items, list):
+                for item in items:
+                    if not isinstance(item, dict) or item.get("summary") != summary:
+                        continue
+                    try:
+                        return parse_calendar_resource(item)
+                    except GoogleProviderError:
+                        continue
+            next_page_token = response.get("nextPageToken")
+            if not isinstance(next_page_token, str) or not next_page_token:
+                return None
+            page_token = next_page_token
+
+    def create_mirror_calendar(
+        self,
+        *,
+        access_token: str,
+        summary: str = MIRROR_CALENDAR_SUMMARY,
+    ) -> GoogleCalendarResource:
         response = post_json(
             f"{GOOGLE_CALENDAR_API_BASE_URL}/calendars",
-            json.dumps({"summary": MIRROR_CALENDAR_SUMMARY}).encode("utf-8"),
+            json.dumps({"summary": summary}).encode("utf-8"),
             headers={
                 "Authorization": f"Bearer {access_token}",
                 "Content-Type": "application/json",
@@ -248,9 +294,12 @@ class GoogleCalendarClient:
                 response_body = response.read()
                 content_type = response.headers.get("Content-Type", "")
         except error.HTTPError as exc:
+            response_body = exc.read().decode("utf-8", errors="replace")
             raise GoogleProviderError(
                 "Google Calendar request failed",
                 status_code=exc.code,
+                error_code=parse_google_error_code(response_body),
+                error_reason=parse_google_error_reason(response_body),
             ) from exc
         except error.URLError as exc:
             raise GoogleProviderError("Google Calendar request failed") from exc

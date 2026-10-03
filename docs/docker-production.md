@@ -60,7 +60,7 @@ bash ./scripts/docker-deploy.sh
 ```
 
 The deployment script reloads the user systemd manager and restarts the
-Quadlet-owned `calendar-web.service` and `calendar-worker.service`; their
+Quadlet-owned `calendar-backend.service`, `calendar-web.service`, and `calendar-worker.service`; their
 dependencies start automatically.
 
 Manual Compose command for a separate development or disposable environment:

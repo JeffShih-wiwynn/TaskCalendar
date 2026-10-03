@@ -4,12 +4,13 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.google_calendar import GoogleCategoryCalendar
     from app.models.scheduled_task import ScheduledTask
     from app.models.user import User
 
@@ -21,6 +22,7 @@ class TaskList(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
     name: Mapped[str] = mapped_column(String(255))
     color: Mapped[str] = mapped_column(String(7), default="#176b58")
+    google_sync_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
@@ -33,3 +35,7 @@ class TaskList(Base):
 
     user: Mapped["User"] = relationship(back_populates="task_lists")
     scheduled_tasks: Mapped[list["ScheduledTask"]] = relationship(back_populates="task_list")
+    google_calendar: Mapped["GoogleCategoryCalendar | None"] = relationship(
+        back_populates="task_list",
+        uselist=False,
+    )

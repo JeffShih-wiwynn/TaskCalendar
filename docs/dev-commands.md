@@ -175,7 +175,7 @@ Permanently delete local dev database data:
 `scripts/dev.sh` is the public dispatcher for local development commands. Its implementation is split under `scripts/dev/` into config, Compose, env, process, database, backend, and frontend helpers.
 It writes logs and PID files to `.calendar-dev/`.
 The dev stack uses the `calendar-dev` Compose project. On this host, production uses
-rootless Podman Quadlet units (`calendar-web.service`, `calendar-worker.service`, and
+rootless Podman Quadlet units (`calendar-backend.service`, `calendar-web.service`, `calendar-worker.service`, and
 their generated dependencies); Compose is retained for development and image builds.
 The start command monitors the backend and frontend processes and stops them on `Ctrl+C`.
 

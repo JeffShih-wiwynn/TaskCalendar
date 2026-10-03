@@ -193,6 +193,7 @@ const mocks = vi.hoisted(() => ({
             user_id: "user-1",
             name: "Work",
             color: "#2f80ed",
+            google_sync_enabled: false,
             created_at: "",
             updated_at: "",
         },
@@ -942,6 +943,7 @@ describe("App", () => {
                 user_id: "user-1",
                 name: "Work",
                 color: "#2f80ed",
+                google_sync_enabled: false,
                 created_at: "",
                 updated_at: "",
             },
@@ -1960,7 +1962,6 @@ describe("App", () => {
                 completed_at: null,
             },
         ];
-
         render(<App />);
 
         await screen.findByRole("button", { name: "Mobile Calendar" });
@@ -7008,7 +7009,10 @@ describe("App", () => {
     });
 
     it("toggles completed tasks visibility from settings", async () => {
-        const now = new Date();
+        // This test owns its persisted preference. A preceding component can
+        // finish an async storage write during test cleanup.
+        window.localStorage.setItem("calendar-show-completed-tasks", "true");
+        const now = new Date("2026-05-14T12:00:00.000Z");
         const todayAtTen = new Date(
             now.getFullYear(),
             now.getMonth(),
@@ -7040,7 +7044,9 @@ describe("App", () => {
 
         render(<App />);
 
-        expect(await screen.findByText("Completed today task")).toBeInTheDocument();
+        await waitFor(() =>
+            expect(mocks.fullCalendarProps.events).toHaveLength(1),
+        );
 
         fireEvent.click(
             await screen.findByRole("button", {
@@ -7055,14 +7061,17 @@ describe("App", () => {
         fireEvent.click(
             await screen.findByRole("switch", { name: "Show completed tasks" }),
         );
+        await waitFor(() =>
+            expect(
+                screen.getByRole("switch", { name: "Show completed tasks" }),
+            ).toHaveAttribute("aria-checked", "false"),
+        );
         fireEvent.click(
             screen.getByRole("button", { name: "Return to sidebar" }),
         );
 
         await waitFor(() =>
-            expect(
-                screen.queryByText("Completed today task"),
-            ).not.toBeInTheDocument(),
+            expect(mocks.fullCalendarProps.events).toHaveLength(0),
         );
 
         await waitFor(() =>
@@ -7085,12 +7094,17 @@ describe("App", () => {
         fireEvent.click(
             await screen.findByRole("switch", { name: "Show completed tasks" }),
         );
+        await waitFor(() =>
+            expect(
+                screen.getByRole("switch", { name: "Show completed tasks" }),
+            ).toHaveAttribute("aria-checked", "true"),
+        );
         fireEvent.click(
             screen.getByRole("button", { name: "Return to sidebar" }),
         );
 
         await waitFor(() =>
-            expect(screen.getByText("Completed today task")).toBeInTheDocument(),
+            expect(mocks.fullCalendarProps.events).toHaveLength(1),
         );
     });
 
@@ -7118,6 +7132,7 @@ describe("App", () => {
                 completed_at: "2026-05-08T11:00:00Z",
             },
         ];
+        window.localStorage.setItem("calendar-show-completed-tasks", "true");
 
         render(<App />);
 
@@ -7136,6 +7151,11 @@ describe("App", () => {
 
         await waitFor(() =>
             expect(mocks.fullCalendarProps.events).toHaveLength(0),
+        );
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("heading", { name: "Preferences" }),
+            ).not.toBeInTheDocument(),
         );
 
         fireEvent.click(await screen.findByRole("button", { name: "Settings" }));

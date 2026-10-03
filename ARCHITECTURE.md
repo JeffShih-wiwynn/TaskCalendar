@@ -105,7 +105,16 @@ Future cleanup targets:
 - No Android widget yet.
 - No OAuth or social login beyond Google Calendar mirror setup.
 
-These are roadmap items, not current implementation goals.
+## Google Calendar Category Routing
+
+OAuth and tokens remain user-scoped, while synchronized categories use one
+managed Google calendar mapping per `TaskList`. `GoogleEventMirror` remains
+task-scoped so category changes can safely move events. Uncategorized tasks
+and categories with sync disabled are not mirrored. The design and migration
+plan are documented in [Google Calendar Category Routing](docs/google-calendar-category-routing.md).
+
+The category mapping is created lazily on the first eligible synchronization;
+the legacy unified calendar remains available for recovery during migration.
 
 ## Development Workflow Notes
 

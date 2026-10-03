@@ -1365,6 +1365,15 @@ h2 {
   align-items: center;
 }
 
+.category-inline-sync-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted-text);
+  font-size: 0.82rem;
+}
+
 .category-inline-form input[type="color"] {
   width: 36px;
   height: 36px;

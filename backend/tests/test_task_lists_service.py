@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base
+from app.models.google_calendar import GoogleCategoryCalendar
 from app.task_lists import service
 from app.task_lists.schemas import TaskListCreate
 from app.tasks.schemas import ScheduledTaskCreate
@@ -50,3 +51,19 @@ def test_delete_task_list_clears_tasks(db_session: Session) -> None:
 
     db_session.refresh(task)
     assert task.list_id is None
+
+
+def test_delete_task_list_removes_google_category_mapping(db_session: Session) -> None:
+    task_list = service.create_task_list(db_session, TaskListCreate(name="Work"))
+    mapping = GoogleCategoryCalendar(
+        user_id=task_list.user_id,
+        task_list_id=task_list.id,
+        google_calendar_id="work-calendar",
+        google_calendar_summary="TaskCalendar — Work",
+    )
+    db_session.add(mapping)
+    db_session.commit()
+
+    service.delete_task_list(db_session, task_list.id)
+
+    assert db_session.get(GoogleCategoryCalendar, mapping.id) is None

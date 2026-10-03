@@ -6,6 +6,7 @@ export type TaskList = {
   user_id: string;
   name: string;
   color: string;
+  google_sync_enabled: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -23,7 +24,7 @@ export async function createTaskList(name: string, color: string): Promise<TaskL
 
 export async function updateTaskList(
   taskListId: string,
-  input: Partial<Pick<TaskList, 'name' | 'color'>>,
+  input: Partial<Pick<TaskList, 'name' | 'color' | 'google_sync_enabled'>>,
 ): Promise<TaskList> {
   return request<TaskList>(API_ROUTES.taskLists.item(taskListId), {
     method: 'PATCH',
