@@ -7008,7 +7008,7 @@ describe("App", () => {
     });
 
     it("toggles completed tasks visibility from settings", async () => {
-        const now = new Date();
+        const now = new Date("2026-05-14T12:00:00.000Z");
         const todayAtTen = new Date(
             now.getFullYear(),
             now.getMonth(),
@@ -7055,6 +7055,11 @@ describe("App", () => {
         fireEvent.click(
             await screen.findByRole("switch", { name: "Show completed tasks" }),
         );
+        await waitFor(() =>
+            expect(
+                screen.getByRole("switch", { name: "Show completed tasks" }),
+            ).toHaveAttribute("aria-checked", "false"),
+        );
         fireEvent.click(
             screen.getByRole("button", { name: "Return to sidebar" }),
         );
@@ -7084,6 +7089,11 @@ describe("App", () => {
         );
         fireEvent.click(
             await screen.findByRole("switch", { name: "Show completed tasks" }),
+        );
+        await waitFor(() =>
+            expect(
+                screen.getByRole("switch", { name: "Show completed tasks" }),
+            ).toHaveAttribute("aria-checked", "true"),
         );
         fireEvent.click(
             screen.getByRole("button", { name: "Return to sidebar" }),
