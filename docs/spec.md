@@ -76,6 +76,10 @@ The current app is web-first:
 - Google-side edits are not imported and may be overwritten by reconciliation.
 - Background worker / durable outbox / retry behavior.
 
+The current mirror uses one dedicated Google secondary calendar per connected
+user. Category-specific Google calendars are planned, but are not part of the
+current implementation; see [Google Calendar Category Routing](google-calendar-category-routing.md).
+
 ## Data Model Assumptions
 
 - `User` stores username, password hash, admin flag, optional timezone, and timestamps.

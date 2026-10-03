@@ -87,3 +87,21 @@ Goal: expose the existing `due_at` model in the task editor without weakening sc
 - [ ] Decide whether completion is shared or per-user.
 - [ ] Decide how recurring shared tasks behave.
 - [ ] Do not implement collaboration/live editing yet.
+
+## Phase 15: Category-specific Google calendars
+
+Goal: route one-way Google mirror events to separate managed calendars for
+categories selected by the user.
+
+- [ ] Add persisted category-level Google sync enablement.
+- [ ] Add user/category-to-Google-calendar mappings.
+- [ ] Add category sync controls to the frontend.
+- [ ] Route task events to the selected category calendar.
+- [ ] Safely move events when a task changes category.
+- [ ] Remove events for uncategorized or disabled categories.
+- [ ] Migrate the existing unified mirror calendar without data loss.
+- [ ] Add backend, frontend, and end-to-end coverage.
+- [ ] Preserve one-way sync, durable outbox behavior, and TaskCalendar authority.
+
+See [Google Calendar Category Routing](google-calendar-category-routing.md) for
+the design.

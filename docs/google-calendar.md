@@ -3,6 +3,10 @@
 TaskCalendar mirrors incomplete scheduled tasks into a dedicated Google secondary calendar named `TaskCalendar Mirror — Read Only`.
 The mirror is one-way. TaskCalendar remains the source of truth.
 
+The current implementation uses one managed mirror calendar per connected user.
+Category-specific calendars with per-category opt-in synchronization are
+planned separately; see [Google Calendar Category Routing](google-calendar-category-routing.md).
+
 Automatic sync is durable: task changes enqueue database-backed outbox jobs, and a separate worker sends those changes to Google Calendar with retry and periodic reconciliation.
 
 ## Google Cloud Console

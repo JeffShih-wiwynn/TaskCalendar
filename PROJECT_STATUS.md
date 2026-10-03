@@ -69,6 +69,7 @@ This file summarizes the current repository state.
 
 - Mobile ergonomics beyond the Phase 1 responsive baseline
 - Task form extraction and backend auth/admin service separation are documented refactor candidates
+- Google Calendar category-routing design is documented; implementation is not started
 
 ## Known Limitations
 

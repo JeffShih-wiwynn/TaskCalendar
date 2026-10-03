@@ -21,6 +21,7 @@ This file records the architecture decisions that should stay stable unless the 
 - `notification_enabled`, `notification_offset_minutes`, `notification_channel`, and `notification_sent_at` are the notification fields to preserve across API layers.
 - Google Calendar mirror is one-way. TaskCalendar remains authoritative.
 - Google Calendar sync uses a dedicated secondary calendar, a durable outbox, and a background worker.
+- The planned Google Calendar category-routing extension will keep OAuth user-scoped, map synchronized categories to managed secondary calendars, and exclude uncategorized or disabled categories; implementation is pending.
 - Google-side edits are not imported.
 - Per-task Discord reminders and daily todo Discord digests are notification features, not external calendar sync features.
 - Daily todo digests should use the user's timezone when present and fall back to `APP_TIMEZONE`.

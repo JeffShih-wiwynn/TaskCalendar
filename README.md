@@ -12,6 +12,7 @@ Calendar is licensed under the GNU Affero General Public License v3.0. See [LICE
 - [Architecture](ARCHITECTURE.md)
 - [Development Commands](docs/dev-commands.md)
 - [Google Calendar Mirror](docs/google-calendar.md)
+- [Google Calendar Category Routing Plan](docs/google-calendar-category-routing.md)
 - [Ubuntu Production Deployment](docs/ubuntu-production.md)
 - [Docker Production Deployment](docs/docker-production.md)
 
@@ -23,6 +24,7 @@ Calendar is licensed under the GNU Affero General Public License v3.0. See [LICE
 - Recurring tasks are materialized into concrete occurrences.
 - Categories, backup export/import, Discord per-task reminders, daily todo Discord digests, and PWA install support are implemented.
 - Google Calendar mirror support is implemented as a one-way mirror from TaskCalendar to a dedicated Google secondary calendar.
+- Per-category Google calendars are planned but not implemented; see the [category routing plan](docs/google-calendar-category-routing.md).
 
 ## Requirements
 
