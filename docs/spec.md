@@ -76,6 +76,9 @@ The current app is web-first:
 - Google-side edits are not imported and may be overwritten by reconciliation.
 - Background worker / durable outbox / retry behavior.
 
+Each synchronized category uses its own managed Google secondary calendar.
+Uncategorized tasks are not mirrored; see [Google Calendar Category Routing](google-calendar-category-routing.md).
+
 ## Data Model Assumptions
 
 - `User` stores username, password hash, admin flag, optional timezone, and timestamps.

@@ -3,6 +3,16 @@
 TaskCalendar mirrors incomplete scheduled tasks into a dedicated Google secondary calendar named `TaskCalendar Mirror — Read Only`.
 The mirror is one-way. TaskCalendar remains the source of truth.
 
+Each synchronized category uses one managed mirror calendar. Categories opt in
+through the category editor; uncategorized and disabled-category tasks are not
+mirrored. The legacy unified calendar remains available during migration; see
+[Google Calendar Category Routing](google-calendar-category-routing.md).
+
+Category mapping creation is serialized per task list, so overlapping worker
+jobs reuse one mapping instead of creating duplicate calendars. Deleting a
+category removes its local mapping and leaves its tasks uncategorized; it does
+not delete the Google calendar itself.
+
 Automatic sync is durable: task changes enqueue database-backed outbox jobs, and a separate worker sends those changes to Google Calendar with retry and periodic reconciliation.
 
 ## Google Cloud Console
@@ -51,6 +61,13 @@ The backend requests only this Google Calendar scope:
 ```text
 https://www.googleapis.com/auth/calendar.app.created
 ```
+
+This scope allows TaskCalendar to create and use app-owned calendars, but it
+does not necessarily allow listing every calendar in the user's Google account.
+Therefore old orphaned calendars with the same display name cannot always be
+discovered or removed automatically. Delete obsolete duplicate calendars in
+Google Calendar manually. Once a local category mapping exists, subsequent
+syncs reuse that mapping.
 
 ## Backend Environment
 
@@ -116,6 +133,9 @@ Open Settings -> Google Calendar.
 
 - Connect starts Google OAuth and creates or reuses one secondary Google calendar.
 - Reconnect reuses the stored mirror calendar when it still exists.
+- Reconnect creates a replacement only when the stored mirror calendar is
+  confirmed missing; provider permission, rate-limit, server, and network
+  errors remain errors and do not create another calendar.
 - Sync now queues background reconciliation through the worker.
 - Disconnect clears local encrypted OAuth credentials and stops future Google API use.
 - Disconnect does not delete the Google calendar.

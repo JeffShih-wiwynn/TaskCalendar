@@ -5,6 +5,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.google_calendar.outbox import enqueue_user_reconciliation
+from app.models.google_calendar import GoogleCategoryCalendar
 from app.models.scheduled_task import ScheduledTask
 from app.models.task_list import TaskList
 from app.task_lists.schemas import TaskListCreate, TaskListUpdate
@@ -32,6 +34,7 @@ def create_task_list(
         user_id=user_id,
         name=data.name.strip(),
         color=data.color,
+        google_sync_enabled=data.google_sync_enabled,
         updated_at=datetime.now(UTC),
     )
     db.add(task_list)
@@ -56,8 +59,15 @@ def update_task_list(
     if "color" in updates and updates["color"] is not None:
         task_list.color = updates["color"]
 
+    sync_setting_changed = False
+    if "google_sync_enabled" in updates and updates["google_sync_enabled"] is not None:
+        sync_setting_changed = task_list.google_sync_enabled != updates["google_sync_enabled"]
+        task_list.google_sync_enabled = updates["google_sync_enabled"]
+
     task_list.updated_at = datetime.now(UTC)
     db.add(task_list)
+    if sync_setting_changed:
+        enqueue_user_reconciliation(db, user_id=user_id)
     db.commit()
     db.refresh(task_list)
     return task_list
@@ -82,7 +92,20 @@ def delete_task_list(
         task.list_id = None
         task.updated_at = datetime.now(UTC)
 
+    # The relationship is one-to-one, but task_list_id is NOT NULL. Delete the
+    # mapping explicitly before deleting the category instead of letting the
+    # ORM null the foreign key during relationship synchronization.
+    google_mapping = db.scalar(
+        select(GoogleCategoryCalendar).where(
+            GoogleCategoryCalendar.task_list_id == task_list_id,
+            GoogleCategoryCalendar.user_id == user_id,
+        )
+    )
+    if google_mapping is not None:
+        db.delete(google_mapping)
+
     db.delete(task_list)
+    enqueue_user_reconciliation(db, user_id=user_id)
     db.commit()
 
 

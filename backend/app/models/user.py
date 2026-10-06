@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.models.app_settings import AppSettings
     from app.models.google_calendar import (
         GoogleCalendarConnection,
+        GoogleCategoryCalendar,
         GoogleEventMirror,
         GoogleOAuthState,
         GoogleSyncOutbox,
@@ -47,4 +48,7 @@ class User(Base):
     )
     google_oauth_states: Mapped[list["GoogleOAuthState"]] = relationship(back_populates="user")
     google_event_mirrors: Mapped[list["GoogleEventMirror"]] = relationship(back_populates="user")
+    google_category_calendars: Mapped[list["GoogleCategoryCalendar"]] = relationship(
+        back_populates="user",
+    )
     google_sync_outbox: Mapped[list["GoogleSyncOutbox"]] = relationship(back_populates="user")

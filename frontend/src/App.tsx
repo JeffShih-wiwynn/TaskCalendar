@@ -652,6 +652,8 @@ export function App() {
     const [editingListName, setEditingListName] = useState("");
     const [editingListColor, setEditingListColor] =
         useState(defaultCategoryColor);
+    const [editingGoogleSyncEnabled, setEditingGoogleSyncEnabled] =
+        useState(false);
     const [settingsView, setSettingsView] = useState<SettingsView | null>(null);
     const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
     const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
@@ -2095,6 +2097,10 @@ export function App() {
             setFormError(null);
             clearUndoState();
             setIsDeleting(true);
+            // Close the recurring-delete choice immediately. Keeping the
+            // dialog mounted while the request resolves can leave its warning
+            // visible after a successful occurrence delete.
+            setPendingTaskDelete(null);
             const previousTask = tasksRef.current.find(
                 (task) => task.id === taskId,
             );
@@ -3851,6 +3857,7 @@ export function App() {
         setNewListColor(defaultCategoryColor);
         setEditingListName("");
         setEditingListColor(defaultCategoryColor);
+        setEditingGoogleSyncEnabled(false);
     }, []);
 
     useEffect(() => {
@@ -3865,6 +3872,7 @@ export function App() {
         setEditingTaskListId(taskList.id);
         setEditingListName(taskList.name);
         setEditingListColor(taskList.color);
+        setEditingGoogleSyncEnabled(taskList.google_sync_enabled ?? false);
         window.setTimeout(() => categoryNameInputRef.current?.focus(), 0);
     }, []);
 
@@ -3885,6 +3893,7 @@ export function App() {
             const updatedTaskList = await updateTaskList(editingTaskListId, {
                 name,
                 color: editingListColor,
+                google_sync_enabled: editingGoogleSyncEnabled,
             });
             setTaskLists((current) =>
                 current
@@ -6446,6 +6455,33 @@ export function App() {
                                                                 placeholder="Category name"
                                                                 aria-label="Edit category name"
                                                             />
+                                                        </div>
+                                                        <div className="category-inline-sync-setting">
+                                                            <span>Google Calendar sync</span>
+                                                            <button
+                                                                type="button"
+                                                                role="switch"
+                                                                aria-checked={editingGoogleSyncEnabled}
+                                                                aria-label="Google Calendar sync for category"
+                                                                disabled={!isGoogleCalendarConnected}
+                                                                title={
+                                                                    isGoogleCalendarConnected
+                                                                        ? "Sync this category to its Google Calendar"
+                                                                        : "Connect Google Calendar first"
+                                                                }
+                                                                className={`sidebar-switch${
+                                                                    editingGoogleSyncEnabled
+                                                                        ? " sidebar-switch-on"
+                                                                        : ""
+                                                                }`}
+                                                                onClick={() =>
+                                                                    setEditingGoogleSyncEnabled(
+                                                                        (current) => !current,
+                                                                    )
+                                                                }
+                                                            >
+                                                                <span className="sidebar-switch-knob" />
+                                                            </button>
                                                         </div>
                                                         {isDeleteCategoryConfirming ? (
                                                             <div className="category-inline-actions category-inline-actions--confirm-delete">

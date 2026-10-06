@@ -12,6 +12,7 @@ Calendar is licensed under the GNU Affero General Public License v3.0. See [LICE
 - [Architecture](ARCHITECTURE.md)
 - [Development Commands](docs/dev-commands.md)
 - [Google Calendar Mirror](docs/google-calendar.md)
+- [Google Calendar Category Routing Plan](docs/google-calendar-category-routing.md)
 - [Ubuntu Production Deployment](docs/ubuntu-production.md)
 - [Docker Production Deployment](docs/docker-production.md)
 
@@ -23,6 +24,7 @@ Calendar is licensed under the GNU Affero General Public License v3.0. See [LICE
 - Recurring tasks are materialized into concrete occurrences.
 - Categories, backup export/import, Discord per-task reminders, daily todo Discord digests, and PWA install support are implemented.
 - Google Calendar mirror support is implemented as a one-way mirror from TaskCalendar to a dedicated Google secondary calendar.
+- Per-category Google calendars are implemented with per-category opt-in synchronization; see the [category routing plan](docs/google-calendar-category-routing.md).
 
 ## Requirements
 
@@ -131,6 +133,12 @@ The backend container waits for PostgreSQL, runs Alembic migrations automaticall
 - Completed tasks are removed from Google.
 - Google-side edits are not imported and may be overwritten by reconciliation.
 - The Google sync worker uses a durable outbox and retry loop.
+- Category calendar mappings are protected against concurrent duplicate creation;
+  deleting a category removes its local mapping while keeping its tasks
+  uncategorized.
+- Existing orphaned Google calendars are not automatically deleted. With the
+  `calendar.app.created` scope, Google Calendar list lookup may be unavailable;
+  remove obsolete duplicate calendars manually if needed.
 
 See [docs/google-calendar.md](docs/google-calendar.md) for the OAuth and deployment details.
 

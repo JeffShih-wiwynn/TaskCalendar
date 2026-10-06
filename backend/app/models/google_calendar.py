@@ -11,6 +11,7 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.scheduled_task import ScheduledTask
+    from app.models.task_list import TaskList
     from app.models.user import User
 
 
@@ -45,6 +46,34 @@ class GoogleCalendarConnection(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="google_calendar_connection")
+
+
+class GoogleCategoryCalendar(Base):
+    __tablename__ = "google_category_calendars"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    task_list_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("task_lists.id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
+    )
+    google_calendar_id: Mapped[str] = mapped_column(String(255), unique=True)
+    google_calendar_summary: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="active", index=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    user: Mapped["User"] = relationship(back_populates="google_category_calendars")
+    task_list: Mapped["TaskList"] = relationship(back_populates="google_calendar")
 
 
 class GoogleOAuthState(Base):

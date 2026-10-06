@@ -32,6 +32,8 @@ This file summarizes the current repository state.
 - Backend JSON export/import endpoints for the authenticated user's backup data
 - JSON backups include current-user task lists/categories, tasks, recurrence fields, notification fields, unscheduled ordering, completed state, and notes; they exclude auth secrets and user accounts
 - Google Calendar mirror with durable outbox jobs, retry behavior, and reconciliation worker
+- Google category calendar mappings are concurrency-safe; category deletion removes
+  the local mapping without null-foreign-key failures
 - Mobile bottom navigation and safe-area spacing fixes
 - Mobile calendar quick actions for tap-to-edit, long-press create, and 15-minute time adjustments
 - Phase 1 PWA install support and phone-width responsive layout
@@ -69,6 +71,9 @@ This file summarizes the current repository state.
 
 - Mobile ergonomics beyond the Phase 1 responsive baseline
 - Task form extraction and backend auth/admin service separation are documented refactor candidates
+- Google Calendar category routing is implemented with persisted per-category opt-in state, managed calendar mappings, and category-aware reconciliation
+- Google Calendar reconnect distinguishes a missing stored calendar from provider
+  failures, preventing duplicate replacement calendars
 
 ## Known Limitations
 
@@ -81,6 +86,8 @@ This file summarizes the current repository state.
 - No direct due-date editor in the current task form
 - Mobile calendar interactions are intentionally touch-first; desktop drag/resize remains available
 - Container deployment is documented but not the only deployment path; this host uses rootless Podman Quadlet for production runtime
+- Google Calendar uses the restricted `calendar.app.created` scope, so old
+  orphaned duplicate calendars may require manual cleanup in Google Calendar
 - Backend product routes are still split across `/api/*`, `/auth/*`, `/admin/*`, and `/backup/*`; future cleanup should normalize the product APIs under `/api/*`
 
 ## Next Recommended Priority

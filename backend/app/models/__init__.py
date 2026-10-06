@@ -2,6 +2,7 @@ from app.models.app_settings import AppSettings
 from app.models.daily_todo_notification import DailyTodoNotification
 from app.models.google_calendar import (
     GoogleCalendarConnection,
+    GoogleCategoryCalendar,
     GoogleEventMirror,
     GoogleOAuthState,
     GoogleSyncOutbox,
@@ -14,6 +15,7 @@ __all__ = [
     "AppSettings",
     "DailyTodoNotification",
     "GoogleCalendarConnection",
+    "GoogleCategoryCalendar",
     "GoogleEventMirror",
     "GoogleOAuthState",
     "GoogleSyncOutbox",
