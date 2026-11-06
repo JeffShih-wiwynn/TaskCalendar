@@ -150,7 +150,23 @@ body {
   background: var(--accent-soft);
 }
 
+.auth-mode-switch::before {
+  content: "";
+  grid-area: 1 / 1;
+  border-radius: inherit;
+  background: var(--panel-bg);
+  box-shadow: 0 4px 12px rgb(24 32 38 / 8%);
+  transition: transform var(--micro-duration-medium) var(--micro-ease);
+  pointer-events: none;
+}
+
+.auth-mode-switch[data-mode="register"]::before {
+  transform: translateX(calc(100% + 8px));
+}
+
 .auth-mode-tab {
+  position: relative;
+  grid-row: 1;
   border: 0;
   border-radius: 999px;
   padding: 10px 12px;
@@ -165,10 +181,38 @@ body {
     box-shadow var(--micro-duration-fast) ease;
 }
 
+.auth-mode-tab:first-of-type {
+  grid-column: 1;
+}
+
+.auth-mode-tab:last-of-type {
+  grid-column: 2;
+}
+
 .auth-mode-tab-active {
   color: var(--accent);
-  background: var(--panel-bg);
-  box-shadow: 0 4px 12px rgb(24 32 38 / 8%);
+}
+
+.auth-panel h1,
+.auth-form {
+  animation: auth-content-fade-in var(--micro-duration-fast) ease-out;
+}
+
+@keyframes auth-content-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-mode-switch::before,
+  .auth-mode-tab {
+    transition: none;
+  }
+
+  .auth-panel h1,
+  .auth-form {
+    animation: none;
+  }
 }
 
 .auth-form label {
@@ -1034,6 +1078,10 @@ body {
   text-transform: uppercase;
 }
 
+.auth-panel .eyebrow {
+  text-transform: none;
+}
+
 h2 {
   margin: 0;
   font-size: 1rem;
@@ -1042,6 +1090,32 @@ h2 {
 .filter-section {
   display: grid;
   gap: 8px;
+}
+
+.filter-section[aria-label="Task filters"] {
+  position: relative;
+  z-index: 2;
+}
+
+.task-list[aria-label$=" tasks"] {
+  z-index: 1;
+}
+
+.filter-section[aria-label="Task filters"],
+.task-list[aria-label$=" tasks"] {
+  animation: sidebar-content-fade-in 220ms ease both;
+}
+
+@keyframes sidebar-content-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filter-section[aria-label="Task filters"],
+  .task-list[aria-label$=" tasks"] {
+    animation: none;
+  }
 }
 
 .filter-field {
@@ -1106,7 +1180,7 @@ h2 {
 .task-row {
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--panel-bg);
+  background: var(--task-list-background, var(--panel-bg));
   color: var(--text);
   font: inherit;
 }
@@ -1968,8 +2042,8 @@ h2 {
 }
 
 .task-row.selected {
-  border-color: var(--accent);
-  background: var(--selected-bg);
+  border-color: var(--task-accent, var(--accent));
+  background: var(--task-hover-background, var(--selected-bg));
   box-shadow: 0 10px 20px var(--shadow);
 }
 
@@ -2946,6 +3020,96 @@ input[type="checkbox"].task-checkbox:checked {
   display: grid;
   gap: 4px;
   margin-bottom: 2px;
+}
+
+.registration-row > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.registration-countdown {
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.segmented-control {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.segmented-control-option,
+.task-form .segmented-control-option {
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 2px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.segmented-control-option[aria-pressed="true"],
+.task-form .segmented-control-option[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 25%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.segmented-control-option:disabled,
+.task-form .segmented-control-option:disabled {
+  cursor: default;
+}
+
+.segmented-control-option:focus-visible,
+.task-form .segmented-control-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.task-view-segments {
+  position: relative;
+  isolation: isolate;
+}
+
+.task-view-segments .segmented-control-option {
+  position: relative;
+}
+
+.task-view-segments .segmented-control-option[aria-pressed="true"] {
+  border-color: transparent;
+  background: transparent;
+}
+
+.task-view-selection {
+  position: absolute;
+  inset: -1px;
+  z-index: 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-radius: 5px;
+  background: var(--accent-soft);
+  pointer-events: none;
+}
+
+.task-view-option-label {
+  position: relative;
+  z-index: 1;
+}
+
+.task-view-segments .task-view-option-label {
+  color: inherit;
 }
 
 .admin-user-list {
@@ -4029,8 +4193,8 @@ input[type="checkbox"].task-checkbox:checked {
 @media (hover: hover) and (pointer: fine) {
   .task-row:hover {
     transform: translateY(-2px);
-    border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
-    background: color-mix(in srgb, var(--selected-bg) 58%, var(--panel-bg));
+    border-color: var(--task-accent, var(--border));
+    background: var(--task-hover-background, var(--panel-bg));
     box-shadow: 0 14px 24px var(--shadow);
   }
 
@@ -4114,6 +4278,7 @@ input[type="checkbox"].task-checkbox:checked {
 }
 
 .task-event {
+  border-left-width: 4px;
   border-color: var(--accent);
   background: var(--accent);
   transition:
@@ -4188,10 +4353,6 @@ input[type="checkbox"].task-checkbox:checked {
 }
 
 .task-event--completed {
-  border-color: #9aa8a2;
-  background: #eef2ef;
-  color: #50615b;
-  opacity: 0.58;
   text-decoration: line-through;
 }
 
@@ -4913,7 +5074,7 @@ input[type="checkbox"].task-checkbox:checked {
     border-radius: 6px;
     padding: 10px;
     color: var(--text);
-    background: var(--panel-bg);
+    background: var(--task-list-background, var(--panel-bg));
     font: inherit;
     text-align: left;
   }
@@ -5580,6 +5741,18 @@ input[type="checkbox"].task-checkbox:checked {
   .auth-mode-tab {
     min-height: 44px;
     border-radius: 8px;
+  }
+
+  .auth-mode-tab:last-of-type {
+    grid-area: 2 / 1;
+  }
+
+  .auth-mode-switch::before {
+    border-radius: 8px;
+  }
+
+  .auth-mode-switch[data-mode="register"]::before {
+    transform: translateY(calc(100% + 8px));
   }
 
   .auth-form input,

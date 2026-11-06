@@ -6,6 +6,7 @@ const baseURL = process.env.E2E_BASE_URL ?? `http://${e2eHost}:${frontendPort}`;
 
 export default defineConfig({
   testDir: './e2e',
+  globalSetup: './e2e/setup.ts',
   fullyParallel: false,
   timeout: 45_000,
   expect: {
@@ -13,6 +14,7 @@ export default defineConfig({
   },
   use: {
     baseURL,
+    timezoneId: Intl.DateTimeFormat().resolvedOptions().timeZone,
     trace: 'on-first-retry',
     viewport: { width: 1440, height: 900 },
   },

@@ -1,4 +1,5 @@
-import { expect, type APIRequestContext, type Locator, type Page, test } from '@playwright/test';
+import { test, expect, E2E_NOW } from './fixtures';
+import { type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
 type E2EUser = {
   username: string;
@@ -43,7 +44,7 @@ function uniqueName(prefix: string): string {
 }
 
 function localDate(offsetDays = 0): Date {
-  const date = new Date();
+  const date = new Date(E2E_NOW);
   date.setDate(date.getDate() + offsetDays);
   return date;
 }
@@ -85,7 +86,17 @@ async function registerUser(request: APIRequestContext, prefix: string): Promise
   return { username, password, token: body.access_token };
 }
 
-async function openAuthenticatedApp(page: Page, user: E2EUser): Promise<void> {
+async function openAuthenticatedApp(
+  page: Page,
+  user: E2EUser,
+  timezone = Intl.DateTimeFormat().resolvedOptions().timeZone,
+): Promise<void> {
+  await page.clock.setFixedTime(E2E_NOW);
+  const timezoneResponse = await page.request.patch(`${API_BASE_URL}/auth/me/timezone`, {
+    headers: { Authorization: `Bearer ${user.token}` },
+    data: { timezone },
+  });
+  expect(timezoneResponse.ok()).toBeTruthy();
   await page.addInitScript((token) => {
     window.localStorage.setItem('calendar-auth-token', token);
   }, user.token);
@@ -105,17 +116,15 @@ async function loginThroughUi(page: Page, username: string, password = PASSWORD)
 }
 
 async function switchTaskView(page: Page, label: string): Promise<void> {
-  await page.getByRole('button', { name: 'Task view' }).click();
-  await page
-    .getByRole('listbox', { name: 'Task view options' })
-    .getByRole('button', { name: label })
-    .click();
-  await expect(page.getByRole('button', { name: 'Task view' })).toContainText(label);
+  const viewButton = page.getByRole('group', { name: 'Task view' })
+    .getByRole('button', { name: label, exact: true });
+  await viewButton.click();
+  await expect(viewButton).toHaveAttribute('aria-pressed', 'true');
 }
 
 async function selectTaskFormDropdown(form: Locator, label: string, option: string): Promise<void> {
   await form.getByRole('button', { name: label }).click();
-  await form
+  await form.page()
     .getByRole('listbox', { name: `${label} options` })
     .getByRole('option', { name: option })
     .click();
@@ -271,7 +280,7 @@ test.describe('Calendar E2E', () => {
     await taskRow(page, editedTitle).click();
     await page.locator('#task-edit-form').getByLabel('Completed').check();
     await page.getByRole('button', { name: 'Done' }).click();
-    await expect(taskRow(page, editedTitle)).toBeHidden();
+    await expect(taskRow(page, editedTitle)).toHaveCount(0);
     await expect.poll(async () => {
       const tasks = await listTasks(request, user);
       return tasks.find((task) => task.title === editedTitle)?.completed;
@@ -584,7 +593,7 @@ test.describe('Calendar E2E', () => {
 
   test('persists the selected timezone and displays UTC offset', async ({ page, request }) => {
     const user = await registerUser(request, 'timezone');
-    await openAuthenticatedApp(page, user);
+    await openAuthenticatedApp(page, user, 'UTC');
 
     await openPreferences(page);
     await page.locator('button.preferences-summary-row').filter({ hasText: 'Time zone' }).click();
@@ -740,8 +749,8 @@ test.describe('Calendar E2E', () => {
 
   test('persists task changes across independent sessions after reload', async ({ browser, request }) => {
     const user = await registerUser(request, 'multi-session');
-    const contextA = await browser.newContext();
-    const contextB = await browser.newContext();
+    const contextA = await browser.newContext({ timezoneId: Intl.DateTimeFormat().resolvedOptions().timeZone });
+    const contextB = await browser.newContext({ timezoneId: Intl.DateTimeFormat().resolvedOptions().timeZone });
     const pageA = await contextA.newPage();
     const pageB = await contextB.newPage();
     const title = uniqueName('shared-task');

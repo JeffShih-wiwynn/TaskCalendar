@@ -27,6 +27,11 @@ from app.models.user import User
 
 
 def register_user(db: Session, credentials: AuthCredentials) -> User:
+    from app.auth.registration import get_registration_status, lock_registration
+
+    lock_registration(db)
+    if not get_registration_status(db).registration_open:
+        raise HTTPException(status_code=403, detail="Registration is closed")
     username = normalize_username(credentials.username)
     if get_user_by_username(db, username) is not None:
         raise HTTPException(
