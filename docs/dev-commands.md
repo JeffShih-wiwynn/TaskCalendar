@@ -1,5 +1,9 @@
 # Development Commands
 
+## Playwright CI environment
+
+The Playwright E2E workflow uses `ubuntu-24.04`. Playwright 1.60.0 cannot install Chromium dependencies on Ubuntu 26.04, so this workflow pins the runner instead of following `ubuntu-latest`.
+
 ## Frontend
 
 Install:

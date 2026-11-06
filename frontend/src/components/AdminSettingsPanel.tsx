@@ -1,4 +1,5 @@
 import type { AdminUser } from "../api/admin";
+import { RegistrationControl } from "./RegistrationControl";
 
 type AdminSettingsPanelProps = {
     users: AdminUser[];
@@ -23,8 +24,13 @@ export function AdminSettingsPanel({
         <div className="task-form account-settings-form">
             <div className="account-settings-heading">
                 <h3 className="working-hours-title">Admin</h3>
-                <p className="muted">Manage local user accounts.</p>
             </div>
+            <section className="settings-list-section" aria-label="Registration settings">
+                <h4 className="settings-list-section-title">Registration</h4>
+                <RegistrationControl />
+            </section>
+            <section className="settings-list-section admin-users-section" aria-label="User management">
+                <h4 className="settings-list-section-title">Users</h4>
             {isLoading ? (
                 <p className="muted">Loading users...</p>
             ) : (
@@ -71,6 +77,7 @@ export function AdminSettingsPanel({
                     })}
                 </div>
             )}
+            </section>
             {error && <p className="form-error">{error}</p>}
             <button
                 type="button"

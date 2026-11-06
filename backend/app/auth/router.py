@@ -1,9 +1,10 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from app.auth import service
+from app.auth.registration import RegistrationStatus, get_registration_status
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import (
     ActionResponse,
@@ -21,6 +22,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+@router.get("/registration-status", response_model=RegistrationStatus)
+def registration_status(db: DbSession, response: Response) -> RegistrationStatus:
+    response.headers["Cache-Control"] = "no-store"
+    return get_registration_status(db)
 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)

@@ -105,17 +105,15 @@ async function loginThroughUi(page: Page, username: string, password = PASSWORD)
 }
 
 async function switchTaskView(page: Page, label: string): Promise<void> {
-  await page.getByRole('button', { name: 'Task view' }).click();
-  await page
-    .getByRole('listbox', { name: 'Task view options' })
-    .getByRole('button', { name: label })
-    .click();
-  await expect(page.getByRole('button', { name: 'Task view' })).toContainText(label);
+  const viewButton = page.getByRole('group', { name: 'Task view' })
+    .getByRole('button', { name: label, exact: true });
+  await viewButton.click();
+  await expect(viewButton).toHaveAttribute('aria-pressed', 'true');
 }
 
 async function selectTaskFormDropdown(form: Locator, label: string, option: string): Promise<void> {
   await form.getByRole('button', { name: label }).click();
-  await form
+  await form.page()
     .getByRole('listbox', { name: `${label} options` })
     .getByRole('option', { name: option })
     .click();
@@ -271,7 +269,7 @@ test.describe('Calendar E2E', () => {
     await taskRow(page, editedTitle).click();
     await page.locator('#task-edit-form').getByLabel('Completed').check();
     await page.getByRole('button', { name: 'Done' }).click();
-    await expect(taskRow(page, editedTitle)).toBeHidden();
+    await expect(taskRow(page, editedTitle)).toBeVisible();
     await expect.poll(async () => {
       const tasks = await listTasks(request, user);
       return tasks.find((task) => task.title === editedTitle)?.completed;

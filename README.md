@@ -23,6 +23,7 @@ Calendar is licensed under the GNU Affero General Public License v3.0. See [LICE
 - The sidebar also supports an Overdue filter for incomplete scheduled or due-only tasks.
 - Recurring tasks are materialized into concrete occurrences.
 - Categories, backup export/import, Discord per-task reminders, daily todo Discord digests, and PWA install support are implemented.
+- Category colors remain user-selected; task cards and calendar blocks derive muted, theme-aware surfaces and accent borders from them. Completed tasks use neutral surfaces.
 - Google Calendar mirror support is implemented as a one-way mirror from TaskCalendar to a dedicated Google secondary calendar.
 - Per-category Google calendars are implemented with per-category opt-in synchronization; see the [category routing plan](docs/google-calendar-category-routing.md).
 
@@ -157,6 +158,14 @@ Production builds include install metadata, icons, standalone display mode, and 
 
 - Users register and log in with username/password credentials.
 - The first registered user becomes an admin when the users table is empty.
+- An empty instance shows registration only. Once an account exists, public
+  registration is closed by default and the login screen shows login only.
+- In Settings -> Admin -> Registration, an admin can open registration for five minutes
+  using the Registration switch, or close it early. A countdown shows the time
+  remaining. Anyone with access to the site can register during
+  that window. The backend enforces expiry even if a registration page is left open.
+- Registration windows persist across restarts. Existing accounts remain valid;
+  upgrading an existing instance closes public registration by default.
 - There is no seeded default `root`/`111111` account.
 - Admin user management is available in Settings -> Admin.
 - Users can change their own password and delete their own account from Settings -> Account.
