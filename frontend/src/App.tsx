@@ -1,3 +1,4 @@
+import { taskColors } from "./taskColors";
 import type {
     DatesSetArg,
     DayCellContentArg,
@@ -61,6 +62,7 @@ import {
     type AuthUser,
 } from "./api/auth";
 import { AUTH_SESSION_EXPIRED_EVENT } from "./api/base";
+import { getRegistrationStatus, type RegistrationStatus } from "./api/registration";
 import {
     downloadBackupPayload,
     fetchBackupExport,
@@ -147,7 +149,7 @@ function TaskIndicators({
         <span
             className="task-indicators"
             aria-hidden="true"
-            style={{ color: complementaryColor(categoryColor) }}
+            style={{ color: `color-mix(in srgb, ${categoryColor} 15%, var(--text))` }}
         >
             {hasReminder && (
                 <span
@@ -370,6 +372,7 @@ function TaskFormAccordionSection({
 }) {
     const panelId = `task-form-accordion-panel-${id}`;
     const buttonId = `task-form-accordion-button-${id}`;
+    const prefersReducedMotion = useReducedMotion();
 
     return (
         <section
@@ -393,16 +396,26 @@ function TaskFormAccordionSection({
                 </button>
                 {actions}
             </div>
-            {isExpanded && (
-                <div
-                    id={panelId}
-                    role="region"
-                    aria-labelledby={buttonId}
-                    className="task-form-accordion-panel"
-                >
-                    {children}
-                </div>
-            )}
+            <AnimatePresence initial={false}>
+                {isExpanded && (
+                    <motion.div
+                        id={panelId}
+                        key={panelId}
+                        role="region"
+                        aria-labelledby={buttonId}
+                        className="task-form-accordion-panel"
+                        initial={{ height: 0, opacity: 0, y: -4 }}
+                        animate={{ height: "auto", opacity: 1, y: 0 }}
+                        exit={{ height: 0, opacity: 0, y: -4 }}
+                        transition={prefersReducedMotion
+                            ? { duration: 0 }
+                            : { height: { duration: 0.24, ease: [0.22, 1, 0.36, 1] }, opacity: { duration: 0.18 }, y: { duration: 0.18 } }}
+                        style={{ overflow: "hidden" }}
+                    >
+                        {children}
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </section>
     );
 }
@@ -603,6 +616,27 @@ export function App() {
     );
     const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
     const [authMode, setAuthMode] = useState<AuthMode>("login");
+    const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus | null>(null);
+    const [registrationError, setRegistrationError] = useState<string | null>(null);
+    useEffect(() => {
+        if (authToken) return;
+        let active = true;
+        const refresh = async () => {
+            try {
+                const status = await getRegistrationStatus();
+                if (!active) return;
+                setRegistrationStatus(status);
+                setRegistrationError(null);
+                if (status.setup_required) setAuthMode("register");
+                else if (!status.registration_open) setAuthMode("login");
+            } catch {
+                if (active) setRegistrationError("Unable to load registration status. Please refresh the page.");
+            }
+        };
+        void refresh();
+        const timer = window.setInterval(() => void refresh(), 10000);
+        return () => { active = false; window.clearInterval(timer); };
+    }, [authToken]);
     const [authFormState, setAuthFormState] = useState<AuthFormState>({
         username: "",
         password: "",
@@ -632,6 +666,8 @@ export function App() {
     const [activeView, setActiveView] = useState<TaskView>("today");
     const [mobileScreen, setMobileScreen] = useState<MobileScreen>("today");
     const [upcomingDays, setUpcomingDays] = useState(7);
+    const [upcomingDaysMode, setUpcomingDaysMode] = useState<3 | 7 | "custom">(7);
+    const [customUpcomingDays, setCustomUpcomingDays] = useState(7);
     const [showCompletedTasks, setShowCompletedTasks] = useState(
         getInitialShowCompletedTasks,
     );
@@ -655,7 +691,7 @@ export function App() {
     const [editingGoogleSyncEnabled, setEditingGoogleSyncEnabled] =
         useState(false);
     const [settingsView, setSettingsView] = useState<SettingsView | null>(null);
-    const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
+    const [settingsNavigationDirection, setSettingsNavigationDirection] = useState<1 | -1 | 0>(1);
     const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
     const [isAddingCategory, setIsAddingCategory] = useState(false);
     const [isDeleteCategoryConfirming, setIsDeleteCategoryConfirming] =
@@ -878,12 +914,6 @@ export function App() {
         );
     }, [taskLists]);
 
-    const activeViewLabel = useMemo(
-        () =>
-            taskViews.find((view) => view.id === activeView)?.label ?? "Today",
-        [activeView],
-    );
-
     const activeCategoryLabel = areAllCategoriesVisible ? "All" : "Filtered";
     const selectedListIdForForms = activeListId ?? "";
     const categoryFilterKey = areAllCategoriesVisible
@@ -915,8 +945,9 @@ export function App() {
             calendarTasks,
             categoryColorById,
             effectiveTimezone,
+            themeMode,
         );
-    }, [calendarTasks, categoryColorById, effectiveTimezone]);
+    }, [calendarTasks, categoryColorById, effectiveTimezone, themeMode]);
     const mobileMonthPreviewTasks = useMemo(() => {
         if (!mobileMonthPreviewDate) {
             return [];
@@ -2009,7 +2040,6 @@ export function App() {
     }, [refreshTasks]);
 
     const closeDetailPanel = useCallback(() => {
-        setIsViewMenuOpen(false);
         setIsCategoryMenuOpen(false);
         setContextMenu(null);
         setMobileQuickActionTaskId(null);
@@ -2542,7 +2572,6 @@ export function App() {
     const openCreatePanel = useCallback(
         (start: Date, end: Date) => {
             setFormError(null);
-            setIsViewMenuOpen(false);
             setIsCategoryMenuOpen(false);
             setIsAddingCategory(false);
             setContextMenu(null);
@@ -2551,6 +2580,7 @@ export function App() {
                 setIsSidebarOpen(true);
                 setMobileScreen("calendar");
             }
+            setSettingsView(null);
             setDetailPanelMode("create");
             setSelectedTaskId(null);
             setCreateAccordionSection("schedule");
@@ -2574,7 +2604,6 @@ export function App() {
     const openDateOnlyCreatePanel = useCallback(
         (date: Date) => {
             setFormError(null);
-            setIsViewMenuOpen(false);
             setIsCategoryMenuOpen(false);
             setIsAddingCategory(false);
             setContextMenu(null);
@@ -2583,6 +2612,7 @@ export function App() {
                 setIsSidebarOpen(true);
                 setMobileScreen("calendar");
             }
+            setSettingsView(null);
             setDetailPanelMode("create");
             setSelectedTaskId(null);
             setCreateAccordionSection("schedule");
@@ -2605,11 +2635,11 @@ export function App() {
 
     const openUnscheduledCreatePanel = useCallback(() => {
         setFormError(null);
-        setIsViewMenuOpen(false);
         setIsCategoryMenuOpen(false);
         setIsAddingCategory(false);
         setContextMenu(null);
         setMobileQuickActionTaskId(null);
+        setSettingsView(null);
         setDetailPanelMode("create");
         setSelectedTaskId(null);
         setCreateAccordionSection("schedule");
@@ -2628,7 +2658,6 @@ export function App() {
 
     const openTaskDetailPanel = useCallback((taskId: string) => {
         setFormError(null);
-        setIsViewMenuOpen(false);
         setIsCategoryMenuOpen(false);
         setIsAddingCategory(false);
         setContextMenu(null);
@@ -2637,6 +2666,7 @@ export function App() {
         if (isNarrowScreen()) {
             setIsSidebarOpen(true);
         }
+        setSettingsView(null);
         setDetailPanelMode("edit");
         setSelectedTaskId(taskId);
         const task = tasksRef.current.find((candidate) => candidate.id === taskId);
@@ -2794,9 +2824,13 @@ export function App() {
     );
     const panelVariants = useMemo(
         () => ({
-            hidden: { opacity: 0, x: 12 },
+            hidden: (direction: 1 | -1 | 0) => direction === 0
+                ? { opacity: 0, x: 0 }
+                : { opacity: 0, x: direction * 12 },
             visible: { opacity: 1, x: 0 },
-            exit: { opacity: 0, x: 12 },
+            exit: (direction: 1 | -1 | 0) => direction === 0
+                ? { opacity: 0, x: 0 }
+                : { opacity: 0, x: direction * -12 },
         }),
         [],
     );
@@ -2874,6 +2908,12 @@ export function App() {
             exit: { opacity: 0, y: -8 },
         }),
         [],
+    );
+    const taskViewTransition = useMemo(
+        () => prefersReducedMotion
+            ? { duration: 0 }
+            : { duration: 0.26, ease: [0.22, 1, 0.36, 1] as const },
+        [prefersReducedMotion],
     );
     const taskContentKey = `${activeView}-${categoryFilterKey}-${upcomingDays}`;
 
@@ -3057,7 +3097,6 @@ export function App() {
                 return;
             }
 
-            setIsViewMenuOpen(false);
             setIsCategoryMenuOpen(false);
             setIsAddingCategory(false);
             setIsDetailPanelClosing(false);
@@ -3069,13 +3108,13 @@ export function App() {
             return;
         }
 
-        setIsViewMenuOpen(false);
         setIsCategoryMenuOpen(false);
         setIsAddingCategory(false);
         if (isNarrowScreen()) {
             setIsSidebarOpen(true);
             setMobileScreen("calendar");
         }
+        setSettingsView(null);
         setDetailPanelMode("edit");
         setMobileQuickActionTaskId(null);
         setSelectedTaskId(clickInfo.event.id);
@@ -4196,6 +4235,7 @@ export function App() {
     };
 
     const openSettingsMenu = () => {
+        setSettingsNavigationDirection(-1);
         closeDetailPanel();
         closeSettingsPanels();
         resetAccountForms();
@@ -4203,6 +4243,7 @@ export function App() {
     };
 
     const openWebhookSettings = () => {
+        setSettingsNavigationDirection(1);
         closeDetailPanel();
         closeSettingsPanels();
         setSettingsView("webhook");
@@ -4215,6 +4256,7 @@ export function App() {
     };
 
     const openGoogleCalendarSettings = () => {
+        setSettingsNavigationDirection(1);
         closeDetailPanel();
         closeSettingsPanels();
         setGoogleCalendarError(null);
@@ -4224,6 +4266,7 @@ export function App() {
     };
 
     const openCalendarDisplaySettings = () => {
+        setSettingsNavigationDirection(1);
         closeDetailPanel();
         closeSettingsPanels();
         setExpandedPreferenceSection(null);
@@ -4231,6 +4274,7 @@ export function App() {
     };
 
     const openBackupSettings = () => {
+        setSettingsNavigationDirection(1);
         closeDetailPanel();
         closeSettingsPanels();
         setBackupImportMessage(null);
@@ -4240,6 +4284,7 @@ export function App() {
     };
 
     const openAccountSettings = () => {
+        setSettingsNavigationDirection(1);
         closeDetailPanel();
         closeSettingsPanels();
         resetAccountForms();
@@ -4247,6 +4292,7 @@ export function App() {
     };
 
     const openChangePasswordSettings = () => {
+        setSettingsNavigationDirection(1);
         closeDetailPanel();
         closeSettingsPanels();
         resetAccountForms();
@@ -4254,6 +4300,7 @@ export function App() {
     };
 
     const openDeleteAccountSettings = () => {
+        setSettingsNavigationDirection(1);
         closeDetailPanel();
         closeSettingsPanels();
         resetAccountForms();
@@ -4277,6 +4324,7 @@ export function App() {
     };
 
     const openAdminSettings = () => {
+        setSettingsNavigationDirection(1);
         closeDetailPanel();
         closeSettingsPanels();
         setSettingsView("admin");
@@ -4432,7 +4480,6 @@ export function App() {
         closeSettingsPanels();
         resetAccountForms();
         setContextMenu(null);
-        setIsViewMenuOpen(false);
         setIsCategoryMenuOpen(false);
         setIsSidebarOpen((current) => !current);
     };
@@ -4501,6 +4548,7 @@ export function App() {
         !isSettingsSubviewOpen;
     const openMobileTaskScreen = useCallback(
         (screen: Extract<MobileScreen, "today" | "upcoming" | "unscheduled">) => {
+            setSettingsNavigationDirection(0);
             setMobileScreen(screen);
             setActiveView(screen);
             setIsSidebarOpen(true);
@@ -4572,6 +4620,8 @@ export function App() {
     if (!authToken) {
         return (
             <AuthScreen
+                registrationStatus={registrationStatus}
+                registrationError={registrationError}
                 authMode={authMode}
                 formState={authFormState}
                 error={authError}
@@ -4612,7 +4662,6 @@ export function App() {
                 closeSettingsPanels();
                 resetAccountForms();
                 setContextMenu(null);
-                setIsViewMenuOpen(false);
                 setIsCategoryMenuOpen(false);
             }}
         >
@@ -4712,11 +4761,13 @@ export function App() {
                                 onClick={() => {
                                     closeDetailPanel();
                                     if (isSettingsSubviewOpen) {
+                                        setSettingsNavigationDirection(0);
                                         closeSettingsPanels();
                                         resetAccountForms();
                                         return;
                                     }
                                     resetAccountForms();
+                                    setSettingsNavigationDirection(1);
                                     setSettingsView((current) =>
                                         current === "menu" ? null : "menu",
                                     );
@@ -4738,14 +4789,16 @@ export function App() {
                     </div>
                 </div>
 
-                    <AnimatePresence initial={false} mode="wait">
+                    {/* Remove Settings immediately when returning to tasks or opening the editor. */}
+                    {!detailPanelMode && isSettingsSubviewOpen && (
+                    <AnimatePresence mode="wait" custom={settingsNavigationDirection}>
                         {!detailPanelMode && isSettingsMenuOpen && (
                             <motion.section
                                 key="settings-menu"
                                 className="filter-section settings-menu-panel"
                                 onClick={(event) => event.stopPropagation()}
                                 variants={panelVariants}
-                                initial="hidden"
+                                initial={{ opacity: 0, x: 0 }}
                                 animate="visible"
                                 exit="exit"
                                 transition={panelTransition}
@@ -4788,9 +4841,6 @@ export function App() {
                                                 <span className="settings-navigation-row-title">
                                                     Google Calendar
                                                 </span>
-                                                <span className="settings-navigation-row-subtitle">
-                                                    Mirror scheduled tasks
-                                                </span>
                                             </span>
                                             <span
                                                 className="settings-navigation-row-chevron"
@@ -4808,9 +4858,6 @@ export function App() {
                                             <span className="settings-navigation-row-copy">
                                                 <span className="settings-navigation-row-title">
                                                     Webhook
-                                                </span>
-                                                <span className="settings-navigation-row-subtitle">
-                                                    Notification integration
                                                 </span>
                                             </span>
                                             <span
@@ -4834,9 +4881,6 @@ export function App() {
                                             <span className="settings-navigation-row-copy">
                                                 <span className="settings-navigation-row-title">
                                                     Backup &amp; Restore
-                                                </span>
-                                                <span className="settings-navigation-row-subtitle">
-                                                    Export or restore your data
                                                 </span>
                                             </span>
                                             <span
@@ -4879,9 +4923,6 @@ export function App() {
                                                 <span className="settings-navigation-row-copy">
                                                     <span className="settings-navigation-row-title">
                                                         Admin
-                                                    </span>
-                                                    <span className="settings-navigation-row-subtitle">
-                                                        Manage users
                                                     </span>
                                                 </span>
                                                 <span
@@ -4933,10 +4974,6 @@ export function App() {
                                         <h3 className="working-hours-title">
                                             Profile &amp; Security
                                         </h3>
-                                        <p className="muted">
-                                            Manage your password or delete this
-                                            account.
-                                        </p>
                                 </div>
                                     <button
                                         type="button"
@@ -5213,13 +5250,18 @@ export function App() {
                                                 </span>
                                             </span>
                                         </button>
-                                        {expandedPreferenceSection ===
-                                        "week-start" ? (
-                                            <div
+                                        <AnimatePresence initial={false}>
+                                        {expandedPreferenceSection === "week-start" && (
+                                            <motion.div
                                                 id="week-start-preference-options"
                                                 className="preferences-inline-options"
                                                 role="group"
                                                 aria-label="Week start"
+                                                initial={{ height: 0, opacity: 0, y: -4 }}
+                                                animate={{ height: "auto", opacity: 1, y: 0 }}
+                                                exit={{ height: 0, opacity: 0, y: -4 }}
+                                                transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                                                style={{ overflow: "hidden" }}
                                             >
                                                 <button
                                                     type="button"
@@ -5253,8 +5295,9 @@ export function App() {
                                                 >
                                                     Monday
                                                 </button>
-                                            </div>
-                                        ) : null}
+                                            </motion.div>
+                                        )}
+                                        </AnimatePresence>
                                         <button
                                             type="button"
                                             className="settings-navigation-row preferences-summary-row"
@@ -5290,11 +5333,16 @@ export function App() {
                                                 </span>
                                             </span>
                                         </button>
-                                        {expandedPreferenceSection ===
-                                        "working-hours" ? (
-                                            <div
+                                        <AnimatePresence initial={false}>
+                                        {expandedPreferenceSection === "working-hours" && (
+                                            <motion.div
                                                 id="working-hours-preference-editor"
                                                 className="preferences-inline-editor"
+                                                initial={{ height: 0, opacity: 0, y: -4 }}
+                                                animate={{ height: "auto", opacity: 1, y: 0 }}
+                                                exit={{ height: 0, opacity: 0, y: -4 }}
+                                                transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                                                style={{ overflow: "hidden" }}
                                             >
                                                 <label>
                                                     <span>Start time</span>
@@ -5330,8 +5378,9 @@ export function App() {
                                                         }
                                                     />
                                                 </label>
-                                            </div>
-                                        ) : null}
+                                            </motion.div>
+                                        )}
+                                        </AnimatePresence>
                                     </div>
                                     <div className="settings-list-section">
                                         <p className="settings-list-section-title">
@@ -5371,11 +5420,16 @@ export function App() {
                                                 </span>
                                             </span>
                                         </button>
-                                        {expandedPreferenceSection ===
-                                        "timezone" ? (
-                                            <div
+                                        <AnimatePresence initial={false}>
+                                        {expandedPreferenceSection === "timezone" && (
+                                            <motion.div
                                                 id="timezone-preference-editor"
                                                 className="preferences-inline-editor preferences-timezone-editor"
+                                                initial={{ height: 0, opacity: 0, y: -4 }}
+                                                animate={{ height: "auto", opacity: 1, y: 0 }}
+                                                exit={{ height: 0, opacity: 0, y: -4 }}
+                                                transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                                                style={{ overflow: "hidden" }}
                                             >
                                                 <div
                                                     className="timezone-dropdown"
@@ -5479,20 +5533,14 @@ export function App() {
                                                         ? "Saving..."
                                                         : "Use browser time zone"}
                                                 </button>
-                                                {currentUser?.timezone == null && (
-                                                    <p className="muted">
-                                                        Detected from this browser
-                                                        until you choose a time
-                                                        zone.
-                                                    </p>
-                                                )}
                                                 {timezoneError && (
                                                     <p className="form-error">
                                                         {timezoneError}
                                                     </p>
                                                 )}
-                                            </div>
-                                        ) : null}
+                                            </motion.div>
+                                        )}
+                                        </AnimatePresence>
                                     </div>
                                     <div className="settings-list-section">
                                         <p className="settings-list-section-title">
@@ -5586,6 +5634,11 @@ export function App() {
                                 transition={panelTransition}
                             >
                                 <div className="task-form backup-settings-form">
+                                    <div className="account-settings-heading">
+                                        <h3 className="working-hours-title">
+                                            Backup &amp; Restore
+                                        </h3>
+                                    </div>
                                     <input
                                         ref={backupFileInputRef}
                                         className="visually-hidden"
@@ -5617,18 +5670,12 @@ export function App() {
                                             </div>
                                         </div>
                                     )}
-                                    {backupImportFile ? (
+                                    {backupImportFile && (
                                         <p className="form-error">
                                             Importing this backup will
                                             replace existing calendar and
                                             account data for this account.
                                             Confirm once to continue.
-                                        </p>
-                                    ) : (
-                                        <p className="muted">
-                                            Restore will replace existing
-                                            calendar and account data for this
-                                            account.
                                         </p>
                                     )}
                                     <button
@@ -5904,6 +5951,11 @@ export function App() {
                                         void handleSaveWebhookSettings(event)
                                     }
                                 >
+                                    <div className="account-settings-heading">
+                                        <h3 className="working-hours-title">
+                                            Webhook
+                                        </h3>
+                                    </div>
                                     <label>
                                         <span>Webhook URL</span>
                                         <input
@@ -5943,11 +5995,6 @@ export function App() {
                                             rows={4}
                                         />
                                     </label>
-                                    <p className="muted">
-                                        Use placeholders like {`{title}`},{" "}
-                                        {`{when}`}, {`{notes}`}, and{" "}
-                                        {`{app_url}`}.
-                                    </p>
                                     {webhookTestMessage && (
                                         <p className="webhook-test-success">
                                             {webhookTestMessage}
@@ -5995,6 +6042,7 @@ export function App() {
                             </motion.section>
                         )}
                     </AnimatePresence>
+                    )}
 
                     {adminUserDeleteCandidate && (
                         <div
@@ -6121,96 +6169,46 @@ export function App() {
 
                     {isSidebarTaskContentVisible && (
                         <section
+                            key="sidebar-task-filters"
                             className="filter-section"
                             aria-label="Task filters"
                         >
                             <div className="filter-field task-view-filter-field">
                                 <span>View</span>
                                 <div
-                                    className="filter-dropdown"
+                                    className="segmented-control task-view-segments"
+                                    role="group"
+                                    aria-label="Task view"
                                     onClick={(event) => event.stopPropagation()}
                                 >
-                                    <button
-                                        type="button"
-                                        className="filter-trigger"
-                                        aria-label="Task view"
-                                        aria-expanded={isViewMenuOpen}
-                                        onClick={() => {
-                                            setIsViewMenuOpen(
-                                                (current) => !current,
-                                            );
-                                            setIsCategoryMenuOpen(false);
-                                        }}
-                                    >
-                                        <span>{activeViewLabel}</span>
-                                        <span
-                                            className="filter-chevron"
-                                            aria-hidden="true"
+                                    {taskViews.map((view) => (
+                                        <button
+                                            key={view.id}
+                                            type="button"
+                                            className="segmented-control-option"
+                                            aria-pressed={activeView === view.id}
+                                            onClick={() => {
+                                                setActiveView(view.id);
+                                                setIsCategoryMenuOpen(false);
+                                            }}
                                         >
-                                            ▾
-                                        </span>
-                                    </button>
-                                    <AnimatePresence initial={false}>
-                                        {isViewMenuOpen && (
-                                            <motion.div
-                                                key="view-menu"
-                                                className="filter-menu"
-                                                role="listbox"
-                                                aria-label="Task view options"
-                                                variants={dropdownVariants}
-                                                initial="hidden"
-                                                animate="visible"
-                                                exit="exit"
-                                                transition={
-                                                    dropdownTransition
-                                                }
-                                            >
-                                                {taskViews.map((view) => (
-                                                    <button
-                                                        key={view.id}
-                                                        type="button"
-                                                        className={`filter-option ${activeView === view.id ? "active" : ""}`}
-                                                        onClick={() => {
-                                                            setActiveView(
-                                                                view.id,
-                                                            );
-                                                            setIsViewMenuOpen(
-                                                                false,
-                                                            );
-                                                        }}
-                                                    >
-                                                        {view.label}
-                                                    </button>
-                                                ))}
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
+                                            {activeView === view.id && (
+                                                <motion.span
+                                                    className="task-view-selection"
+                                                    layoutId="task-view-selection"
+                                                    aria-hidden="true"
+                                                    transition={prefersReducedMotion
+                                                        ? { duration: 0 }
+                                                        : { type: "spring", stiffness: 500, damping: 40 }}
+                                                />
+                                            )}
+                                            <span className="task-view-option-label">
+                                                {view.label}
+                                            </span>
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
-
-                            {activeView === "upcoming" && (
-                                <div className="filter-field">
-                                    <span>Days</span>
-                                    <input
-                                        className="filter-number-input"
-                                        type="number"
-                                        min={1}
-                                        step={1}
-                                        value={upcomingDays}
-                                        onChange={(event) => {
-                                            const nextValue = Number.parseInt(
-                                                event.target.value,
-                                                10,
-                                            );
-                                            setUpcomingDays(
-                                                Number.isNaN(nextValue)
-                                                    ? 1
-                                                    : Math.max(1, nextValue),
-                                            );
-                                        }}
-                                    />
-                                </div>
-                            )}
 
                             <div className="filter-field">
                                 <span>Category</span>
@@ -6227,7 +6225,6 @@ export function App() {
                                             setIsCategoryMenuOpen(
                                                 (current) => !current,
                                             );
-                                            setIsViewMenuOpen(false);
                                         }}
                                     >
                                         <span className="filter-trigger-value">
@@ -6658,6 +6655,75 @@ export function App() {
                                 </div>
                             </div>
 
+                            <AnimatePresence initial={false}>
+                                {activeView === "upcoming" && (
+                                    <motion.div
+                                        key="upcoming-days"
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: "auto", opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        transition={taskViewTransition}
+                                        style={{ overflow: "hidden" }}
+                                    >
+                                        <div className="filter-field">
+                                            <span>Days</span>
+                                            <div className="segmented-control task-view-segments" role="group" aria-label="Upcoming days">
+                                                {([3, 7, "custom"] as const).map((mode) => (
+                                                    <button
+                                                        key={mode}
+                                                        type="button"
+                                                        className="segmented-control-option"
+                                                        aria-pressed={upcomingDaysMode === mode}
+                                                        onClick={(event) => {
+                                                            event.stopPropagation();
+                                                            setUpcomingDaysMode(mode);
+                                                            setUpcomingDays(mode === "custom" ? customUpcomingDays : mode);
+                                                        }}
+                                                    >
+                                                        {upcomingDaysMode === mode && (
+                                                            <motion.span
+                                                                className="task-view-selection"
+                                                                layoutId="upcoming-days-selection"
+                                                                aria-hidden="true"
+                                                                transition={prefersReducedMotion ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 40 }}
+                                                            />
+                                                        )}
+                                                        <span className="task-view-option-label">{mode === "custom" ? "Custom" : mode}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <AnimatePresence initial={false}>
+                                                {upcomingDaysMode === "custom" && (
+                                                    <motion.div
+                                                        key="custom-days"
+                                                        initial={{ height: 0, opacity: 0 }}
+                                                        animate={{ height: "auto", opacity: 1 }}
+                                                        exit={{ height: 0, opacity: 0 }}
+                                                        transition={taskViewTransition}
+                                                        style={{ overflow: "hidden" }}
+                                                    >
+                                                        <input
+                                                            aria-label="Custom days"
+                                                            className="filter-number-input"
+                                                            type="number"
+                                                            min={1}
+                                                            step={1}
+                                                            value={customUpcomingDays}
+                                                            onChange={(event) => {
+                                                                const parsed = Number.parseInt(event.target.value, 10);
+                                                                const days = Number.isFinite(parsed) ? Math.max(1, parsed) : 1;
+                                                                setCustomUpcomingDays(days);
+                                                                setUpcomingDays(days);
+                                                            }}
+                                                        />
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
                             {activeView === "unscheduled" && (
                                 <button
                                     type="button"
@@ -6674,8 +6740,9 @@ export function App() {
                         </section>
                     )}
 
+                    {/* Settings replaces the editor without retaining its exit animation. */}
+                    {!isSettingsSubviewOpen && (
                     <AnimatePresence
-                        initial={false}
                         mode="wait"
                         onExitComplete={() => setIsDetailPanelClosing(false)}
                     >
@@ -6689,7 +6756,7 @@ export function App() {
                                         : "Edit task panel"
                                 }
                                 variants={panelVariants}
-                                initial="hidden"
+                                initial={{ opacity: 0, x: 0 }}
                                 animate="visible"
                                 exit="exit"
                                 transition={panelTransition}
@@ -7079,9 +7146,11 @@ export function App() {
                                 </motion.section>
                         )}
                     </AnimatePresence>
+                    )}
 
                     {isSidebarTaskContentVisible && (
                         <section
+                            key="sidebar-task-list"
                             ref={taskListRef}
                             className={`task-list ${dragTargetMode === "reorder" ? "drag-target-list-active" : ""}`}
                             aria-label={`${activeView} tasks`}
@@ -7090,9 +7159,9 @@ export function App() {
                                 key={taskContentKey}
                                 className="task-list-content"
                                 variants={taskContentVariants}
-                                initial="hidden"
+                                initial={prefersReducedMotion ? false : "hidden"}
                                 animate="visible"
-                                transition={dropdownTransition}
+                                transition={taskViewTransition}
                             >
                                 {isInitialTaskLoad && (
                                     <motion.p
@@ -7155,18 +7224,7 @@ export function App() {
                                                     }
                                                             className={`task-row ${activeView === "unscheduled" ? "task-row--reorderable" : ""} ${!task.completed && isOverdueTask(task, new Date(), effectiveTimezone) ? "task-row--overdue" : ""} ${selectedTaskId === task.id ? "selected" : ""}`}
                                                     data-task-index={taskIndex}
-                                                    style={{
-                                                        borderLeftColor:
-                                                            taskCategoryColor(
-                                                                task,
-                                                                categoryColorById,
-                                                            ),
-                                                        accentColor:
-                                                            taskCategoryColor(
-                                                                task,
-                                                                categoryColorById,
-                                                            ),
-                                                    }}
+                                                    style={taskRowColors(task, categoryColorById, themeMode)}
                                                     onPointerDown={(event) =>
                                                         handleTaskRowPointerDown(
                                                             task.id,
@@ -7984,12 +8042,7 @@ export function App() {
                                     key={task.id}
                                     type="button"
                                     className="mobile-month-task-row"
-                                    style={{
-                                        borderLeftColor: taskCategoryColor(
-                                            task,
-                                            categoryColorById,
-                                        ),
-                                    }}
+                                    style={taskRowColors(task, categoryColorById, themeMode)}
                                     onClick={() => {
                                         setMobileMonthPreviewDate(null);
                                         openTaskDetailPanel(task.id);
@@ -8421,6 +8474,8 @@ type LabeledInputProps = {
 };
 
 type AuthScreenProps = {
+    registrationStatus: RegistrationStatus | null;
+    registrationError: string | null;
     authMode: AuthMode;
     formState: AuthFormState;
     error: string | null;
@@ -8431,6 +8486,8 @@ type AuthScreenProps = {
 };
 
 function AuthScreen({
+    registrationStatus,
+    registrationError,
     authMode,
     formState,
     error,
@@ -8439,19 +8496,21 @@ function AuthScreen({
     onChange,
     onModeChange,
 }: AuthScreenProps) {
+    if (!registrationStatus) {
+        return <main className="auth-shell"><section className="auth-panel">
+            <p role="status">{registrationError ?? "Loading sign-in options…"}</p>
+        </section></main>;
+    }
     const isRegistering = authMode === "register";
 
     return (
         <main className="auth-shell">
             <section className="auth-panel" aria-labelledby="auth-title">
-                <p className="eyebrow">SCHEDULED TASK CALENDAR</p>
-                <h1 id="auth-title">
+                <p className="eyebrow">TaskCalendar</p>
+                <h1 id="auth-title" key={`title-${authMode}`}>
                     {isRegistering ? "Register" : "Welcome back"}
                 </h1>
-                <p className="auth-subtitle">
-                    {isRegistering ? "Create a new account" : "Sign in to continue"}
-                </p>
-                <div className="auth-mode-switch" role="tablist" aria-label="Authentication mode">
+                {registrationStatus?.registration_open && !registrationStatus.setup_required && <div className="auth-mode-switch" data-mode={authMode} role="tablist" aria-label="Authentication mode">
                     <button
                         type="button"
                         role="tab"
@@ -8474,8 +8533,9 @@ function AuthScreen({
                     >
                         Register
                     </button>
-                </div>
-                <form className="auth-form" onSubmit={onSubmit}>
+                </div>}
+                {registrationError && <p role="alert">{registrationError}</p>}
+                <form className="auth-form" key={`form-${authMode}`} onSubmit={onSubmit}>
                     <label>
                         <span>Username</span>
                         <input
@@ -8511,7 +8571,7 @@ function AuthScreen({
                         />
                     </label>
                     {error && <p className="form-error">{error}</p>}
-                    <button type="submit" disabled={isSubmitting}>
+                    <button type="submit" disabled={isSubmitting || !registrationStatus}>
                         {isSubmitting
                             ? isRegistering
                                 ? "Creating..."
@@ -8922,6 +8982,7 @@ function RecurrenceComposer({ state, onChange }: RecurrenceComposerProps) {
                     label="Repeat"
                     value={state.recurrence_frequency}
                     options={recurrenceFrequencyDisplayOptions}
+                    escapeClipping
                     onChange={(value) =>
                         onChange({
                             recurrence_frequency: value as RecurrenceFrequency,
@@ -8944,6 +9005,7 @@ function RecurrenceComposer({ state, onChange }: RecurrenceComposerProps) {
                             label="Until"
                             value={endsMode}
                             options={recurrenceEndsOptions}
+                            escapeClipping
                             onChange={(value) =>
                                 onChange({
                                     recurrence_until:
@@ -9034,6 +9096,7 @@ function ReminderComposer({ state, onChange, allDay }: ReminderComposerProps) {
                     label="Reminder"
                     value={reminderMode}
                     options={reminderOptions}
+                    escapeClipping
                     onChange={(selectedValue) => {
                         if (selectedValue === "ON_TIME") {
                             onChange({
@@ -9110,6 +9173,7 @@ function ReminderComposer({ state, onChange, allDay }: ReminderComposerProps) {
                                 label="Reminder unit"
                                 value={reminderUnit}
                                 options={reminderUnitOptions}
+                                escapeClipping
                                 onChange={(value) =>
                                     onChange({
                                         notification_unit:
@@ -10574,8 +10638,9 @@ function mapTaskToCalendarEvent(
     task: ScheduledTask,
     categoryColorById: Map<string, string>,
     timezone: string,
+    theme: ThemeMode,
 ): EventInput {
-    const color = taskCategoryColor(task, categoryColorById);
+    const colors = taskColors(taskCategoryColor(task, categoryColorById), theme, task.completed);
     const scheduledStart = task.scheduled_start;
     const allDay = Boolean(task.all_day);
     const timedStart =
@@ -10610,11 +10675,9 @@ function mapTaskToCalendarEvent(
         allDay,
         display: "block",
         editable: true,
-        backgroundColor: task.completed
-            ? withAlpha(color, 0.32)
-            : color,
-        borderColor: color,
-        textColor: task.completed ? "#50615b" : readableTextColor(color),
+        backgroundColor: colors.background,
+        borderColor: colors.accent,
+        textColor: colors.text,
         classNames,
         extendedProps: {
             task,
@@ -10626,34 +10689,26 @@ function mapTasksToCalendarEvents(
     tasks: ScheduledTask[],
     categoryColorById: Map<string, string>,
     timezone: string,
+    theme: ThemeMode,
 ): EventInput[] {
     return tasks
         .filter((task) => task.scheduled_start)
-        .map((task) => mapTaskToCalendarEvent(task, categoryColorById, timezone));
+        .map((task) => mapTaskToCalendarEvent(task, categoryColorById, timezone, theme));
 }
 
-function readableTextColor(hexColor: string): string {
-    const red = Number.parseInt(hexColor.slice(1, 3), 16);
-    const green = Number.parseInt(hexColor.slice(3, 5), 16);
-    const blue = Number.parseInt(hexColor.slice(5, 7), 16);
-    const brightness = (red * 299 + green * 587 + blue * 114) / 1000;
-    return brightness > 145 ? "#182026" : "#ffffff";
-}
-
-function complementaryColor(hexColor: string): string {
-    const red = Number.parseInt(hexColor.slice(1, 3), 16);
-    const green = Number.parseInt(hexColor.slice(3, 5), 16);
-    const blue = Number.parseInt(hexColor.slice(5, 7), 16);
-    return `#${[red, green, blue]
-        .map((channel) => (255 - channel).toString(16).padStart(2, "0"))
-        .join("")}`;
-}
-
-function withAlpha(hexColor: string, alpha: number): string {
-    const red = Number.parseInt(hexColor.slice(1, 3), 16);
-    const green = Number.parseInt(hexColor.slice(3, 5), 16);
-    const blue = Number.parseInt(hexColor.slice(5, 7), 16);
-    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+function taskRowColors(
+    task: ScheduledTask,
+    categoryColorById: Map<string, string>,
+    theme: ThemeMode,
+): CSSProperties {
+    const colors = taskColors(taskCategoryColor(task, categoryColorById), theme, task.completed);
+    return {
+        borderLeftColor: colors.accent,
+        accentColor: colors.accent,
+        "--task-list-background": colors.listBackground,
+        "--task-hover-background": colors.hoverBackground,
+        "--task-accent": colors.accent,
+    } as CSSProperties;
 }
 
 function getInitialThemeMode(): ThemeMode {

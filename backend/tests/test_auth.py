@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.auth.dependencies import get_current_user
+from app.auth.registration import RegistrationUpdate, update_registration, get_registration_status
 from app.auth.router import (
     change_password,
     delete_account,
@@ -41,6 +42,7 @@ def db_session() -> Generator[Session, None, None]:
     TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
     with TestingSessionLocal() as session:
+        update_registration(session, RegistrationUpdate(duration_minutes=5))
         yield session
 
     Base.metadata.drop_all(bind=engine)
@@ -73,6 +75,50 @@ def test_register_only_promotes_first_user_to_admin(db_session: Session) -> None
 
     assert first.is_admin is True
     assert second.is_admin is False
+
+
+def test_registration_closed_after_setup_and_expiry(db_session: Session) -> None:
+    from datetime import UTC, datetime, timedelta
+    from app.models.registration import RegistrationSettings
+
+    update_registration(db_session, RegistrationUpdate(duration_minutes=0))
+    assert get_registration_status(db_session).setup_required
+    register(AuthCredentials(username="owner", password="secret"), db_session)
+    assert not get_registration_status(db_session).registration_open
+    with pytest.raises(HTTPException) as exc:
+        register(AuthCredentials(username="blocked", password="secret"), db_session)
+    assert exc.value.status_code == 403
+    update_registration(db_session, RegistrationUpdate(duration_minutes=5))
+    register(AuthCredentials(username="invited", password="secret"), db_session)
+    config = db_session.get(RegistrationSettings, 1)
+    config.open_until = datetime.now(UTC) - timedelta(seconds=1)
+    db_session.commit()
+    with pytest.raises(HTTPException) as exc:
+        register(AuthCredentials(username="late", password="secret"), db_session)
+    assert exc.value.status_code == 403
+
+
+def test_registration_window_admin_authorization(db_session: Session) -> None:
+    from fastapi.testclient import TestClient
+    from app.core.database import get_db
+    from app.main import create_app
+    from app.auth.security import create_access_token
+
+    admin = register(AuthCredentials(username="admin", password="secret"), db_session)
+    regular = register(AuthCredentials(username="regular", password="secret"), db_session)
+    app = create_app(start_worker=False)
+    app.dependency_overrides[get_db] = lambda: db_session
+    with TestClient(app) as client:
+        assert client.put("/admin/registration", json={"duration_minutes": 5}).status_code == 401
+        headers = {"Authorization": f"Bearer {create_access_token(str(regular.id))}"}
+        assert client.put("/admin/registration", headers=headers, json={"duration_minutes": 5}).status_code == 403
+        headers = {"Authorization": f"Bearer {create_access_token(str(admin.id))}"}
+        assert client.put("/admin/registration", headers=headers, json={"duration_minutes": 0}).status_code == 200
+        assert not client.get("/auth/registration-status").json()["registration_open"]
+        assert client.post("/auth/register", json={"username": "blocked", "password": "secret"}).status_code == 403
+        assert client.put("/admin/registration", headers=headers, json={"duration_minutes": 5}).json()["registration_open"]
+        assert client.put("/admin/registration", headers=headers, json={"duration_minutes": -1}).status_code == 422
+        assert client.put("/admin/registration", headers=headers, json={"duration_minutes": 15}).status_code == 422
 
 
 def test_register_rejects_duplicate_username(db_session: Session) -> None:

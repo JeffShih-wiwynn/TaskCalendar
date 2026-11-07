@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import service
 from app.auth.dependencies import get_current_admin_user
+from app.auth.registration import RegistrationStatus, RegistrationUpdate, update_registration
 from app.auth.schemas import ActionResponse, UserRead
 from app.core.database import get_db
 from app.models.user import User
@@ -14,6 +15,13 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentAdminUser = Annotated[User, Depends(get_current_admin_user)]
+
+
+@router.put("/registration", response_model=RegistrationStatus)
+def set_registration(
+    data: RegistrationUpdate, db: DbSession, current_admin: CurrentAdminUser,
+) -> RegistrationStatus:
+    return update_registration(db, data)
 
 
 @router.get("/users", response_model=list[UserRead])

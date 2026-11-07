@@ -10,8 +10,10 @@ from app.models.google_calendar import (
 from app.models.scheduled_task import ScheduledTask
 from app.models.task_list import TaskList
 from app.models.user import User
+from app.models.registration import RegistrationSettings
 
 __all__ = [
+    "RegistrationSettings",
     "AppSettings",
     "DailyTodoNotification",
     "GoogleCalendarConnection",

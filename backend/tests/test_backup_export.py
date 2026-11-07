@@ -1,6 +1,7 @@
 from collections.abc import Generator
 
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 from pydantic import ValidationError
@@ -336,7 +337,11 @@ def test_backup_export_serializes_datetimes_in_configured_timezone(
 
     payload = export_user_backup(db_session, user_id=user.id)
 
-    assert payload["exported_at"].endswith("-04:00")
+    exported_at = datetime.fromisoformat(payload["exported_at"])
+    assert exported_at.tzinfo is not None
+    assert exported_at.utcoffset() == exported_at.astimezone(
+        ZoneInfo("America/New_York")
+    ).utcoffset()
     assert payload["tasks"][0]["scheduled_start"] == "2026-05-15T14:00:00-04:00"
     assert payload["tasks"][0]["scheduled_end"] == "2026-05-15T15:00:00-04:00"
 
