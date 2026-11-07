@@ -1,4 +1,5 @@
-import { expect, type APIRequestContext, type Page, test } from '@playwright/test';
+import { test, expect, E2E_NOW } from './fixtures';
+import { type APIRequestContext, type Page } from '@playwright/test';
 
 const e2eHost = process.env.E2E_DEV_HOST ?? '127.0.0.1';
 const frontendPort = process.env.E2E_FRONTEND_PORT ?? '5173';
@@ -27,6 +28,12 @@ async function registerUser(request: APIRequestContext): Promise<{ username: str
 }
 
 async function openAuthenticatedApp(page: Page, user: { username: string; token: string }): Promise<void> {
+  await page.clock.setFixedTime(E2E_NOW);
+  const timezoneResponse = await page.request.patch(`${API_BASE_URL}/auth/me/timezone`, {
+    headers: { Authorization: `Bearer ${user.token}` },
+    data: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+  });
+  expect(timezoneResponse.ok()).toBeTruthy();
   await page.addInitScript((token) => {
     window.localStorage.setItem('calendar-auth-token', token);
   }, user.token);

@@ -1,5 +1,13 @@
 # Development Commands
 
+## Playwright CI environment
+
+The Playwright E2E workflow uses `ubuntu-24.04`. Playwright 1.60.0 cannot install Chromium dependencies on Ubuntu 26.04, so this workflow pins the runner instead of following `ubuntu-latest`.
+
+Playwright global setup creates a test administrator on an empty instance. A shared fixture renews the five-minute registration window before each desktop or mobile test, and teardown closes registration. Use a disposable test instance. When reusing one, set `E2E_ADMIN_USERNAME` and `E2E_ADMIN_PASSWORD` to its administrator credentials; the default test administrator is reused automatically on subsequent runs. Tokens are passed to workers in memory.
+
+Browser contexts and test users use the runner's timezone, and browser time is fixed at local noon for the test date to avoid midnight-dependent calendar failures. CI exercises both `UTC` and `Asia/Taipei`.
+
 ## Frontend
 
 Install:

@@ -5,7 +5,6 @@ import {
     screen,
     within,
     waitFor,
-    waitForElementToBeRemoved,
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { EventInput } from "@fullcalendar/core";
@@ -19,6 +18,7 @@ import {
 } from "react";
 
 import { App } from "./App";
+import { getRegistrationStatus } from "./api/registration";
 
 const mocks = vi.hoisted(() => ({
     AuthError: class MockAuthError extends Error {
@@ -684,6 +684,11 @@ vi.mock("./api/auth", () => ({
     register: mocks.register,
 }));
 
+vi.mock("./api/registration", () => ({
+    getRegistrationStatus: vi.fn(async () => ({ setup_required: false, registration_open: true, open_until: null })),
+    setRegistrationWindow: vi.fn(),
+}));
+
 vi.mock("./api/admin", () => ({
     deleteAdminUser: mocks.deleteAdminUser,
     listAdminUsers: mocks.listAdminUsers,
@@ -1127,13 +1132,30 @@ describe("App", () => {
         });
     });
 
-    it("shows the auth screen when no token exists", () => {
+    it("shows the auth screen when no token exists", async () => {
         window.localStorage.removeItem("calendar-auth-token");
 
         render(<App />);
 
-        expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
-        expect(screen.queryByRole("button", { name: "Task view" })).not.toBeInTheDocument();
+        expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+        expect(screen.queryByRole("group", { name: "Task view" })).not.toBeInTheDocument();
+    });
+
+    it("only offers registration during initial setup", async () => {
+        window.localStorage.removeItem("calendar-auth-token");
+        vi.mocked(getRegistrationStatus).mockResolvedValueOnce({ setup_required: true, registration_open: true, open_until: null });
+        render(<App />);
+        expect(await screen.findByRole("heading", { name: "Register" })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Login" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("tab", { name: "Login" })).not.toBeInTheDocument();
+    });
+
+    it("hides registration when closed", async () => {
+        window.localStorage.removeItem("calendar-auth-token");
+        vi.mocked(getRegistrationStatus).mockResolvedValueOnce({ setup_required: false, registration_open: false, open_until: null });
+        render(<App />);
+        await waitFor(() => expect(screen.getByRole("button", { name: "Login" })).toBeEnabled());
+        expect(screen.queryByRole("tab", { name: "Register" })).not.toBeInTheDocument();
     });
 
     it("logs in and renders the calendar app", async () => {
@@ -1141,12 +1163,13 @@ describe("App", () => {
 
         render(<App />);
 
-        fireEvent.change(screen.getByLabelText("Username"), {
+        fireEvent.change(await screen.findByLabelText("Username"), {
             target: { value: "alice" },
         });
         fireEvent.change(screen.getByLabelText("Password"), {
             target: { value: "secret-password" },
         });
+        await waitFor(() => expect(screen.getByRole("button", { name: "Login" })).toBeEnabled());
         fireEvent.click(screen.getByRole("button", { name: "Login" }));
 
         await waitFor(() =>
@@ -1157,7 +1180,7 @@ describe("App", () => {
         );
         expect(window.localStorage.getItem("calendar-auth-token")).toBe("test-token");
         expect(
-            await screen.findByRole("button", { name: "Task view" }),
+            await screen.findByRole("group", { name: "Task view" }),
         ).toHaveTextContent("Today");
     });
 
@@ -1168,9 +1191,8 @@ describe("App", () => {
         expect(mocks.listTasks).toHaveBeenCalled();
         expect(mocks.listTaskLists).toHaveBeenCalled();
 
-        fireEvent.click(screen.getByRole("button", { name: "Task view" }));
-        const taskViewOptions = screen.getByRole("listbox", {
-            name: "Task view options",
+        const taskViewOptions = screen.getByRole("group", {
+            name: "Task view",
         });
         expect(within(taskViewOptions).getByRole("button", { name: "Today" })).toBeInTheDocument();
         expect(
@@ -1200,7 +1222,7 @@ describe("App", () => {
             await screen.findByText("Session expired. Please log in again."),
         ).toBeInTheDocument();
         expect(window.localStorage.getItem("calendar-auth-token")).toBeNull();
-        expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+        expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
     });
 
     it("logs out from the settings menu", async () => {
@@ -1211,7 +1233,44 @@ describe("App", () => {
         fireEvent.click(await screen.findByRole("button", { name: "Logout" }));
 
         expect(window.localStorage.getItem("calendar-auth-token")).toBeNull();
-        expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+        expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    });
+
+    it("switches between Settings and the calendar editor without overlapping panels", async () => {
+        mocks.tasks = [makeTask()];
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        expect(await screen.findByRole("button", { name: "Preferences" })).toBeInTheDocument();
+
+        act(() => {
+            mocks.fullCalendarProps.eventClick?.({
+                el: document.createElement("div"),
+                event: { id: "task-1", start: new Date() },
+                view: { type: "timeGridWeek" },
+            });
+        });
+
+        expect(screen.getByRole("region", { name: "Edit task panel" })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Preferences" })).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Settings" })).toHaveAttribute("aria-expanded", "false");
+
+        fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+
+        expect(screen.getByRole("button", { name: "Preferences" })).toBeInTheDocument();
+        expect(screen.queryByRole("region", { name: "Edit task panel" })).not.toBeInTheDocument();
+    });
+
+    it("removes Settings immediately when clicking the background to return to tasks", async () => {
+        render(<App />);
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        expect(screen.getByRole("button", { name: "Preferences" })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("main"));
+
+        expect(screen.queryByRole("button", { name: "Preferences" })).not.toBeInTheDocument();
+        expect(await screen.findByRole("group", { name: "Task view" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Settings" })).toHaveAttribute("aria-expanded", "false");
     });
 
     it("renders grouped settings rows without display preference switches", async () => {
@@ -1235,9 +1294,9 @@ describe("App", () => {
         expect(
             screen.queryByRole("button", { name: "Account" }),
         ).not.toBeInTheDocument();
-        expect(screen.getByText("Mirror scheduled tasks")).toBeInTheDocument();
-        expect(screen.getByText("Notification integration")).toBeInTheDocument();
-        expect(screen.getByText("Export or restore your data")).toBeInTheDocument();
+        expect(screen.queryByText("Mirror scheduled tasks")).not.toBeInTheDocument();
+        expect(screen.queryByText("Notification integration")).not.toBeInTheDocument();
+        expect(screen.queryByText("Export or restore your data")).not.toBeInTheDocument();
         expect(
             screen.queryByRole("switch", { name: "Dark mode" }),
         ).not.toBeInTheDocument();
@@ -1247,6 +1306,7 @@ describe("App", () => {
     });
 
     it("toggles dark mode from preferences settings", async () => {
+        mocks.tasks = [makeTask()];
         render(<App />);
 
         fireEvent.click(
@@ -1263,8 +1323,14 @@ describe("App", () => {
             name: "Dark mode",
         });
 
+        await waitFor(() => expect(mocks.fullCalendarProps.events).toHaveLength(1));
+        const lightBackground = mocks.fullCalendarProps.events[0].backgroundColor;
         expect(darkModeSwitch).toHaveAttribute("aria-checked", "false");
         fireEvent.click(darkModeSwitch);
+        await waitFor(() => {
+            expect(mocks.fullCalendarProps.events[0].backgroundColor).not.toBe(lightBackground);
+            expect(mocks.fullCalendarProps.events[0].textColor).toBe("#eef4f1");
+        });
 
         await waitFor(() =>
             expect(
@@ -1403,7 +1469,7 @@ describe("App", () => {
         expect(
             screen.getByRole("button", { name: "Return to sidebar" }),
         ).toHaveTextContent("☰");
-        expect(screen.queryByRole("button", { name: "Task view" })).toBeNull();
+        expect(screen.queryByRole("group", { name: "Task view" })).toBeNull();
         expect(
             screen.queryByRole("heading", { name: "Task filters" }),
         ).toBeNull();
@@ -1897,7 +1963,7 @@ describe("App", () => {
     it("remounts the calendar when mobile interaction mode changes", async () => {
         render(<App />);
 
-        await screen.findByRole("button", { name: "Task view" });
+        await screen.findByRole("group", { name: "Task view" });
         expect(mocks.fullCalendarMount).toHaveBeenCalledTimes(1);
         expect(mocks.fullCalendarProps.editable).toBe(true);
         expect(mocks.fullCalendarProps.eventStartEditable).toBe(true);
@@ -2107,10 +2173,12 @@ describe("App", () => {
 
         fireEvent.click(scheduleButton);
         expect(scheduleButton).toHaveAttribute("aria-expanded", "false");
-        expect(screen.queryByLabelText("Start date")).not.toBeInTheDocument();
-        expect(
-            screen.queryByRole("button", { name: "Clear schedule" }),
-        ).not.toBeInTheDocument();
+        await waitFor(() => {
+            expect(screen.queryByLabelText("Start date")).not.toBeInTheDocument();
+            expect(
+                screen.queryByRole("button", { name: "Clear schedule" }),
+            ).not.toBeInTheDocument();
+        });
         expect(screen.getByLabelText("Title")).toBeInTheDocument();
 
         fireEvent.click(scheduleButton);
@@ -2128,9 +2196,11 @@ describe("App", () => {
         fireEvent.click(categoriesButton);
         expect(notesButton).toHaveAttribute("aria-expanded", "false");
         expect(categoriesButton).toHaveAttribute("aria-expanded", "true");
-        expect(
-            screen.queryByRole("textbox", { name: "Notes" }),
-        ).not.toBeInTheDocument();
+        await waitFor(() => {
+            expect(
+                screen.queryByRole("textbox", { name: "Notes" }),
+            ).not.toBeInTheDocument();
+        });
 
         fireEvent.click(notesButton);
         expect(getNotesTextbox()).toHaveValue("Accordion note");
@@ -2883,7 +2953,7 @@ describe("App", () => {
     it("stops authenticated polling after logout", async () => {
         render(<App />);
 
-        await screen.findByRole("button", { name: "Task view" });
+        await screen.findByRole("group", { name: "Task view" });
         await waitFor(() =>
             expect(mocks.listTasks.mock.calls.length).toBeGreaterThan(0),
         );
@@ -2990,14 +3060,14 @@ describe("App", () => {
 
         render(<App />);
 
-        fireEvent.change(screen.getByLabelText("Username"), {
+        fireEvent.change(await screen.findByLabelText("Username"), {
             target: { value: "alice" },
         });
         fireEvent.change(screen.getByLabelText("Password"), {
             target: { value: "secret-password" },
         });
 
-        fireEvent.click(screen.getByRole("tab", { name: "Register" }));
+        fireEvent.click(await screen.findByRole("tab", { name: "Register" }));
 
         expect(screen.getByLabelText("Username")).toHaveValue("");
         expect(screen.getByLabelText("Password")).toHaveValue("");
@@ -3019,16 +3089,15 @@ describe("App", () => {
         render(<App />);
 
         expect(
-            await screen.findByRole("button", { name: "Task view" }),
+            await screen.findByRole("group", { name: "Task view" }),
         ).toHaveTextContent("Today");
         expect(
             screen.getByRole("button", { name: "Task category" }),
         ).toHaveTextContent("All");
-        fireEvent.click(screen.getByRole("button", { name: "Task view" }));
         expect(
             screen
                 .getAllByRole("button", { name: "Today" })
-                .some((button) => button.classList.contains("filter-option")),
+                .some((button) => button.classList.contains("segmented-control-option")),
         ).toBe(true);
         expect(
             screen.getByRole("button", { name: "Upcoming" }),
@@ -3048,6 +3117,24 @@ describe("App", () => {
         ).not.toBeInTheDocument();
         expect(screen.queryByText("Create task")).not.toBeInTheDocument();
         expect(screen.queryByText("Show on calendar")).not.toBeInTheDocument();
+    });
+
+    it("switches task views directly using the segmented buttons", async () => {
+        render(<App />);
+        const views = await screen.findByRole("group", { name: "Task view" });
+        expect(within(views).getAllByRole("button")).toHaveLength(3);
+        const today = within(views).getByRole("button", { name: "Today" });
+        const upcoming = within(views).getByRole("button", { name: "Upcoming" });
+        const inbox = within(views).getByRole("button", { name: "Inbox" });
+        expect(today).toHaveAttribute("aria-pressed", "true");
+        fireEvent.click(upcoming);
+        expect(upcoming).toHaveAttribute("aria-pressed", "true");
+        expect(today).toHaveAttribute("aria-pressed", "false");
+        expect(await screen.findByRole("region", { name: "upcoming tasks" })).toBeInTheDocument();
+        fireEvent.click(inbox);
+        expect(inbox).toHaveAttribute("aria-pressed", "true");
+        expect(upcoming).toHaveAttribute("aria-pressed", "false");
+        expect(await screen.findByRole("region", { name: "unscheduled tasks" })).toBeInTheDocument();
     });
 
     it("shows a no time tasks view with a create task button", async () => {
@@ -3077,7 +3164,7 @@ describe("App", () => {
 
         render(<App />);
 
-        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        await screen.findByRole("group", { name: "Task view" });
         fireEvent.click(
             await screen.findByRole("button", { name: "Inbox" }),
         );
@@ -3181,7 +3268,7 @@ describe("App", () => {
 
         render(<App />);
 
-        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        await screen.findByRole("group", { name: "Task view" });
         fireEvent.click(
             await screen.findByRole("button", { name: "Inbox" }),
         );
@@ -3276,7 +3363,7 @@ describe("App", () => {
 
         render(<App />);
 
-        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        await screen.findByRole("group", { name: "Task view" });
         fireEvent.click(
             await screen.findByRole("button", { name: "Inbox" }),
         );
@@ -3332,7 +3419,7 @@ describe("App", () => {
 
         render(<App />);
 
-        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        await screen.findByRole("group", { name: "Task view" });
         fireEvent.click(
             await screen.findByRole("button", { name: "Inbox" }),
         );
@@ -3417,7 +3504,6 @@ describe("App", () => {
             todayRow.querySelector(".task-drag-handle"),
         ).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole("button", { name: "Task view" }));
         fireEvent.click(screen.getByRole("button", { name: "Upcoming" }));
         const upcomingRow = await screen.findByRole("button", {
             name: /Upcoming draggable/i,
@@ -3426,7 +3512,6 @@ describe("App", () => {
             upcomingRow.querySelector(".task-drag-handle"),
         ).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole("button", { name: "Task view" }));
         fireEvent.click(screen.getByRole("button", { name: "Inbox" }));
         await screen.findByText("Inbox draggable");
         const inboxRow = document.querySelector(
@@ -3487,7 +3572,7 @@ describe("App", () => {
 
         render(<App />);
 
-        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        await screen.findByRole("group", { name: "Task view" });
         fireEvent.click(
             await screen.findByRole("button", { name: "Inbox" }),
         );
@@ -3583,7 +3668,7 @@ describe("App", () => {
 
         render(<App />);
 
-        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        await screen.findByRole("group", { name: "Task view" });
         fireEvent.click(
             await screen.findByRole("button", { name: "Inbox" }),
         );
@@ -3677,7 +3762,7 @@ describe("App", () => {
 
         const rendered = render(<App />);
 
-        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        await screen.findByRole("group", { name: "Task view" });
         fireEvent.click(
             await screen.findByRole("button", { name: "Inbox" }),
         );
@@ -3695,7 +3780,7 @@ describe("App", () => {
         rendered.unmount();
         render(<App />);
 
-        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        await screen.findByRole("group", { name: "Task view" });
         fireEvent.click(
             await screen.findByRole("button", { name: "Inbox" }),
         );
@@ -3782,7 +3867,7 @@ describe("App", () => {
 
         render(<App />);
 
-        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        await screen.findByRole("group", { name: "Task view" });
         fireEvent.click(
             await screen.findByRole("button", { name: "Inbox" }),
         );
@@ -3848,7 +3933,7 @@ describe("App", () => {
         );
         fireEvent.click(screen.getByRole("switch", { name: "All" }));
         fireEvent.click(screen.getByRole("switch", { name: "Work" }));
-        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        await screen.findByRole("group", { name: "Task view" });
         fireEvent.click(
             await screen.findByRole("button", { name: "Inbox" }),
         );
@@ -3892,7 +3977,7 @@ describe("App", () => {
 
         mocks.draggableConstruct.mockClear();
 
-        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        await screen.findByRole("group", { name: "Task view" });
         fireEvent.click(
             await screen.findByRole("button", { name: "Inbox" }),
         );
@@ -3924,7 +4009,7 @@ describe("App", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "Close" }));
         expect(
-            await screen.findByRole("button", { name: "Task view" }),
+            await screen.findByRole("group", { name: "Task view" }),
         ).toBeInTheDocument();
         await waitFor(() =>
             expect(mocks.draggableConstruct.mock.calls.length).toBeGreaterThan(
@@ -3941,14 +4026,14 @@ describe("App", () => {
         );
 
         expect(
-            screen.queryByRole("button", { name: "Task view" }),
+            screen.queryByRole("group", { name: "Task view" }),
         ).not.toBeInTheDocument();
         expect(screen.getByRole("button", { name: "⇥" })).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole("button", { name: "⇥" }));
 
         expect(
-            await screen.findByRole("button", { name: "Task view" }),
+            await screen.findByRole("group", { name: "Task view" }),
         ).toBeInTheDocument();
     });
 
@@ -3990,7 +4075,7 @@ describe("App", () => {
         render(<App />);
 
         expect(
-            await screen.findByRole("button", { name: "Task view" }),
+            await screen.findByRole("group", { name: "Task view" }),
         ).toBeInTheDocument();
         expect(
             screen.getByRole("region", { name: "today tasks" }),
@@ -4003,7 +4088,7 @@ describe("App", () => {
             screen.getByRole("heading", { name: "Create task" }),
         ).toBeInTheDocument();
         expect(
-            screen.queryByRole("button", { name: "Task view" }),
+            screen.queryByRole("group", { name: "Task view" }),
         ).not.toBeInTheDocument();
         expect(
             screen.queryByRole("button", { name: "Task category" }),
@@ -4016,7 +4101,7 @@ describe("App", () => {
 
         await waitFor(() =>
             expect(
-                screen.getByRole("button", { name: "Task view" }),
+                screen.getByRole("group", { name: "Task view" }),
             ).toBeInTheDocument(),
         );
         expect(
@@ -4578,9 +4663,7 @@ describe("App", () => {
             screen.getByRole("button", { name: "Webhook" }),
         );
 
-        await waitForElementToBeRemoved(() =>
-            screen.queryByRole("heading", { name: "Create task" }),
-        );
+        expect(screen.queryByRole("heading", { name: "Create task" })).not.toBeInTheDocument();
         expect(await screen.findByLabelText("Webhook URL")).toBeInTheDocument();
     });
 
@@ -4700,7 +4783,7 @@ describe("App", () => {
         render(<App />);
 
         fireEvent.click(
-            await screen.findByRole("button", { name: "Task view" }),
+            await screen.findByRole("group", { name: "Task view" }),
         );
         fireEvent.click(await screen.findByRole("button", { name: "Inbox" }));
         expect(
@@ -4719,8 +4802,8 @@ describe("App", () => {
             "settings-action-button-warning",
         );
         expect(
-            within(adminSettingsButton).getByText("Manage users"),
-        ).toBeInTheDocument();
+            within(adminSettingsButton).queryByText("Manage users"),
+        ).not.toBeInTheDocument();
         expect(
             within(adminSettingsButton).queryByText(
                 "Manage users and system settings",
@@ -4733,7 +4816,7 @@ describe("App", () => {
         ).toBeInTheDocument();
         await waitFor(() => expect(mocks.listAdminUsers).toHaveBeenCalled());
         expect(
-            screen.queryByRole("button", { name: "Task view" }),
+            screen.queryByRole("group", { name: "Task view" }),
         ).not.toBeInTheDocument();
         expect(
             screen.queryByRole("button", { name: "Task category" }),
@@ -4937,7 +5020,7 @@ describe("App", () => {
             ).not.toBeInTheDocument(),
         );
         expect(
-            screen.getByRole("button", { name: "Task view" }),
+            screen.getByRole("group", { name: "Task view" }),
         ).toBeInTheDocument();
         expect(
             screen.getByRole("button", { name: "Task category" }),
@@ -5029,7 +5112,7 @@ describe("App", () => {
             ).not.toBeInTheDocument(),
         );
         expect(
-            screen.getByRole("button", { name: "Task view" }),
+            screen.getByRole("group", { name: "Task view" }),
         ).toBeInTheDocument();
         expect(
             screen.getByRole("button", { name: "Task category" }),
@@ -5565,7 +5648,7 @@ describe("App", () => {
             ).not.toBeInTheDocument(),
         );
         expect(
-            screen.getByRole("button", { name: "Task view" }),
+            screen.getByRole("group", { name: "Task view" }),
         ).toBeInTheDocument();
         expect(
             screen.getByRole("button", { name: "Task category" }),
@@ -6285,7 +6368,7 @@ describe("App", () => {
         render(<App />);
 
         expect(
-            await screen.findByRole("button", { name: "Task view" }),
+            await screen.findByRole("group", { name: "Task view" }),
         ).toHaveTextContent("Today");
 
         fireEvent.click(screen.getByRole("button", { name: "Task category" }));
@@ -6412,7 +6495,7 @@ describe("App", () => {
         render(<App />);
 
         expect(
-            await screen.findByRole("button", { name: "Task view" }),
+            await screen.findByRole("group", { name: "Task view" }),
         ).toBeInTheDocument();
         await waitFor(() =>
             expect(mocks.fullCalendarProps.events).toHaveLength(1),
@@ -6449,7 +6532,7 @@ describe("App", () => {
         render(<App />);
 
         expect(
-            await screen.findByRole("button", { name: "Task view" }),
+            await screen.findByRole("group", { name: "Task view" }),
         ).toBeInTheDocument();
         await waitFor(() =>
             expect(mocks.fullCalendarProps.events).toHaveLength(1),
@@ -6466,7 +6549,7 @@ describe("App", () => {
         render(<App />);
 
         expect(
-            await screen.findByRole("button", { name: "Task view" }),
+            await screen.findByRole("group", { name: "Task view" }),
         ).toBeInTheDocument();
         fireEvent.click(
             screen.getByRole("button", { name: "Drop all-day task" }),
@@ -6494,7 +6577,7 @@ describe("App", () => {
         render(<App />);
 
         expect(
-            await screen.findByRole("button", { name: "Task view" }),
+            await screen.findByRole("group", { name: "Task view" }),
         ).toBeInTheDocument();
         await waitFor(() =>
             expect(mocks.fullCalendarProps.events).toEqual(
@@ -6535,7 +6618,7 @@ describe("App", () => {
         render(<App />);
 
         expect(
-            await screen.findByRole("button", { name: "Task view" }),
+            await screen.findByRole("group", { name: "Task view" }),
         ).toBeInTheDocument();
         await waitFor(() =>
             expect(mocks.fullCalendarProps.events).toEqual(
@@ -6648,7 +6731,7 @@ describe("App", () => {
 
         render(<App />);
 
-        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        await screen.findByRole("group", { name: "Task view" });
         fireEvent.click(
             await screen.findByRole("button", { name: "Inbox" }),
         );
@@ -6724,7 +6807,7 @@ describe("App", () => {
 
         render(<App />);
 
-        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        await screen.findByRole("group", { name: "Task view" });
         fireEvent.click(
             await screen.findByRole("button", { name: "Inbox" }),
         );
@@ -6766,7 +6849,7 @@ describe("App", () => {
         render(<App />);
 
         expect(
-            await screen.findByRole("button", { name: "Task view" }),
+            await screen.findByRole("group", { name: "Task view" }),
         ).toBeInTheDocument();
         fireEvent.click(
             screen.getByRole("button", { name: "Open all-day create task" }),
@@ -6807,7 +6890,7 @@ describe("App", () => {
         render(<App />);
 
         expect(
-            await screen.findByRole("button", { name: "Task view" }),
+            await screen.findByRole("group", { name: "Task view" }),
         ).toBeInTheDocument();
         fireEvent.click(
             screen.getByRole("button", { name: "Open all-day create task" }),
@@ -6842,7 +6925,7 @@ describe("App", () => {
         render(<App />);
 
         expect(
-            await screen.findByRole("button", { name: "Task view" }),
+            await screen.findByRole("group", { name: "Task view" }),
         ).toBeInTheDocument();
         fireEvent.click(
             screen.getByRole("button", { name: "Open create task" }),
@@ -6869,7 +6952,7 @@ describe("App", () => {
         render(<App />);
 
         expect(
-            await screen.findByRole("button", { name: "Task view" }),
+            await screen.findByRole("group", { name: "Task view" }),
         ).toBeInTheDocument();
         fireEvent.click(
             screen.getByRole("button", { name: "Open all-day create task" }),
@@ -6991,20 +7074,32 @@ describe("App", () => {
         render(<App />);
 
         fireEvent.click(
-            await screen.findByRole("button", { name: "Task view" }),
+            await screen.findByRole("group", { name: "Task view" }),
         );
         fireEvent.click(screen.getByRole("button", { name: "Upcoming" }));
 
-        expect(screen.getByDisplayValue(7)).toBeInTheDocument();
+        const daysOptions = screen.getByRole("group", { name: "Upcoming days" });
+        expect(screen.getByRole("button", { name: "Task category" }).compareDocumentPosition(daysOptions) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+        expect(within(daysOptions).getByRole("button", { name: "7" })).toHaveAttribute("aria-pressed", "true");
+        expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
         expect(screen.getByText("Today task")).toBeInTheDocument();
         expect(screen.getByText("Later task")).toBeInTheDocument();
         expect(screen.queryByText("Outside task")).not.toBeInTheDocument();
 
-        fireEvent.change(screen.getByRole("spinbutton"), {
+        fireEvent.click(within(daysOptions).getByRole("button", { name: "Custom" }));
+        fireEvent.change(screen.getByRole("spinbutton", { name: "Custom days" }), {
             target: { value: "1" },
         });
 
         expect(screen.getByText("Today task")).toBeInTheDocument();
+        expect(screen.queryByText("Later task")).not.toBeInTheDocument();
+        fireEvent.click(within(daysOptions).getByRole("button", { name: "3" }));
+        expect(within(daysOptions).getByRole("button", { name: "3" })).toHaveAttribute("aria-pressed", "true");
+        expect(screen.queryByText("Later task")).not.toBeInTheDocument();
+        fireEvent.click(within(daysOptions).getByRole("button", { name: "7" }));
+        expect(screen.getByText("Later task")).toBeInTheDocument();
+        fireEvent.click(within(daysOptions).getByRole("button", { name: "Custom" }));
+        expect(screen.getByRole("spinbutton", { name: "Custom days" })).toHaveValue(1);
         expect(screen.queryByText("Later task")).not.toBeInTheDocument();
     });
 
@@ -7301,7 +7396,7 @@ describe("App", () => {
         render(<App />);
 
         expect(
-            await screen.findByRole("button", { name: "Task view" }),
+            await screen.findByRole("group", { name: "Task view" }),
         ).toHaveTextContent("Today");
         expect(
             await screen.findByText("Overdue task"),
@@ -7420,7 +7515,7 @@ describe("App", () => {
         render(<App />);
 
         expect(
-            await screen.findByRole("button", { name: "Task view" }),
+            await screen.findByRole("group", { name: "Task view" }),
         ).toHaveTextContent("Today");
 
         const taskRow = await screen.findByRole("button", {
@@ -7442,7 +7537,7 @@ describe("App", () => {
         );
         await waitFor(() =>
             expect(
-                screen.getByRole("button", { name: "Task view" }),
+                screen.getByRole("group", { name: "Task view" }),
             ).toBeInTheDocument(),
         );
         expect(
@@ -7550,7 +7645,7 @@ describe("App", () => {
 
         render(<App />);
 
-        fireEvent.click(await screen.findByRole("button", { name: "Task view" }));
+        await screen.findByRole("group", { name: "Task view" });
         fireEvent.click(
             await screen.findByRole("button", { name: "Inbox" }),
         );
