@@ -114,6 +114,7 @@ import {
     IconTrash,
 } from "./components/icons";
 import { AdminSettingsPanel } from "./components/AdminSettingsPanel";
+import { AssetIcon } from "./components/assetIcons";
 
 type TaskState =
     | { status: "loading"; tasks: ScheduledTask[] }
@@ -4536,6 +4537,8 @@ export function App() {
     const isBackupSettingsOpen = settingsView === "backup";
     const isSettingsSubviewOpen = settingsView !== null;
     const isGoogleCalendarConnected = googleCalendarStatus?.connected === true;
+    const canSyncGoogleCalendar =
+        isGoogleCalendarConnected || googleCalendarStatus?.status === "error";
     const isGoogleCalendarRecoveryState =
         googleCalendarStatus?.status === "needs_reauth" ||
         googleCalendarStatus?.status === "error";
@@ -4774,7 +4777,7 @@ export function App() {
                                 }}
                             >
                                 <span aria-hidden="true">
-                                    {isSettingsSubviewOpen ? "☰" : "⚙"}
+                                    {isSettingsSubviewOpen ? <AssetIcon name="home" className="sidebar-settings-icon" /> : <AssetIcon name="settings" className="sidebar-settings-icon" />}
                                 </span>
                             </button>
                         </div>
@@ -4814,6 +4817,7 @@ export function App() {
                                             aria-label="Preferences"
                                             onClick={openCalendarDisplaySettings}
                                         >
+                                            <AssetIcon name="preferences" className="settings-navigation-icon" />
                                             <span className="settings-navigation-row-copy">
                                                 <span className="settings-navigation-row-title">
                                                     Preferences
@@ -4837,6 +4841,7 @@ export function App() {
                                             aria-label="Google Calendar"
                                             onClick={openGoogleCalendarSettings}
                                         >
+                                            <AssetIcon name="google-calendar" className="settings-navigation-icon" />
                                             <span className="settings-navigation-row-copy">
                                                 <span className="settings-navigation-row-title">
                                                     Google Calendar
@@ -4855,6 +4860,7 @@ export function App() {
                                             aria-label="Webhook"
                                             onClick={openWebhookSettings}
                                         >
+                                            <AssetIcon name="bell" className="settings-navigation-icon" />
                                             <span className="settings-navigation-row-copy">
                                                 <span className="settings-navigation-row-title">
                                                     Webhook
@@ -4878,6 +4884,7 @@ export function App() {
                                             aria-label="Backup & Restore"
                                             onClick={openBackupSettings}
                                         >
+                                            <AssetIcon name="download" className="settings-navigation-icon" />
                                             <span className="settings-navigation-row-copy">
                                                 <span className="settings-navigation-row-title">
                                                     Backup &amp; Restore
@@ -4901,6 +4908,7 @@ export function App() {
                                             aria-label="Profile & Security"
                                             onClick={openAccountSettings}
                                         >
+                                            <AssetIcon name="settings" className="settings-navigation-icon" />
                                             <span className="settings-navigation-row-copy">
                                                 <span className="settings-navigation-row-title">
                                                     Profile &amp; Security
@@ -4920,6 +4928,7 @@ export function App() {
                                                 aria-label="Admin"
                                                 onClick={openAdminSettings}
                                             >
+                                                <AssetIcon name="admin" className="settings-navigation-icon" />
                                                 <span className="settings-navigation-row-copy">
                                                     <span className="settings-navigation-row-title">
                                                         Admin
@@ -4977,24 +4986,27 @@ export function App() {
                                 </div>
                                     <button
                                         type="button"
-                                        className="settings-action-button settings-action-button-primary"
+                                        className="settings-action-button settings-action-button-primary settings-action-button--icon-aligned"
                                         onClick={handleLogout}
                                     >
-                                        Logout
+                                        <AssetIcon name="log-out" className="backup-action-icon" />
+                                        <span>Logout</span>
                                     </button>
                                     <button
                                         type="button"
-                                        className="settings-action-button settings-action-button-warning"
+                                        className="settings-action-button settings-action-button-warning settings-action-button--icon-aligned"
                                         onClick={openChangePasswordSettings}
                                     >
-                                        Change Password
+                                        <AssetIcon name="change-password" className="backup-action-icon" />
+                                        <span>Change Password</span>
                                     </button>
                                     <button
                                         type="button"
-                                        className="settings-action-button settings-action-button-danger"
+                                        className="settings-action-button settings-action-button-danger settings-action-button--icon-aligned"
                                         onClick={openDeleteAccountSettings}
                                     >
-                                        Delete Account
+                                        <AssetIcon name="delete-account" className="backup-action-icon" />
+                                        <span>Delete Account</span>
                                     </button>
                                     <button
                                         type="button"
@@ -5680,19 +5692,18 @@ export function App() {
                                     )}
                                     <button
                                         type="button"
-                                        className="settings-action-button settings-action-button-primary"
+                                        className="settings-action-button settings-action-button-primary settings-action-button--backup-aligned"
                                         disabled={isBackupLoading}
                                         onClick={() =>
                                             void handleOpenBackupSummary()
                                         }
                                     >
-                                        {isBackupLoading
-                                            ? "Backing up..."
-                                            : "Backup"}
+                                        <AssetIcon name="download" className="backup-action-icon" />
+                                        <span>{isBackupLoading ? "Backing up..." : "Backup"}</span>
                                     </button>
                                     <button
                                         type="button"
-                                        className="settings-action-button settings-action-button-danger"
+                                        className="settings-action-button settings-action-button-danger settings-action-button--backup-aligned"
                                         disabled={isBackupImporting}
                                         onClick={() => {
                                             if (backupImportFile) {
@@ -5704,11 +5715,14 @@ export function App() {
                                             backupFileInputRef.current?.click();
                                         }}
                                     >
-                                        {isBackupImporting
-                                            ? "Restoring..."
-                                            : backupImportFile
-                                              ? "Confirm restore"
-                                              : "Restore"}
+                                        <AssetIcon name="upload" className="backup-action-icon" />
+                                        <span>
+                                            {isBackupImporting
+                                                ? "Restoring..."
+                                                : backupImportFile
+                                                  ? "Confirm restore"
+                                                  : "Restore"}
+                                        </span>
                                     </button>
                                     <button
                                         type="button"
@@ -5789,15 +5803,17 @@ export function App() {
                                                 <span>Status:</span> Needs attention
                                             </div>
                                             <div>
-                                                Reconnect Google Calendar to resume
-                                                mirroring scheduled tasks.
+                                                {googleCalendarStatus?.status === "needs_reauth"
+                                                    ? "Reconnect Google Calendar to resume mirroring scheduled tasks."
+                                                    : "Sync failed. Retry syncing your scheduled tasks."}
                                             </div>
                                             {googleCalendarStatus?.pending_sync_items &&
                                             googleCalendarStatus.pending_sync_items >
                                                 0 ? (
                                                 <div>
-                                                    Sync will retry automatically
-                                                    after the connection is restored.
+                                                    {googleCalendarStatus?.status === "needs_reauth"
+                                                        ? "Sync will retry automatically after the connection is restored."
+                                                        : "Pending changes will be included when you retry."}
                                                 </div>
                                             ) : null}
                                         </div>
@@ -5818,7 +5834,7 @@ export function App() {
                                             {googleCalendarError}
                                         </p>
                                     )}
-                                    {isGoogleCalendarConnected ? (
+                                    {canSyncGoogleCalendar ? (
                                         <>
                                             <button
                                                 type="button"
@@ -5834,7 +5850,9 @@ export function App() {
                                             >
                                                 {isGoogleCalendarSyncing
                                                     ? "Starting..."
-                                                    : "Sync now"}
+                                                    : googleCalendarStatus?.status === "error"
+                                                      ? "Retry sync"
+                                                      : "Sync now"}
                                             </button>
                                             <div className="google-connection-management">
                                                 <p className="settings-list-section-title">
@@ -8506,7 +8524,7 @@ function AuthScreen({
     return (
         <main className="auth-shell">
             <section className="auth-panel" aria-labelledby="auth-title">
-                <p className="eyebrow">TaskCalendar</p>
+                <p className="auth-brand"><img src="/taskcalendar-logo.svg" alt="" />TaskCalendar</p>
                 <h1 id="auth-title" key={`title-${authMode}`}>
                     {isRegistering ? "Register" : "Welcome back"}
                 </h1>

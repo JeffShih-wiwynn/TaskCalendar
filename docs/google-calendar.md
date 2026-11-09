@@ -217,3 +217,12 @@ cd backend
 source .venv/bin/activate
 alembic upgrade head
 ```
+
+Timed events without a stored end time use a 30-minute fallback end when mirrored.
+The event payload omits `endTimeUnspecified`; sending that flag with the fallback
+end caused Google to reject updates with HTTP 400 `Invalid Value`. Updates also
+clear the previous date representation when switching between all-day and timed
+events, including batch updates.
+
+Sync errors remain retryable from Settings. Reconnect is requested only when
+Google reports that authorization has expired or been revoked.

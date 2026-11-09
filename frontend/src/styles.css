@@ -5783,3 +5783,101 @@ input[type="checkbox"].task-checkbox:checked {
     line-height: clamp(9px, 2.35vw, 11px);
   }
 }
+
+.asset-icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  flex: 0 0 auto;
+  background-color: currentColor;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+}
+
+.compact-action-button__icon .asset-icon,
+.floating-panel-icon .asset-icon,
+.task-indicator .asset-icon {
+  width: 100%;
+  height: 100%;
+}
+
+.settings-navigation-row {
+  justify-content: flex-start;
+}
+
+.settings-navigation-row .settings-navigation-row-copy {
+  flex: 1;
+}
+
+.settings-navigation-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--muted);
+}
+
+.settings-navigation-row-chevron {
+  margin-left: auto;
+}
+
+.backup-action-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.auth-brand img {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+}
+
+.app-shell.dark :is(input[type="date"], input[type="time"], input[type="datetime-local"]) {
+  color-scheme: dark;
+}
+
+.account-settings-form > .settings-action-button--icon-aligned {
+  display: grid;
+  grid-template-columns: 20px 8px minmax(0, 144px) 28px;
+  justify-content: center;
+  text-align: center;
+}
+
+.account-settings-form > .settings-action-button--icon-aligned > .asset-icon {
+  grid-column: 1;
+}
+
+.account-settings-form > .settings-action-button--icon-aligned > span:not(.asset-icon) {
+  grid-column: 3;
+}
+
+.backup-settings-form > .settings-action-button--backup-aligned {
+  position: relative;
+  display: block;
+  text-align: center;
+}
+
+.backup-settings-form > .settings-action-button--backup-aligned > .asset-icon {
+  position: absolute;
+  top: 50%;
+  left: 24px;
+  transform: translateY(-50%);
+}
+
+.backup-settings-form > .settings-action-button--backup-aligned > span:not(.asset-icon) {
+  display: block;
+  width: 100%;
+}

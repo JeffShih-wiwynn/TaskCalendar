@@ -1721,8 +1721,6 @@ def build_event_payload(task: ScheduledTask, *, timezone: ZoneInfo) -> dict:
         "dateTime": local_end.isoformat(),
         "timeZone": timezone.key,
     }
-    if task.scheduled_end is None:
-        payload["endTimeUnspecified"] = True
     return payload
 
 

@@ -252,7 +252,7 @@ class GoogleCalendarClient:
     ) -> GoogleEventResource:
         response = put_json(
             build_event_url(calendar_id=calendar_id, event_id=event_id),
-            json.dumps(payload).encode("utf-8"),
+            json.dumps(normalize_event_update_payload(payload)).encode("utf-8"),
             headers=authorized_json_headers(access_token),
         )
         return parse_event_resource(response)
@@ -366,6 +366,20 @@ def build_event_path(*, calendar_id: str, event_id: str) -> str:
     return f"{build_events_path(calendar_id=calendar_id)}/{parse.quote(event_id, safe='')}"
 
 
+def normalize_event_update_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload)
+    # Explicitly clear the previous representation when changing event type.
+    for field in ("start", "end"):
+        value = payload.get(field)
+        if not isinstance(value, dict):
+            continue
+        if value.get("dateTime") is not None:
+            normalized[field] = {**value, "date": None}
+        elif value.get("date") is not None:
+            normalized[field] = {**value, "dateTime": None, "timeZone": None}
+    return normalized
+
+
 def build_batch_body(
     requests: list[GoogleBatchEventRequest],
     *,
@@ -383,7 +397,10 @@ def build_batch_body(
             ]
         )
         if event_request.payload is not None:
-            payload = json.dumps(event_request.payload, separators=(",", ":")).encode("utf-8")
+            event_payload = event_request.payload
+            if event_request.method in {"PUT", "PATCH"}:
+                event_payload = normalize_event_update_payload(event_payload)
+            payload = json.dumps(event_payload, separators=(",", ":")).encode("utf-8")
             lines.extend(
                 [
                     b"Content-Type: application/json",

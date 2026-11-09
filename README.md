@@ -25,7 +25,7 @@ Calendar is licensed under the GNU Affero General Public License v3.0. See [LICE
 - Categories, backup export/import, Discord per-task reminders, daily todo Discord digests, and PWA install support are implemented.
 - Category colors remain user-selected; task cards and calendar blocks derive muted, theme-aware surfaces and accent borders from them. Completed tasks use neutral surfaces.
 - Google Calendar mirror support is implemented as a one-way mirror from TaskCalendar to a dedicated Google secondary calendar.
-- Per-category Google calendars are implemented with per-category opt-in synchronization; see the [category routing plan](docs/google-calendar-category-routing.md).
+- Per-category Google calendars are implemented with per-category opt-in synchronization; see the [category routing details](docs/google-calendar-category-routing.md).
 
 ## Requirements
 
