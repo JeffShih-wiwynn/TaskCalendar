@@ -356,8 +356,10 @@ test.describe('Calendar E2E', () => {
     await page.mouse.move(eventBox.x + eventBox.width / 2, eventBox.y + eventBox.height / 2);
     await page.mouse.down();
     await page.mouse.move(eventBox.x + eventBox.width / 2, eventBox.y + eventBox.height / 2 + 70, { steps: 12 });
+    await expect(page.locator('.calendar-task-drag-preview')).toHaveCount(1);
     await page.mouse.up();
     await patchPromise;
+    await expect(page.locator('.calendar-task-drag-preview')).toHaveCount(0);
 
     await expect(calendarEvent(page, title)).toBeVisible();
     const afterDrag = (await listTasks(request, user)).find((task) => task.id === createdTask.id);
