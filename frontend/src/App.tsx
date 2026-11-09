@@ -1,4 +1,5 @@
 import { taskColors } from "./taskColors";
+import { startCalendarDragMotion, startExternalTaskDragMotion, revertCalendarEventWithMotion } from "./calendarDragMotion";
 import type {
     DatesSetArg,
     DayCellContentArg,
@@ -18,6 +19,7 @@ import interactionPlugin, {
     Draggable,
     type DropArg,
     type EventResizeDoneArg,
+    type EventDragStartArg,
 } from "@fullcalendar/interaction";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -812,6 +814,10 @@ export function App() {
         useState<CSSProperties | null>(null);
     const editStateSyncTaskIdRef = useRef<string | null>(null);
     const calendarRef = useRef<FullCalendar | null>(null);
+    const calendarDragMotionRef = useRef<ReturnType<typeof startCalendarDragMotion> | null>(null);
+    useEffect(() => () => calendarDragMotionRef.current?.cancel(), []);
+    const externalTaskDragMotionRef = useRef<ReturnType<typeof startExternalTaskDragMotion> | null>(null);
+    useEffect(() => () => externalTaskDragMotionRef.current?.cancel(), []);
     const calendarTransitionTimeoutRef = useRef<number | null>(null);
     const calendarEventAnimationKindRef =
         useRef<CalendarTransitionKind>("neutral");
@@ -2490,7 +2496,12 @@ export function App() {
                 }
                 reloadTasks();
             } catch (error) {
-                dropInfo.revert();
+                const root = dropInfo.el.closest<HTMLElement>(".fc");
+                if (root) {
+                    revertCalendarEventWithMotion(root, dropInfo.event.id, dropInfo.revert);
+                } else {
+                    dropInfo.revert();
+                }
                 setFormError(
                     error instanceof Error
                         ? error.message
@@ -2932,20 +2943,19 @@ export function App() {
         (dayHeaderInfo: DayHeaderContentArg) => {
             if (
                 (dayHeaderInfo.view.type !== "timeGridWeek" &&
-                    dayHeaderInfo.view.type !== "timeGridDay") ||
-                !isMobileLayout
+                    dayHeaderInfo.view.type !== "timeGridDay")
             ) {
-                return dayHeaderInfo.text;
+                return <span>{dayHeaderInfo.text}</span>;
             }
 
             return (
-                <span className="mobile-week-day-header">
-                    <span className="mobile-week-day-label">
+                <span className={isMobileLayout ? "mobile-week-day-header" : "calendar-week-day-header"}>
+                    <span className={isMobileLayout ? "mobile-week-day-label" : "calendar-week-day-label"}>
                         {formatCalendarWallClockDate(dayHeaderInfo.date, {
                             weekday: "short",
                         })}
                     </span>
-                    <span className="mobile-week-date-label">
+                    <span className={isMobileLayout ? "mobile-week-date-label" : "calendar-week-date-label"}>
                         {formatCalendarWallClockDate(dayHeaderInfo.date, {
                             day: "2-digit",
                         })}
@@ -2954,15 +2964,6 @@ export function App() {
             );
         },
         [isMobileLayout],
-    );
-
-    const mobileCalendarPeriodLabel = useMemo(
-        () =>
-            `${calendarDate.getUTCFullYear()} ${formatCalendarWallClockDate(
-                calendarDate,
-                { month: "short" },
-            )}`,
-        [calendarDate],
     );
 
     const renderSlotLabelContent = useCallback(
@@ -3399,11 +3400,16 @@ export function App() {
         setDragTargetMode((current) => (current === "schedule" ? null : current));
     }, []);
 
-    const startScheduleDragHighlight = useCallback(() => {
+    const startScheduleDragHighlight = useCallback((source: HTMLElement) => {
         endScheduleDragHighlight();
+        externalTaskDragMotionRef.current?.cancel();
+        externalTaskDragMotionRef.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+            ? null
+            : startExternalTaskDragMotion(source, appShellRef.current?.querySelector<HTMLElement>(".calendar-panel .fc"));
         setDragTargetMode("schedule");
 
         const clear = () => {
+            externalTaskDragMotionRef.current?.stop();
             scheduleDragCleanupRef.current = null;
             setDragTargetMode((current) =>
                 current === "schedule" ? null : current,
@@ -3442,6 +3448,7 @@ export function App() {
 
             const taskId = dropInfo.draggedEl.getAttribute("data-task-id");
             const task = tasksRef.current.find((item) => item.id === taskId);
+            const dragMotion = externalTaskDragMotionRef.current;
             if (!task) {
                 return;
             }
@@ -3475,6 +3482,8 @@ export function App() {
                     showTaskUndo(undoState);
                 }
                 replaceTaskInState(updatedTask);
+                const root = appShellRef.current?.querySelector<HTMLElement>(".calendar-panel .fc");
+                if (root) dragMotion?.finish(root, updatedTask.id);
                 void refreshTasks();
             } catch (error) {
                 setFormError(
@@ -3513,7 +3522,23 @@ export function App() {
         [],
     );
 
+    const handleEventDragStart = useCallback((dragInfo: EventDragStartArg) => {
+        calendarDragMotionRef.current?.cancel();
+        calendarDragMotionRef.current = null;
+        if (prefersReducedMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+            !dragInfo.el.classList.contains("fc-timegrid-event")) return;
+        const root = dragInfo.el.closest<HTMLElement>(".fc");
+        if (root) {
+            calendarDragMotionRef.current = startCalendarDragMotion(root, dragInfo.el, dragInfo.event.id);
+        }
+    }, [prefersReducedMotion]);
+
+    const handleEventDragStop = useCallback(() => {
+        calendarDragMotionRef.current?.finish();
+    }, []);
+
     const handleEventDidMount = useCallback((mountInfo: EventMountArg) => {
+        mountInfo.el.dataset.calendarTaskId = mountInfo.event.id;
         if (!mountInfo.isMirror) {
             const animationKind = calendarEventAnimationKindRef.current;
             mountInfo.el.style.setProperty(
@@ -7503,7 +7528,7 @@ export function App() {
                                                             ) => {
                                                                 event.stopPropagation();
                                                                 if (!isMobileLayout) {
-                                                                    startScheduleDragHighlight();
+                                                                    startScheduleDragHighlight(event.currentTarget);
                                                                 }
                                                             }}
                                                             onMouseDown={(
@@ -7849,12 +7874,12 @@ export function App() {
                                     </AnimatePresence>
                                 </div>
                             </div>
-                        ) : isTimeGridView && isMobileLayout ? (
-                            <span className="calendar-toolbar-period-label">
-                                {mobileCalendarPeriodLabel}
-                            </span>
                         ) : (
-                            <span>{calendarTitle}</span>
+                            <span className={isMobileLayout ? "calendar-toolbar-period-label" : undefined}>
+                                {isTimeGridView
+                                    ? formatCalendarWallClockDate(calendarDate, { month: "long", year: "numeric" })
+                                    : calendarTitle}
+                            </span>
                         )}
                     </div>
 
@@ -7924,6 +7949,9 @@ export function App() {
                         dateClick={handleDateClick}
                         datesSet={handleDatesSet}
                         eventDrop={handleEventDrop}
+                        eventDragStart={handleEventDragStart}
+                        eventDragStop={handleEventDragStop}
+                        dragRevertDuration={prefersReducedMotion ? 0 : 130}
                         eventResize={handleEventResize}
                         drop={handleExternalTaskDrop}
                         slotLabelFormat={{

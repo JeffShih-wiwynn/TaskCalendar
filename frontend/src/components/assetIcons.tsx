@@ -28,7 +28,11 @@ export function AssetIcon({
         <span
             aria-hidden="true"
             className={`asset-icon ${className}`.trim()}
-            style={{ maskImage: mask, WebkitMaskImage: mask }}
+            style={{
+                maskImage: mask,
+                WebkitMaskImage: mask,
+                maskMode: "alpha",
+            }}
         />
     );
 }

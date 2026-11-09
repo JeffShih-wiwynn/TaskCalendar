@@ -4317,6 +4317,11 @@ input[type="checkbox"].task-checkbox:checked {
     0 8px 18px var(--shadow);
 }
 
+.fc .fc-timegrid-event.calendar-task-drag-preview,
+.task-drag-handle.fc-event-dragging.calendar-task-drag-preview {
+  box-shadow: 0 8px 18px var(--shadow);
+}
+
 .task-event.calendar-task-event--enter {
   animation: calendar-task-event-enter
     var(--calendar-task-event-enter-duration) var(--micro-ease) both;
@@ -4421,6 +4426,35 @@ input[type="checkbox"].task-checkbox:checked {
   table-layout: fixed;
 }
 
+.calendar-panel .fc {
+  --fc-now-indicator-color: color-mix(in srgb, var(--accent) 80%, var(--muted));
+}
+
+.calendar-panel .fc .fc-timegrid-now-indicator-arrow {
+  display: none;
+}
+
+.calendar-panel .fc .fc-timegrid-now-indicator-line {
+  border-top-width: 2px;
+}
+
+.calendar-panel .fc .fc-timegrid-now-indicator-line::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--fc-now-indicator-color);
+  pointer-events: none;
+}
+
+.calendar-panel .fc-direction-rtl .fc-timegrid-now-indicator-line::before {
+  right: 0;
+  left: auto;
+}
+
 .fc .fc-button {
   border-radius: 6px;
   background: var(--accent);
@@ -4458,7 +4492,7 @@ input[type="checkbox"].task-checkbox:checked {
 }
 
 .fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number::after {
-  content: '';
+  content: none;
   width: 7px;
   height: 7px;
   border-radius: 999px;
@@ -4488,7 +4522,7 @@ input[type="checkbox"].task-checkbox:checked {
 
 .fc .fc-col-header-cell.fc-day-today .fc-col-header-cell-cushion::after,
 .fc .fc-timegrid-col.fc-day-today .fc-col-header-cell-cushion::after {
-  content: '';
+  content: none;
   width: 16px;
   height: 3px;
   border-radius: 999px;
@@ -4501,14 +4535,161 @@ input[type="checkbox"].task-checkbox:checked {
   color: var(--text);
 }
 
-.app-shell.dark .fc-theme-standard td,
-.app-shell.dark .fc-theme-standard th,
-.app-shell.dark .fc-theme-standard .fc-scrollgrid {
-  border-color: var(--border);
+.app-shell .calendar-panel {
+  border-color: color-mix(in srgb, var(--border) 25%, var(--panel-bg));
+}
+
+.app-shell .calendar-panel .fc-theme-standard td,
+.app-shell .calendar-panel .fc-theme-standard th,
+.app-shell .calendar-panel .fc-theme-standard .fc-scrollgrid {
+  border-color: color-mix(in srgb, var(--border) 65%, var(--panel-bg));
+}
+
+.app-shell .calendar-panel .fc .fc-timegrid-col,
+.app-shell .calendar-panel .fc .fc-col-header-cell,
+.app-shell .calendar-panel .fc .fc-daygrid-day {
+  border-left-color: color-mix(in srgb, var(--border) 45%, var(--panel-bg));
+  border-right-color: color-mix(in srgb, var(--border) 45%, var(--panel-bg));
+}
+
+.app-shell .calendar-panel .fc .fc-timegrid td,
+.app-shell .calendar-panel .fc .fc-timegrid .fc-scrollgrid {
+  border-color: color-mix(in srgb, var(--border) 30%, var(--panel-bg));
+  border-left-color: color-mix(in srgb, var(--border) 10%, var(--panel-bg));
+  border-right-color: color-mix(in srgb, var(--border) 10%, var(--panel-bg));
+}
+
+.app-shell .calendar-panel .fc .fc-timegrid .fc-timegrid-slot-minor {
+  border-top-color: transparent;
+}
+
+.app-shell .calendar-panel .fc .fc-timegrid-col.fc-day-today,
+.app-shell .calendar-panel .fc .fc-timegrid .fc-daygrid-day.fc-day-today {
+  background-color: transparent;
+}
+
+.app-shell .calendar-panel .fc-dayGridMonth-view .fc-daygrid-day.fc-day-today {
+  background-color: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.app-shell .calendar-panel .fc .fc-timegrid-slot-lane {
+  background-color: transparent;
+}
+
+.app-shell .calendar-panel .fc .fc-timegrid .fc-timegrid-divider {
+  border-color: color-mix(in srgb, var(--border) 25%, var(--panel-bg));
+  background-color: var(--panel-bg);
+}
+
+.app-shell .calendar-panel .fc .fc-timegrid .fc-scrollgrid {
+  border-top-color: transparent;
+  border-left-color: transparent;
+  border-right-color: transparent;
+}
+
+.app-shell .calendar-panel .fc .fc-timegrid .fc-scrollgrid-section-header > td,
+.app-shell .calendar-panel .fc .fc-timegrid .fc-col-header .fc-timegrid-axis {
+  border-color: transparent;
+  background-color: transparent;
+}
+
+.app-shell .calendar-panel .fc .fc-dayGridMonth-view .fc-scrollgrid {
+  border-color: color-mix(in srgb, var(--border) 25%, var(--panel-bg));
+}
+
+.app-shell .calendar-panel .fc .fc-dayGridMonth-view .fc-daygrid-day,
+.app-shell .calendar-panel .fc .fc-dayGridMonth-view .fc-col-header-cell {
+  border-top-color: color-mix(in srgb, var(--border) 45%, var(--panel-bg));
+  border-bottom-color: color-mix(in srgb, var(--border) 45%, var(--panel-bg));
+  border-left-color: color-mix(in srgb, var(--border) 20%, var(--panel-bg));
+  border-right-color: color-mix(in srgb, var(--border) 20%, var(--panel-bg));
+}
+
+.app-shell .calendar-panel .fc-dayGridMonth-view .fc-col-header-cell {
+  color: var(--muted);
+  background-color: color-mix(in srgb, var(--accent-soft) 45%, var(--panel-bg));
+}
+
+.app-shell .calendar-panel .fc-dayGridMonth-view .fc-day-other:not(.fc-day-today) {
+  background-color: color-mix(in srgb, var(--page-bg) 35%, var(--panel-bg));
+}
+
+.app-shell .calendar-panel .fc-dayGridMonth-view .fc-day-today .fc-daygrid-day-number {
+  color: var(--accent);
+}
+
+/* Time-grid heading and date tiles; event and slot geometry stays unchanged. */
+.app-shell .calendar-panel .fc-timegrid .fc-col-header-cell {
+  background-color: transparent;
+  border-color: transparent;
+}
+
+.app-shell .calendar-panel .fc-timegrid .fc-col-header-cell-cushion {
+  display: block;
+  position: relative;
+  width: auto;
+  margin: 0 2px 10px;
+  padding: 10px 2px;
+  border-radius: 8px;
+  background-color: color-mix(in srgb, var(--accent-soft) 26%, var(--panel-bg));
+}
+
+.app-shell .calendar-panel .fc-timegrid .fc-col-header-cell.fc-day-today .fc-col-header-cell-cushion {
+  background-color: color-mix(in srgb, var(--accent) 24%, var(--panel-bg));
+}
+
+.app-shell .calendar-panel .fc-timegrid .fc-col-header-cell.fc-day-today .fc-col-header-cell-cushion::after {
+  position: absolute;
+  bottom: 4px;
+  left: calc(50% - 8px);
+}
+
+.calendar-week-day-header {
+  display: grid;
+  gap: 7px;
+  justify-items: center;
+}
+
+.calendar-week-day-label {
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 400;
+}
+
+.calendar-week-date-label {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.app-shell .calendar-panel .fc-timegrid .fc-day-today .calendar-week-day-label,
+.app-shell .calendar-panel .fc-timegrid .fc-day-today .calendar-week-date-label,
+.app-shell .calendar-panel .fc-timegrid .fc-day-today .mobile-week-day-label,
+.app-shell .calendar-panel .fc-timegrid .fc-day-today .mobile-week-date-label {
+  color: var(--accent);
+}
+
+.app-shell .calendar-panel .calendar-toolbar-button:not(.calendar-toolbar-button--today-outside),
+.app-shell .calendar-panel .calendar-nav-button,
+.app-shell .calendar-panel .calendar-year-button {
+  border-color: color-mix(in srgb, var(--border) 45%, var(--panel-bg));
+  background-color: var(--panel-bg);
+}
+
+.app-shell .calendar-panel .calendar-toolbar-button:not(.calendar-toolbar-button--today-outside):hover,
+.app-shell .calendar-panel .calendar-nav-button:hover,
+.app-shell .calendar-panel .calendar-year-button:hover {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+  background-color: color-mix(in srgb, var(--accent-soft) 65%, var(--panel-bg));
+}
+
+.app-shell .calendar-panel .calendar-toolbar-button.active {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  background-color: var(--accent-soft);
 }
 
 .app-shell.dark .fc .fc-daygrid-day,
-.app-shell.dark .fc .fc-timegrid-slot,
+.app-shell.dark .fc .fc-timegrid-slot-label,
 .app-shell.dark .fc .fc-timegrid-axis {
   background: var(--panel-bg);
 }

@@ -24,6 +24,8 @@ This document summarizes what is already in the repository snapshot and where th
   - Date range filtering is implemented on the list endpoint.
   - Validation rejects invalid scheduled ranges.
 - [x] Frontend FullCalendar UI
+  - Desktop day/week task dragging uses a short animated preview and landing transition; failed saves animate back, while reduced-motion preferences skip the animation.
+  - Sidebar drag-to-calendar handles use the same smooth movement and animate the scheduled card into its landing position after a successful save.
   - FullCalendar is wired into the frontend.
   - Month, week, and day views are available through a single cycle button.
   - Month view uses the month title as a compact Month-Year picker instead of a year text input.
