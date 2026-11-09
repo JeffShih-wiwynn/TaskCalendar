@@ -13,7 +13,7 @@ This file summarizes the current repository state.
 - Notifications: Discord webhook notifications with per-task reminder fields, optional daily todo digests, and an in-process backend worker thread
 - Google Calendar: one-way mirror through OAuth, a dedicated Google secondary calendar, a durable outbox, and a separate worker process
 - Timezone: application timezone is configurable with `APP_TIMEZONE`, defaulting to `UTC`
-- Deployment: non-Docker Ubuntu deployment and Docker Compose deployment are both documented
+- Deployment: non-Docker Ubuntu deployment and container/Quadlet deployment are documented
 - PWA: installable production build with manifest, app icons, standalone display mode, and static asset service worker
 
 ## Completed Major Features
@@ -67,13 +67,15 @@ This file summarizes the current repository state.
 - User timezone storage and timezone-aware notification formatting
 - Daily todo notification records, scanner, claim/retry state machine, and Discord digest delivery
 
-## Work Currently In Progress
+## Current Focus
 
-- Mobile ergonomics beyond the Phase 1 responsive baseline
-- Task form extraction and backend auth/admin service separation are documented refactor candidates
-- Google Calendar category routing is implemented with persisted per-category opt-in state, managed calendar mappings, and category-aware reconciliation
-- Google Calendar reconnect distinguishes a missing stored calendar from provider
-  failures, preventing duplicate replacement calendars
+- Mobile ergonomics beyond the Phase 1 responsive baseline.
+- Task form extraction and backend auth/admin service separation remain refactor candidates.
+
+Google Calendar category routing and missing-calendar recovery are implemented. A
+recent production sync issue caused by sending `endTimeUnspecified` with a
+fallback timed-event end has been fixed; sync errors now offer retry, while
+reconnect is reserved for authorization failures.
 
 ## Known Limitations
 

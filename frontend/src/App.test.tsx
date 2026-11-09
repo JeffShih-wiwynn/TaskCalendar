@@ -1466,9 +1466,10 @@ describe("App", () => {
             "lang",
             "en-GB",
         );
-        expect(
-            screen.getByRole("button", { name: "Return to sidebar" }),
-        ).toHaveTextContent("☰");
+        const returnButton = screen.getByRole("button", { name: "Return to sidebar" });
+        expect(returnButton.querySelector(".asset-icon")).toHaveStyle({
+            maskImage: 'url("/icons/home.svg")',
+        });
         expect(screen.queryByRole("group", { name: "Task view" })).toBeNull();
         expect(
             screen.queryByRole("heading", { name: "Task filters" }),
@@ -4593,6 +4594,25 @@ describe("App", () => {
         expect(await screen.findByText("Up to date")).toBeInTheDocument();
         expect(screen.queryByText(/retry automatically/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/Syncing .*changes/i)).not.toBeInTheDocument();
+    });
+
+    it("offers retry for sync errors without requiring reauthorization", async () => {
+        mocks.googleCalendarStatus = {
+            connected: false,
+            status: "error",
+            mirror_calendar_summary: "TaskCalendar Mirror — Read Only",
+            last_successful_sync_at: null,
+            last_error_when_safe_to_show: "Google Calendar connection needs attention.",
+            pending_sync_items: 1,
+            processing_sync_items: 0,
+            retrying_sync_items: 0,
+        };
+        render(<App />);
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(screen.getByRole("button", { name: "Google Calendar" }));
+        expect(await screen.findByText("Sync failed. Retry syncing your scheduled tasks.")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Retry sync" }));
+        await waitFor(() => expect(mocks.syncGoogleCalendarNow).toHaveBeenCalled());
     });
 
     it("keeps reconnect prominent when Google Calendar needs reauthorization", async () => {

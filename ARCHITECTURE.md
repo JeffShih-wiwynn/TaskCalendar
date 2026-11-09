@@ -110,8 +110,8 @@ Future cleanup targets:
 OAuth and tokens remain user-scoped, while synchronized categories use one
 managed Google calendar mapping per `TaskList`. `GoogleEventMirror` remains
 task-scoped so category changes can safely move events. Uncategorized tasks
-and categories with sync disabled are not mirrored. The design and migration
-plan are documented in [Google Calendar Category Routing](docs/google-calendar-category-routing.md).
+and categories with sync disabled are not mirrored. Current behavior and recovery limits are documented in
+[Google Calendar Category Routing](docs/google-calendar-category-routing.md).
 
 The category mapping is created lazily on the first eligible synchronization;
 the legacy unified calendar remains available for recovery during migration.

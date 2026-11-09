@@ -75,6 +75,10 @@ The current app is web-first:
 - Materialized recurring occurrences become separate ordinary Google events.
 - Google-side edits are not imported and may be overwritten by reconciliation.
 - Background worker / durable outbox / retry behavior.
+- Category-level opt-in routes events to managed calendars; uncategorized and
+  disabled-category tasks are excluded.
+- Sync failures can be retried; reconnect is required for expired or revoked
+  Google authorization.
 
 Each synchronized category uses its own managed Google secondary calendar.
 Uncategorized tasks are not mirrored; see [Google Calendar Category Routing](google-calendar-category-routing.md).

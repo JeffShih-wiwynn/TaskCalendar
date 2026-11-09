@@ -99,6 +99,11 @@ This document summarizes what is already in the repository snapshot and where th
   - Separate sync worker process.
   - Batch reconciliation with progress tracking and retries.
   - Manual Sync now queues background reconciliation.
+  - Category opt-in routes events to per-category calendars; moves, disables,
+    deletion, and reconciliation clean up or relocate mirrored events safely.
+  - Start-only timed tasks use a 30-minute mirror end without the unsupported
+    `endTimeUnspecified` flag. Sync errors can be retried; only expired or
+    revoked authorization requires reconnect.
 
 ## Current Notes
 

@@ -3304,3 +3304,17 @@ def test_google_status_splits_active_processing_and_retry_counts(
     assert status.pending_sync_items == 3
     assert status.processing_sync_items == 1
     assert status.retrying_sync_items == 2
+
+
+def test_start_only_google_event_has_concrete_fallback_end(db_session: Session) -> None:
+    from zoneinfo import ZoneInfo
+
+    user = create_user(db_session)
+    task = create_task(db_session, user=user)
+    task.scheduled_start = datetime(2026, 11, 28, 11, 0, tzinfo=UTC)
+    task.scheduled_end = None
+    task.all_day = False
+    payload = service.build_event_payload(task, timezone=ZoneInfo("Asia/Taipei"))
+    assert payload["start"]["dateTime"] == "2026-11-28T19:00:00+08:00"
+    assert payload["end"]["dateTime"] == "2026-11-28T19:30:00+08:00"
+    assert "endTimeUnspecified" not in payload

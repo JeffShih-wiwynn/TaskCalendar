@@ -80,7 +80,7 @@ There is no backend build step beyond installing the Python package and running 
 
 ## Production Notes
 
-For production, use [ubuntu-production.md](ubuntu-production.md) for the primary non-Docker path or [docker-production.md](docker-production.md) for the Compose path. Local development commands in this guide remain unchanged.
+For production, use [ubuntu-production.md](ubuntu-production.md) for the alternative non-container Ubuntu path. On this host, production runs with rootless Podman Quadlet as documented in [docker-production.md](docker-production.md); Compose is used for local development and image builds. Local development commands in this guide remain unchanged.
 
 ## Ubuntu Troubleshooting
 
