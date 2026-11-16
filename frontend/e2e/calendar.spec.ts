@@ -598,10 +598,9 @@ test.describe('Calendar E2E', () => {
     await openAuthenticatedApp(page, user, 'UTC');
 
     await openPreferences(page);
-    await page.locator('button.preferences-summary-row').filter({ hasText: 'Time zone' }).click();
-    await page.getByRole('button', { name: 'Time zone', exact: true }).click();
+    await page.getByRole('button', { name: 'Main time zone', exact: true }).click();
 
-    const timezoneOptions = page.getByRole('listbox', { name: 'Time zone options' });
+    const timezoneOptions = page.getByRole('listbox', { name: 'Main time zone options' });
     await expect(timezoneOptions).toBeVisible();
     const taipeiOption = timezoneOptions.getByRole('option', { name: /Taipei.*UTC\+08:00/ });
     await expect(taipeiOption).toBeVisible();
@@ -614,13 +613,64 @@ test.describe('Calendar E2E', () => {
     await taipeiOption.click();
     await timezoneResponse;
 
-    await expect(page.locator('button.timezone-dropdown-trigger')).toContainText('Taipei');
-    await expect(page.locator('button.timezone-dropdown-trigger')).toContainText('UTC+08:00');
+    await expect(page.getByRole('button', { name: 'Main time zone' })).toContainText('Taipei');
+
+    const firstDualTimeLabel = page.locator('.calendar-dual-time-label').first();
+    await expect(firstDualTimeLabel.locator('span')).toHaveCount(1);
+    const timezoneAxisHeader = page.locator('.fc-col-header .fc-timegrid-axis-frame').first();
+    await expect(timezoneAxisHeader).toBeVisible();
+    await expect.poll(() => timezoneAxisHeader.evaluate((element) => ({
+      main: getComputedStyle(element, '::before').content,
+      sub: getComputedStyle(element, '::after').display,
+      alignContent: getComputedStyle(element).alignContent,
+      fillsCell: Math.abs(
+        element.getBoundingClientRect().height -
+        (element.parentElement?.getBoundingClientRect().height ?? 0),
+      ) < 1,
+    }))).toEqual({ main: '"Taipei"', sub: 'none', alignContent: 'center', fillsCell: true });
+
+    await page.getByRole('button', { name: 'Sub time zone', exact: true }).click();
+    const subTimezoneOptions = page.getByRole('listbox', { name: 'Sub time zone options' });
+    await expect(subTimezoneOptions.getByRole('option').first()).toHaveText('None');
+    const amsterdamOption = subTimezoneOptions.getByRole('option', { name: /Amsterdam.*UTC[+-]/ });
+    const subTimezoneResponse = page.waitForResponse((response) => (
+      response.url().includes('/auth/me/timezone') &&
+      response.request().method() === 'PATCH' &&
+      response.ok()
+    ));
+    await amsterdamOption.click();
+    await subTimezoneResponse;
+    await expect(page.getByRole('button', { name: 'Sub time zone' })).toContainText('Amsterdam');
+
+    await expect(firstDualTimeLabel.locator('span')).toHaveCount(2);
+    await expect.poll(() => timezoneAxisHeader.evaluate((element) => ({
+      main: getComputedStyle(element, '::before').content,
+      sub: getComputedStyle(element, '::after').content,
+    }))).toEqual({ main: '"Taipei"', sub: '"Amsterdam"' });
 
     await page.reload();
     await expect(page.getByText(`Hello, ${user.username}`)).toBeVisible();
     await openPreferences(page);
-    await expect(page.locator('button.preferences-summary-row').filter({ hasText: 'Asia/Taipei' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Main time zone' })).toContainText('Taipei');
+    await expect(page.getByRole('button', { name: 'Sub time zone' })).toContainText('Amsterdam');
+
+    await page.getByRole('button', { name: 'Sub time zone', exact: true }).click();
+    const disableResponse = page.waitForResponse((response) => (
+      response.url().includes('/auth/me/timezone') &&
+      response.request().method() === 'PATCH' &&
+      response.request().postDataJSON().secondary_timezone === null &&
+      response.ok()
+    ));
+    await page.getByRole('listbox', { name: 'Sub time zone options' })
+      .getByRole('option', { name: 'None' })
+      .click();
+    await disableResponse;
+    await expect(page.getByRole('button', { name: 'Sub time zone' })).toContainText('None');
+    await expect(firstDualTimeLabel.locator('span')).toHaveCount(1);
+
+    await page.reload();
+    await expect(page.getByText(`Hello, ${user.username}`)).toBeVisible();
+    await expect(page.locator('.calendar-dual-time-label').first().locator('span')).toHaveCount(1);
   });
 
   test('shows reminder and repeating indicators for scheduled tasks', async ({ page, request }) => {

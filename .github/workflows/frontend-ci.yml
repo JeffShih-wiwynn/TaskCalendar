@@ -12,6 +12,7 @@ jobs:
         timezone:
           - UTC
           - Asia/Taipei
+          - Europe/Amsterdam
     env:
       TZ: ${{ matrix.timezone }}
 

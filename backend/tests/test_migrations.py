@@ -27,13 +27,18 @@ def test_alembic_upgrade_head_initializes_fresh_database(tmp_path: Path) -> None
         "task_lists",
         "scheduled_tasks",
     }
-    user_columns = {column["name"] for column in inspector.get_columns("users")}
+    user_column_details = {
+        column["name"]: column for column in inspector.get_columns("users")
+    }
+    user_columns = set(user_column_details)
     scheduled_task_columns = {
         column["name"] for column in inspector.get_columns("scheduled_tasks")
     }
     assert "password_hash" in user_columns
     assert "is_admin" in user_columns
     assert "timezone" in user_columns
+    assert "secondary_timezone" in user_columns
+    assert user_column_details["secondary_timezone"]["nullable"] is True
     assert "notification_offset_minutes" in scheduled_task_columns
     app_settings_columns = {
         column["name"] for column in inspector.get_columns("app_settings")

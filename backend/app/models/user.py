@@ -30,6 +30,10 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), default="")
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     timezone: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    secondary_timezone: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

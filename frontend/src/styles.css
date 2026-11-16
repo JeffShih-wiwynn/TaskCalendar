@@ -706,75 +706,37 @@ body {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.timezone-dropdown {
-  position: relative;
-  min-width: 0;
-}
-
-.timezone-dropdown-trigger,
-.timezone-dropdown-option {
+.timezone-inline-options {
   display: grid;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-width: 0;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-}
-
-.timezone-dropdown-trigger {
-  grid-template-columns: minmax(0, 1fr) auto 18px;
-  width: 100%;
-  min-width: 0;
-  border: 1px solid var(--field-border);
-  border-radius: 6px;
-  padding: 9px 38px 9px 10px;
-  background: var(--panel-bg);
-  cursor: pointer;
-}
-
-.timezone-dropdown-trigger > span:nth-child(2),
-.timezone-dropdown-option > span:nth-child(2) {
-  white-space: nowrap;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.timezone-dropdown-chevron {
-  position: absolute;
-  right: 12px;
-  width: 8px;
-  height: 8px;
-  color: var(--muted);
-  pointer-events: none;
-  border-right: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
-  transform: translateY(-2px) rotate(45deg);
-}
-
-.timezone-dropdown-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  left: 0;
-  z-index: 30;
   max-height: 280px;
   overflow-y: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--panel-bg);
-  box-shadow: 0 14px 30px rgb(24 32 38 / 24%);
 }
 
 .timezone-dropdown-option {
+  display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
   min-height: 40px;
   padding: 8px 10px;
   border: 0;
+  color: var(--text);
   background: var(--panel-bg);
+  font: inherit;
+  text-align: left;
   cursor: pointer;
+}
+
+.timezone-dropdown-option > span:nth-child(2) {
+  white-space: nowrap;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .timezone-dropdown-option:hover,
@@ -4366,6 +4328,10 @@ input[type="checkbox"].task-checkbox:checked {
   height: 100%;
 }
 
+.calendar-has-secondary-timezone .fc {
+  --calendar-time-axis-width: 6.5rem;
+}
+
 .fc .fc-scroller {
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -4399,6 +4365,58 @@ input[type="checkbox"].task-checkbox:checked {
 
 .fc-direction-ltr .fc-timegrid-slot-label-frame {
   text-align: center;
+}
+
+.calendar-dual-time-label {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+  text-align: center;
+}
+
+.calendar-dual-time-label > span + span {
+  color: var(--muted);
+}
+
+.calendar-dual-time-label--single {
+  gap: 0;
+}
+
+.calendar-view-timeGridWeek .fc-timegrid .fc-col-header .fc-timegrid-axis-frame,
+.calendar-view-timeGridDay .fc-timegrid .fc-col-header .fc-timegrid-axis-frame {
+  display: grid;
+  place-content: center;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
+  gap: 3px;
+  padding: 5px 3px;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 750;
+  line-height: 1.05;
+  text-align: center;
+}
+
+.calendar-view-timeGridWeek .fc-timegrid .fc-col-header .fc-timegrid-axis-frame::before,
+.calendar-view-timeGridDay .fc-timegrid .fc-col-header .fc-timegrid-axis-frame::before {
+  content: var(--calendar-main-timezone-label);
+}
+
+.calendar-view-timeGridWeek .fc-timegrid .fc-col-header .fc-timegrid-axis-frame::after,
+.calendar-view-timeGridDay .fc-timegrid .fc-col-header .fc-timegrid-axis-frame::after {
+  content: var(--calendar-secondary-timezone-label);
+  color: var(--muted);
+}
+
+.calendar-shell:not(.calendar-has-secondary-timezone).calendar-view-timeGridWeek .fc-timegrid .fc-col-header .fc-timegrid-axis-frame::after,
+.calendar-shell:not(.calendar-has-secondary-timezone).calendar-view-timeGridDay .fc-timegrid .fc-col-header .fc-timegrid-axis-frame::after {
+  display: none;
 }
 
 .fc .fc-scrollgrid-sync-table,
@@ -5281,6 +5299,11 @@ input[type="checkbox"].task-checkbox:checked {
     --fc-border-color: color-mix(in srgb, var(--border) 76%, transparent);
   }
 
+  .calendar-has-secondary-timezone.calendar-view-timeGridWeek .fc,
+  .calendar-has-secondary-timezone.calendar-view-timeGridDay .fc {
+    --mobile-week-axis-width: 4rem;
+  }
+
   .calendar-view-timeGridWeek .fc-scrollgrid,
   .calendar-view-timeGridDay .fc-scrollgrid,
   .calendar-view-timeGridWeek .fc-col-header,
@@ -5384,6 +5407,19 @@ input[type="checkbox"].task-checkbox:checked {
     font-size: 0.66rem;
     font-weight: 700;
     letter-spacing: 0.02em;
+  }
+
+  .calendar-view-timeGridWeek .calendar-dual-time-label,
+  .calendar-view-timeGridDay .calendar-dual-time-label {
+    gap: 1px;
+    font-size: 0.62rem;
+  }
+
+  .calendar-view-timeGridWeek .fc-timegrid .fc-col-header .fc-timegrid-axis-frame,
+  .calendar-view-timeGridDay .fc-timegrid .fc-col-header .fc-timegrid-axis-frame {
+    gap: 2px;
+    padding-inline: 2px;
+    font-size: 0.62rem;
   }
 
   .calendar-view-timeGridWeek .fc-timegrid-axis-cushion,

@@ -62,6 +62,7 @@ describe("auth api", () => {
                         username: "alice",
                         is_admin: false,
                         timezone: "Asia/Taipei",
+                        secondary_timezone: "Europe/Amsterdam",
                         created_at: "2026-01-01T00:00:00Z",
                         updated_at: "2026-01-01T00:00:00Z",
                     }),
@@ -82,6 +83,74 @@ describe("auth api", () => {
             expect.objectContaining({
                 method: "PATCH",
                 body: JSON.stringify({ timezone: "Asia/Taipei" }),
+            }),
+        );
+    });
+
+    it("updates the current user's sub time zone without sending a main zone", async () => {
+        window.localStorage.setItem("calendar-auth-token", "test-token");
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () =>
+                new Response(
+                    JSON.stringify({
+                        id: "user-id",
+                        username: "alice",
+                        is_admin: false,
+                        timezone: "Europe/Amsterdam",
+                        secondary_timezone: "Asia/Taipei",
+                        created_at: "2026-01-01T00:00:00Z",
+                        updated_at: "2026-01-01T00:00:00Z",
+                    }),
+                    {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" },
+                    },
+                ),
+            ) as typeof fetch,
+        );
+
+        await authApi.updateTimezone({ secondary_timezone: "Asia/Taipei" });
+
+        expect(fetch).toHaveBeenCalledWith(
+            "/auth/me/timezone",
+            expect.objectContaining({
+                method: "PATCH",
+                body: JSON.stringify({ secondary_timezone: "Asia/Taipei" }),
+            }),
+        );
+    });
+
+    it("disables the current user's sub time zone with an explicit null", async () => {
+        window.localStorage.setItem("calendar-auth-token", "test-token");
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () =>
+                new Response(
+                    JSON.stringify({
+                        id: "user-id",
+                        username: "alice",
+                        is_admin: false,
+                        timezone: "Europe/Amsterdam",
+                        secondary_timezone: null,
+                        created_at: "2026-01-01T00:00:00Z",
+                        updated_at: "2026-01-01T00:00:00Z",
+                    }),
+                    {
+                        status: 200,
+                        headers: { "Content-Type": "application/json" },
+                    },
+                ),
+            ) as typeof fetch,
+        );
+
+        await authApi.updateTimezone({ secondary_timezone: null });
+
+        expect(fetch).toHaveBeenCalledWith(
+            "/auth/me/timezone",
+            expect.objectContaining({
+                method: "PATCH",
+                body: JSON.stringify({ secondary_timezone: null }),
             }),
         );
     });

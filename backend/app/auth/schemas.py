@@ -11,6 +11,7 @@ class AuthCredentials(BaseModel):
 
 class UpdateTimezoneRequest(BaseModel):
     timezone: str | None = Field(default=None, max_length=100)
+    secondary_timezone: str | None = Field(default=None, max_length=100)
 
 
 class TokenResponse(BaseModel):
@@ -23,6 +24,7 @@ class UserRead(BaseModel):
     username: str
     is_admin: bool
     timezone: str | None
+    secondary_timezone: str | None
     created_at: datetime
     updated_at: datetime
 

@@ -11,12 +11,14 @@ export type AuthUser = {
     username: string;
     is_admin: boolean;
     timezone: string | null;
+    secondary_timezone: string | null;
     created_at: string;
     updated_at: string;
 };
 
 export type UpdateTimezoneInput = {
-    timezone: string | null;
+    timezone?: string | null;
+    secondary_timezone?: string | null;
 };
 
 export type ChangePasswordInput = {

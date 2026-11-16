@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - dev
   pull_request:
 
 concurrency:
@@ -17,6 +18,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
+      fail-fast: false
       matrix:
         timezone:
           - UTC
@@ -58,4 +60,21 @@ jobs:
 
       - name: Run Playwright E2E tests
         working-directory: frontend
-        run: npm run test:e2e
+        run: npm run test:e2e -- --reporter=html,line
+
+      - name: Prepare artifact name
+        if: always()
+        env:
+          TEST_TIMEZONE: ${{ matrix.timezone }}
+        run: echo "ARTIFACT_TIMEZONE=${TEST_TIMEZONE//\//-}" >> "$GITHUB_ENV"
+
+      - name: Upload browser reports and server logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ env.ARTIFACT_TIMEZONE }}
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+            .calendar-dev/logs/
+          retention-days: 7

@@ -1,5 +1,9 @@
 import { taskColors } from "./taskColors";
 import { startCalendarDragMotion, startExternalTaskDragMotion, revertCalendarEventWithMotion } from "./calendarDragMotion";
+import {
+    formatCalendarSlotTimes,
+    getTimezoneCity,
+} from "./calendarTimezones";
 import type {
     DatesSetArg,
     DayCellContentArg,
@@ -31,6 +35,7 @@ import {
 } from "framer-motion";
 import { createPortal } from "react-dom";
 import {
+    Fragment,
     useCallback,
     useEffect,
     useLayoutEffect,
@@ -194,6 +199,7 @@ const commonTimezoneOptions = [
     "Asia/Bangkok",
     "Asia/Kolkata",
     "Australia/Sydney",
+    "Europe/Amsterdam",
     "Europe/London",
     "Europe/Paris",
     "America/New_York",
@@ -323,7 +329,8 @@ type SettingsView =
     | "google-calendar"
     | "backup";
 type TaskFormAccordionSectionId = "schedule" | "organization" | "notes";
-type PreferenceSectionId = "week-start" | "working-hours" | "timezone";
+type PreferenceSectionId = "week-start" | "working-hours";
+type TimezoneMenu = "main" | "secondary";
 type TaskRowDragEvent =
     | ReactMouseEvent<HTMLElement>
     | ReactPointerEvent<HTMLElement>;
@@ -508,14 +515,6 @@ function getBrowserTimezone(): string {
     }
 }
 
-function getTimezoneCity(timezone: string): string {
-    const timezoneParts = timezone.split("/");
-    return (timezoneParts[timezoneParts.length - 1] ?? timezone).replace(
-        /_/g,
-        " ",
-    );
-}
-
 function formatTimezoneOffset(timezone: string): string {
     try {
         const offsetPart = new Intl.DateTimeFormat("en-US", {
@@ -653,7 +652,8 @@ export function App() {
     const [weekStart, setWeekStart] = useState<WeekStart>("sunday");
     const [isTimezoneSaving, setIsTimezoneSaving] = useState(false);
     const [timezoneError, setTimezoneError] = useState<string | null>(null);
-    const [isTimezoneMenuOpen, setIsTimezoneMenuOpen] = useState(false);
+    const [openTimezoneMenu, setOpenTimezoneMenu] =
+        useState<TimezoneMenu | null>(null);
     const [
         isDailyTodoNotificationEnabled,
         setIsDailyTodoNotificationEnabled,
@@ -852,8 +852,9 @@ export function App() {
     const categoryNameInputRef = useRef<HTMLInputElement | null>(null);
     const monthYearPickerRef = useRef<HTMLDivElement | null>(null);
     const monthYearPickerTriggerRef = useRef<HTMLButtonElement | null>(null);
-    const timezoneDropdownRef = useRef<HTMLDivElement | null>(null);
-    const timezoneDropdownTriggerRef = useRef<HTMLButtonElement | null>(null);
+    const timezoneEditorRef = useRef<HTMLDivElement | null>(null);
+    const mainTimezoneTriggerRef = useRef<HTMLButtonElement | null>(null);
+    const secondaryTimezoneTriggerRef = useRef<HTMLButtonElement | null>(null);
     const timeGridScrollTopRef = useRef<number | null>(null);
     const calendarSwipeStateRef = useRef<CalendarSwipeState | null>(null);
     const suppressNextCalendarTapRef = useRef(false);
@@ -864,6 +865,7 @@ export function App() {
 
     const browserTimezone = getBrowserTimezone();
     const effectiveTimezone = currentUser?.timezone ?? browserTimezone;
+    const effectiveSecondaryTimezone = currentUser?.secondary_timezone ?? null;
     const tasks = taskState.tasks;
     const isInitialTaskLoad =
         taskState.status === "loading" && tasks.length === 0;
@@ -1014,7 +1016,7 @@ export function App() {
         [authToken],
     );
     const handleTimezoneChange = useCallback(
-        async (timezone: string | null) => {
+        async (kind: TimezoneMenu, timezone: string | null) => {
             if (!authToken) {
                 return;
             }
@@ -1022,7 +1024,11 @@ export function App() {
             setIsTimezoneSaving(true);
             setTimezoneError(null);
             try {
-                const updatedUser = await updateTimezone({ timezone });
+                const updatedUser = await updateTimezone(
+                    kind === "main"
+                        ? { timezone }
+                        : { secondary_timezone: timezone },
+                );
                 setCurrentUser(updatedUser);
             } catch (error) {
                 setTimezoneError(
@@ -2970,15 +2976,26 @@ export function App() {
         (slotLabelInfo: SlotLabelContentArg) => {
             if (
                 (slotLabelInfo.view.type !== "timeGridWeek" &&
-                    slotLabelInfo.view.type !== "timeGridDay") ||
-                !isMobileLayout
+                    slotLabelInfo.view.type !== "timeGridDay")
             ) {
                 return slotLabelInfo.text;
             }
 
-            return String(slotLabelInfo.date.getUTCHours()).padStart(2, "0");
+            const times = formatCalendarSlotTimes(
+                slotLabelInfo.date,
+                effectiveTimezone,
+                effectiveSecondaryTimezone,
+            );
+            return (
+                <span
+                    className={`calendar-dual-time-label ${times.secondary ? "" : "calendar-dual-time-label--single"}`}
+                >
+                    <span>{times.main}</span>
+                    {times.secondary ? <span>{times.secondary}</span> : null}
+                </span>
+            );
         },
-        [isMobileLayout],
+        [effectiveSecondaryTimezone, effectiveTimezone],
     );
 
     const renderEventContent = useCallback(
@@ -4616,7 +4633,7 @@ export function App() {
     ].sort(compareTimezonesByUtc);
 
     useEffect(() => {
-        if (!isTimezoneMenuOpen) {
+        if (!openTimezoneMenu) {
             return;
         }
 
@@ -4624,16 +4641,20 @@ export function App() {
             const target = event.target;
             if (
                 target instanceof Node &&
-                timezoneDropdownRef.current?.contains(target)
+                timezoneEditorRef.current?.contains(target)
             ) {
                 return;
             }
-            setIsTimezoneMenuOpen(false);
+            setOpenTimezoneMenu(null);
         };
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === "Escape") {
-                setIsTimezoneMenuOpen(false);
-                timezoneDropdownTriggerRef.current?.focus();
+                const trigger =
+                    openTimezoneMenu === "main"
+                        ? mainTimezoneTriggerRef.current
+                        : secondaryTimezoneTriggerRef.current;
+                setOpenTimezoneMenu(null);
+                trigger?.focus();
             }
         };
 
@@ -4643,7 +4664,7 @@ export function App() {
             document.removeEventListener("pointerdown", handlePointerDown);
             document.removeEventListener("keydown", handleKeyDown);
         };
-    }, [isTimezoneMenuOpen]);
+    }, [openTimezoneMenu]);
 
     if (!authToken) {
         return (
@@ -5298,7 +5319,11 @@ export function App() {
                                                 animate={{ height: "auto", opacity: 1, y: 0 }}
                                                 exit={{ height: 0, opacity: 0, y: -4 }}
                                                 transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                                                style={{ overflow: "hidden" }}
+                                                style={{
+                                                    overflow: openTimezoneMenu
+                                                        ? "visible"
+                                                        : "hidden",
+                                                }}
                                             >
                                                 <button
                                                     type="button"
@@ -5419,165 +5444,129 @@ export function App() {
                                         )}
                                         </AnimatePresence>
                                     </div>
-                                    <div className="settings-list-section">
+                                    <div
+                                        className="settings-list-section timezone-settings-section"
+                                        ref={timezoneEditorRef}
+                                    >
                                         <p className="settings-list-section-title">
                                             Time zone
                                         </p>
-                                        <button
-                                            type="button"
-                                            className="settings-navigation-row preferences-summary-row"
-                                            aria-expanded={
-                                                expandedPreferenceSection ===
-                                                "timezone"
-                                            }
-                                            aria-controls="timezone-preference-editor"
-                                            onClick={() =>
-                                                setExpandedPreferenceSection(
-                                                    (current) =>
-                                                        current === "timezone"
-                                                            ? null
-                                                            : "timezone",
-                                                )
-                                            }
-                                        >
-                                            <span className="settings-navigation-row-copy">
-                                                <span className="settings-navigation-row-title">
-                                                    Time zone
-                                                </span>
-                                            </span>
-                                            <span className="preferences-summary-row-trailing">
-                                                <span className="preferences-summary-value">
-                                                    {effectiveTimezone}
-                                                </span>
-                                                <span
-                                                    className="settings-navigation-row-chevron"
-                                                    aria-hidden="true"
-                                                >
-                                                    ›
-                                                </span>
-                                            </span>
-                                        </button>
-                                        <AnimatePresence initial={false}>
-                                        {expandedPreferenceSection === "timezone" && (
-                                            <motion.div
-                                                id="timezone-preference-editor"
-                                                className="preferences-inline-editor preferences-timezone-editor"
-                                                initial={{ height: 0, opacity: 0, y: -4 }}
-                                                animate={{ height: "auto", opacity: 1, y: 0 }}
-                                                exit={{ height: 0, opacity: 0, y: -4 }}
-                                                transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                                                style={{ overflow: "hidden" }}
-                                            >
-                                                <div
-                                                    className="timezone-dropdown"
-                                                    ref={timezoneDropdownRef}
-                                                >
-                                                    <button
-                                                        ref={
-                                                            timezoneDropdownTriggerRef
-                                                        }
-                                                        type="button"
-                                                        className="timezone-dropdown-trigger"
-                                                        aria-label="Time zone"
-                                                        aria-haspopup="listbox"
-                                                        aria-expanded={
-                                                            isTimezoneMenuOpen
-                                                        }
-                                                        disabled={
-                                                            isTimezoneSaving
-                                                        }
-                                                        onClick={() =>
-                                                            setIsTimezoneMenuOpen(
-                                                                (current) =>
-                                                                    !current,
-                                                            )
-                                                        }
-                                                    >
-                                                        <span>
-                                                            {getTimezoneCity(
-                                                                effectiveTimezone,
-                                                            )}
-                                                        </span>
-                                                        <span>
-                                                            {formatTimezoneOffset(
-                                                                effectiveTimezone,
-                                                            )}
-                                                        </span>
-                                                        <span
-                                                            className="timezone-dropdown-chevron"
-                                                            aria-hidden="true"
-                                                        />
-                                                    </button>
-                                                    {isTimezoneMenuOpen ? (
-                                                        <div
-                                                            className="timezone-dropdown-menu"
-                                                            role="listbox"
-                                                            aria-label="Time zone options"
-                                                        >
-                                                            {timezoneOptions.map(
-                                                                (timezone) => (
-                                                                    <button
-                                                                        key={
-                                                                            timezone
-                                                                        }
-                                                                        type="button"
-                                                                        role="option"
-                                                                        aria-selected={
-                                                                            timezone ===
-                                                                            effectiveTimezone
-                                                                        }
-                                                                        className="timezone-dropdown-option"
-                                                                        onClick={() => {
-                                                                            setIsTimezoneMenuOpen(
-                                                                                false,
-                                                                            );
-                                                                            void handleTimezoneChange(
-                                                                                timezone,
-                                                                            );
-                                                                        }}
-                                                                    >
-                                                                        <span>
-                                                                            {getTimezoneCity(
-                                                                                timezone,
-                                                                            )}
-                                                                        </span>
-                                                                        <span>
-                                                                            {formatTimezoneOffset(
-                                                                                timezone,
-                                                                            )}
-                                                                        </span>
-                                                                    </button>
-                                                                ),
-                                                            )}
-                                                        </div>
-                                                    ) : null}
-                                                </div>
+                                        {([
+                                            ["main", "Main time zone", effectiveTimezone],
+                                            ["secondary", "Sub time zone", effectiveSecondaryTimezone],
+                                        ] as const).map(([kind, label, selectedTimezone]) => (
+                                            <Fragment key={kind}>
                                                 <button
+                                                    ref={kind === "main" ? mainTimezoneTriggerRef : secondaryTimezoneTriggerRef}
                                                     type="button"
-                                                    className="settings-action-button settings-action-button-neutral"
-                                                    disabled={
-                                                        isTimezoneSaving ||
-                                                        currentUser?.timezone ===
-                                                            browserTimezone
-                                                    }
+                                                    className="settings-navigation-row preferences-summary-row"
+                                                    aria-label={label}
+                                                    aria-expanded={openTimezoneMenu === kind}
+                                                    aria-controls={`${kind}-timezone-options`}
+                                                    disabled={isTimezoneSaving}
                                                     onClick={() =>
-                                                        void handleTimezoneChange(
-                                                            browserTimezone,
+                                                        setOpenTimezoneMenu((current) =>
+                                                            current === kind ? null : kind,
                                                         )
                                                     }
                                                 >
-                                                    {isTimezoneSaving
-                                                        ? "Saving..."
-                                                        : "Use browser time zone"}
+                                                    <span className="settings-navigation-row-copy">
+                                                        <span className="settings-navigation-row-title">
+                                                            {label}
+                                                        </span>
+                                                    </span>
+                                                    <span className="preferences-summary-row-trailing">
+                                                        <span className="preferences-summary-value">
+                                                            {selectedTimezone
+                                                                ? getTimezoneCity(selectedTimezone)
+                                                                : "None"}
+                                                        </span>
+                                                        <span
+                                                            className="settings-navigation-row-chevron"
+                                                            aria-hidden="true"
+                                                        >
+                                                            {openTimezoneMenu === kind ? "⌄" : "›"}
+                                                        </span>
+                                                    </span>
                                                 </button>
-                                                {timezoneError && (
-                                                    <p className="form-error">
-                                                        {timezoneError}
-                                                    </p>
-                                                )}
-                                            </motion.div>
+                                                <AnimatePresence initial={false}>
+                                                    {openTimezoneMenu === kind ? (
+                                                        <motion.div
+                                                            id={`${kind}-timezone-options`}
+                                                            className="preferences-inline-editor preferences-timezone-editor"
+                                                            initial={{ height: 0, opacity: 0, y: -4 }}
+                                                            animate={{ height: "auto", opacity: 1, y: 0 }}
+                                                            exit={{ height: 0, opacity: 0, y: -4 }}
+                                                            transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                                                            style={{ overflow: "hidden" }}
+                                                        >
+                                                            <div
+                                                                className="timezone-inline-options"
+                                                                role="listbox"
+                                                                aria-label={`${label} options`}
+                                                            >
+                                                                {kind === "secondary" ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        role="option"
+                                                                        aria-selected={selectedTimezone === null}
+                                                                        className="timezone-dropdown-option"
+                                                                        onClick={() => {
+                                                                            setOpenTimezoneMenu(null);
+                                                                            void handleTimezoneChange("secondary", null);
+                                                                        }}
+                                                                    >
+                                                                        <span>None</span>
+                                                                        <span />
+                                                                    </button>
+                                                                ) : null}
+                                                                {timezoneOptions.map((timezone) => (
+                                                                    <button
+                                                                        key={timezone}
+                                                                        type="button"
+                                                                        role="option"
+                                                                        aria-selected={timezone === selectedTimezone}
+                                                                        className="timezone-dropdown-option"
+                                                                        onClick={() => {
+                                                                            setOpenTimezoneMenu(null);
+                                                                            void handleTimezoneChange(kind, timezone);
+                                                                        }}
+                                                                    >
+                                                                        <span>{getTimezoneCity(timezone)}</span>
+                                                                        <span>{formatTimezoneOffset(timezone)}</span>
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                            {kind === "main" ? (
+                                                                <button
+                                                                    type="button"
+                                                                    className="settings-action-button settings-action-button-neutral"
+                                                                    disabled={
+                                                                        isTimezoneSaving ||
+                                                                        currentUser?.timezone === browserTimezone
+                                                                    }
+                                                                    onClick={() =>
+                                                                        void handleTimezoneChange(
+                                                                            "main",
+                                                                            browserTimezone,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    {isTimezoneSaving
+                                                                        ? "Saving..."
+                                                                        : "Use browser time zone"}
+                                                                </button>
+                                                            ) : null}
+                                                        </motion.div>
+                                                    ) : null}
+                                                </AnimatePresence>
+                                            </Fragment>
+                                        ))}
+                                        {timezoneError && (
+                                            <p className="form-error">
+                                                {timezoneError}
+                                            </p>
                                         )}
-                                        </AnimatePresence>
                                     </div>
                                     <div className="settings-list-section">
                                         <p className="settings-list-section-title">
@@ -7910,9 +7899,21 @@ export function App() {
                 </div>
 
                 <motion.div
-                    className={`calendar-transition-shell calendar-shell ${isMobileLayout ? "calendar-shell--mobile-readonly" : ""} calendar-view-${calendarView}`}
+                    className={`calendar-transition-shell calendar-shell ${isMobileLayout ? "calendar-shell--mobile-readonly" : ""} ${effectiveSecondaryTimezone ? "calendar-has-secondary-timezone" : ""} calendar-view-${calendarView}`}
                     animate={calendarTransitionControls}
                     initial={false}
+                    style={
+                        {
+                            "--calendar-main-timezone-label": JSON.stringify(
+                                getTimezoneCity(effectiveTimezone),
+                            ),
+                            "--calendar-secondary-timezone-label": JSON.stringify(
+                                effectiveSecondaryTimezone
+                                    ? getTimezoneCity(effectiveSecondaryTimezone)
+                                    : "",
+                            ),
+                        } as CSSProperties
+                    }
                     onTouchStart={handleCalendarTouchStart}
                     onTouchMove={handleCalendarTouchMove}
                     onTouchEnd={handleCalendarTouchEnd}

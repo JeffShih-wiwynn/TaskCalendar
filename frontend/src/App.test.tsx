@@ -18,6 +18,7 @@ import {
 } from "react";
 
 import { App } from "./App";
+import type { AuthUser } from "./api/auth";
 import { getRegistrationStatus } from "./api/registration";
 
 const mocks = vi.hoisted(() => ({
@@ -96,14 +97,34 @@ const mocks = vi.hoisted(() => ({
     dragRevert: vi.fn(),
     draggableConstruct: vi.fn(),
     draggableDestroy: vi.fn(),
-    getCurrentUser: vi.fn(async () => ({
+    getCurrentUser: vi.fn(async (): Promise<AuthUser> => ({
         id: "user-1",
         username: "alice",
         is_admin: false,
         timezone: "Asia/Taipei",
+        secondary_timezone: null,
         created_at: "",
         updated_at: "",
     })),
+    updateTimezone: vi.fn(
+        async (input: {
+            timezone?: string | null;
+            secondary_timezone?: string | null;
+        }) => ({
+            id: "user-1",
+            username: "alice",
+            is_admin: false,
+            timezone: input.timezone ?? "Asia/Taipei",
+            secondary_timezone: Object.prototype.hasOwnProperty.call(
+                input,
+                "secondary_timezone",
+            )
+                ? (input.secondary_timezone ?? null)
+                : null,
+            created_at: "",
+            updated_at: "",
+        }),
+    ),
     login: vi.fn(async () => {
         window.localStorage.setItem("calendar-auth-token", "test-token");
         return "test-token";
@@ -682,6 +703,7 @@ vi.mock("./api/auth", () => ({
     isAuthError: (error: unknown) => error instanceof mocks.AuthError,
     login: mocks.login,
     register: mocks.register,
+    updateTimezone: mocks.updateTimezone,
 }));
 
 vi.mock("./api/registration", () => ({
@@ -1044,6 +1066,7 @@ describe("App", () => {
             return updatedTask;
         });
         mocks.fullCalendarMount.mockClear();
+        mocks.updateTimezone.mockClear();
         mocks.fullCalendarRefetchEvents.mockClear();
         mocks.fullCalendarPrev.mockClear();
         mocks.fullCalendarNext.mockClear();
@@ -1127,6 +1150,7 @@ describe("App", () => {
             username: "alice",
             is_admin: false,
             timezone: "Asia/Taipei",
+            secondary_timezone: null,
             created_at: "",
             updated_at: "",
         });
@@ -1474,6 +1498,68 @@ describe("App", () => {
         expect(
             screen.queryByRole("heading", { name: "Task filters" }),
         ).toBeNull();
+    });
+
+    it("lets the user choose main and sub time zones in preferences", async () => {
+        render(<App />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+        fireEvent.click(screen.getByRole("button", { name: /Preferences/i }));
+        await screen.findByRole("heading", { name: "Preferences" });
+
+        expect(screen.getByRole("button", { name: "Main time zone" })).toHaveTextContent(
+            "Taipei",
+        );
+        expect(screen.getByRole("button", { name: "Sub time zone" })).toHaveTextContent(
+            "None",
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Main time zone" }));
+        expect(
+            screen.getByRole("listbox", { name: "Main time zone options" }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole("button", { name: "Use browser time zone" }),
+        ).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: "Sub time zone" }));
+        const options = screen.getByRole("listbox", {
+            name: "Sub time zone options",
+        });
+        await waitFor(() => {
+            expect(
+                screen.queryByRole("listbox", { name: "Main time zone options" }),
+            ).not.toBeInTheDocument();
+            expect(
+                screen.queryByRole("button", { name: "Use browser time zone" }),
+            ).not.toBeInTheDocument();
+        });
+        expect(within(options).getAllByRole("option")[0]).toHaveTextContent("None");
+        fireEvent.click(within(options).getByRole("option", { name: /Amsterdam/i }));
+
+        await waitFor(() =>
+            expect(mocks.updateTimezone).toHaveBeenCalledWith({
+                secondary_timezone: "Europe/Amsterdam",
+            }),
+        );
+        expect(screen.getByRole("button", { name: "Sub time zone" })).toHaveTextContent(
+            "Amsterdam",
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: "Sub time zone" }));
+        fireEvent.click(
+            within(
+                screen.getByRole("listbox", { name: "Sub time zone options" }),
+            ).getByRole("option", { name: "None" }),
+        );
+
+        await waitFor(() =>
+            expect(mocks.updateTimezone).toHaveBeenLastCalledWith({
+                secondary_timezone: null,
+            }),
+        );
+        expect(screen.getByRole("button", { name: "Sub time zone" })).toHaveTextContent(
+            "None",
+        );
     });
 
     it("places notifications preferences immediately below task visibility", async () => {
@@ -4780,6 +4866,7 @@ describe("App", () => {
             username: "alice",
             is_admin: true,
             timezone: "Asia/Taipei",
+            secondary_timezone: "Asia/Taipei",
             created_at: "",
             updated_at: "",
         });
@@ -4951,6 +5038,7 @@ describe("App", () => {
             username: "alice",
             is_admin: true,
             timezone: "Asia/Taipei",
+            secondary_timezone: "Asia/Taipei",
             created_at: "",
             updated_at: "",
         });
