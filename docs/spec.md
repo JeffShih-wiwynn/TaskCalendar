@@ -26,6 +26,7 @@ The current app is web-first:
 - Draggable and resizable scheduled task events on desktop; mobile calendar events are tap/click-only and do not expose drag or resize affordances.
 - Week and day views default to the configured working-hours range and include a compact `Work` / `Full` viewport toggle for switching to the full-day time grid.
 - Preferences include working-hours start, week start, main and sub time zones, and daily todo notification enablement.
+- Week titles show `Nov – Dec 2026` across months and `Dec 2026 – Jan 2027` across years; weeks within one month retain the full month and year.
 - Main and sub time zones have separate expandable rows with scrollable zone lists. Main includes the browser-time-zone action; Sub includes `None` and is disabled by default.
 - Week and day time axes show the main zone and, when enabled, an optional sub zone; task placement and editing continue to use the main zone.
 - Task creation from selected calendar time ranges, including all-day slots.
