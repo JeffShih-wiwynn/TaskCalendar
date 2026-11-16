@@ -8,6 +8,8 @@ Playwright global setup creates a test administrator on an empty instance. A sha
 
 Browser contexts and test users use the runner's timezone, and browser time is fixed at local noon for the test date to avoid midnight-dependent calendar failures. CI exercises both `UTC` and `Asia/Taipei`.
 
+Playwright runs for pull requests, pushes to `main` and `dev`, and manual dispatches. Each timezone job uploads its HTML report, test results, and development server logs as a separate artifact retained for seven days, including on failure. The sanity workflow runs backend lint/tests and frontend validation in UTC and Taipei; the frontend workflow also tests `Europe/Amsterdam` for daylight-saving timezone coverage.
+
 ## Frontend
 
 Install:
@@ -204,7 +206,7 @@ http://127.0.0.1:8000/auth/login
 ## Backend Environment
 
 `APP_TIMEZONE` controls application datetime behavior and defaults to `UTC` when unset. It is used for task datetime serialization, recurrence handling, notification scheduling, and backup datetime import/export. Use an IANA timezone name such as `UTC` or `Asia/Taipei`.
-Users can update their saved timezone from Preferences. Calendar display and task date/time editing use the saved user timezone; recurrence expansion preserves the local wall-clock time across DST changes; notification delivery, including all-day reminder scheduling, prefers the user timezone and falls back to `APP_TIMEZONE`. A user without a saved timezone uses the browser-detected timezone until one is selected.
+Users can update their main time zone and optionally enable a sub time zone from Preferences. Week and day views show the enabled zones on the time axis, while calendar placement and task date/time editing use the main zone. The sub zone is off by default and follows IANA daylight-saving rules when enabled. Recurrence expansion preserves the main-zone local wall-clock time across DST changes; notification delivery, including all-day reminder scheduling, prefers the main user timezone and falls back to `APP_TIMEZONE`. A user without a saved main timezone uses the browser-detected timezone until one is selected.
 
 For local development, set it when starting the stack so `scripts/dev.sh` passes the value directly to the backend process:
 

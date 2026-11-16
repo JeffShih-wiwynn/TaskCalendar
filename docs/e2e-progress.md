@@ -16,7 +16,7 @@ Current progress for the Playwright end-to-end suite in `frontend/e2e/`.
 - Category/list management for creating a category, assigning a task, filtering by category, and reload persistence.
 - Multi-session consistency for one account across independent browser contexts after reload, covering create, edit, and delete.
 - Public `/privacy` access without authentication.
-- Saved timezone selection and UTC offset display.
+- Saved main and optional sub timezone selection, UTC offset display, and single- or dual-zone week/day time-axis labels.
 - Reminder and repeating-task indicators.
 - Mobile calendar screen smoke coverage on Chromium mobile emulation.
 

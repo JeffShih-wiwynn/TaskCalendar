@@ -77,15 +77,11 @@ def update_timezone(
     current_user: User,
     data: UpdateTimezoneRequest,
 ) -> User:
-    timezone = data.timezone.strip() if data.timezone else None
-    if timezone:
-        try:
-            ZoneInfo(timezone)
-        except ZoneInfoNotFoundError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="timezone must be a valid IANA timezone",
-            ) from exc
+    timezone = normalize_timezone(data.timezone, field_name="timezone")
+    secondary_timezone = normalize_timezone(
+        data.secondary_timezone,
+        field_name="secondary_timezone",
+    )
 
     user = db.get(User, current_user.id)
     if user is None:
@@ -95,14 +91,30 @@ def update_timezone(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    timezone_changed = user.timezone != timezone
-    user.timezone = timezone
+    timezone_changed = "timezone" in data.model_fields_set and user.timezone != timezone
+    if "timezone" in data.model_fields_set:
+        user.timezone = timezone
+    if "secondary_timezone" in data.model_fields_set:
+        user.secondary_timezone = secondary_timezone
     db.add(user)
     if timezone_changed:
         enqueue_user_reconciliation(db, user_id=user.id)
     db.commit()
     db.refresh(user)
     return user
+
+
+def normalize_timezone(value: str | None, *, field_name: str) -> str | None:
+    timezone = value.strip() if value else None
+    if timezone:
+        try:
+            ZoneInfo(timezone)
+        except ZoneInfoNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{field_name} must be a valid IANA timezone",
+            ) from exc
+    return timezone
 
 
 def change_password(

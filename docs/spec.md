@@ -25,7 +25,9 @@ The current app is web-first:
 - Clickable month title that opens a compact Month-Year picker for jumping by month and year.
 - Draggable and resizable scheduled task events on desktop; mobile calendar events are tap/click-only and do not expose drag or resize affordances.
 - Week and day views default to the configured working-hours range and include a compact `Work` / `Full` viewport toggle for switching to the full-day time grid.
-- Preferences include working-hours start, week start, and daily todo notification enablement.
+- Preferences include working-hours start, week start, main and sub time zones, and daily todo notification enablement.
+- Main and sub time zones have separate expandable rows with scrollable zone lists. Main includes the browser-time-zone action; Sub includes `None` and is disabled by default.
+- Week and day time axes show the main zone and, when enabled, an optional sub zone; task placement and editing continue to use the main zone.
 - Task creation from selected calendar time ranges, including all-day slots.
 - Mobile calendar interactions use a quick action sheet for tap-to-edit; drag and resize are disabled on narrow screens.
 - Mobile month-view day previews use compact icon buttons for `Close` and `Add`.
@@ -85,7 +87,7 @@ Uncategorized tasks are not mirrored; see [Google Calendar Category Routing](goo
 
 ## Data Model Assumptions
 
-- `User` stores username, password hash, admin flag, optional timezone, and timestamps.
+- `User` stores username, password hash, admin flag, an optional main timezone, an optional secondary display timezone, and timestamps.
 - Public task, category, settings, backup, Google mirror, and admin routes are scoped to the authenticated user or current admin.
 - Some service functions still accept an omitted `user_id` for internal/backward-compatible direct service calls, but public API routes require authentication.
 - Backup export/import is user-scoped and restore replaces the current user's existing calendar data.

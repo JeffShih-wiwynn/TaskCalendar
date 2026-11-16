@@ -83,7 +83,7 @@ This document summarizes what is already in the repository snapshot and where th
 - [x] User preferences and timezone persistence
   - App settings are scoped per user.
   - Working-hours start, week start, Discord settings, and daily todo notification enablement are stored in the backend.
-  - User rows include optional timezone for notification formatting and scheduling.
+  - User rows include an optional main timezone for calendar behavior and an optional, default-off secondary timezone for the week/day time axis.
 - [x] Undo support
   - Recent task changes surface a compact floating undo control.
   - Undo remains single-step and in-memory only.

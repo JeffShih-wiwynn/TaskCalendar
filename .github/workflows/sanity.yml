@@ -7,8 +7,14 @@ on:
 jobs:
   sanity:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        timezone:
+          - UTC
+          - Asia/Taipei
     env:
-      TZ: Asia/Taipei
+      TZ: ${{ matrix.timezone }}
 
     steps:
       - name: Check out repository

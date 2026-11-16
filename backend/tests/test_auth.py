@@ -196,6 +196,70 @@ def test_update_current_user_timezone_persists_valid_timezone(
     assert db_session.query(User).filter_by(username="alice").one().timezone == "Asia/Taipei"
 
 
+def test_update_secondary_timezone_without_changing_main_timezone(
+    db_session: Session,
+) -> None:
+    credentials = AuthCredentials(username="alice", password="secret-password")
+    register(credentials, db_session)
+    current_user = get_current_user(login(credentials, db_session).access_token, db_session)
+    current_user.timezone = "Europe/Amsterdam"
+    db_session.add(
+        GoogleCalendarConnection(
+            user_id=current_user.id,
+            google_calendar_id="mirror-calendar-id",
+            status="connected",
+        )
+    )
+    db_session.commit()
+
+    response = update_current_user_timezone(
+        UpdateTimezoneRequest(secondary_timezone="Asia/Taipei"),
+        db_session,
+        current_user=current_user,
+    )
+
+    assert response.timezone == "Europe/Amsterdam"
+    assert response.secondary_timezone == "Asia/Taipei"
+    assert db_session.query(GoogleSyncOutbox).count() == 0
+
+
+def test_update_secondary_timezone_can_disable_it(
+    db_session: Session,
+) -> None:
+    credentials = AuthCredentials(username="alice", password="secret-password")
+    register(credentials, db_session)
+    current_user = get_current_user(login(credentials, db_session).access_token, db_session)
+    current_user.secondary_timezone = "Asia/Taipei"
+    db_session.commit()
+
+    response = update_current_user_timezone(
+        UpdateTimezoneRequest(secondary_timezone=None),
+        db_session,
+        current_user=current_user,
+    )
+
+    assert response.secondary_timezone is None
+    assert db_session.query(User).filter_by(username="alice").one().secondary_timezone is None
+
+
+def test_update_secondary_timezone_rejects_invalid_timezone(
+    db_session: Session,
+) -> None:
+    credentials = AuthCredentials(username="alice", password="secret-password")
+    register(credentials, db_session)
+    current_user = get_current_user(login(credentials, db_session).access_token, db_session)
+
+    with pytest.raises(HTTPException) as exc_info:
+        update_current_user_timezone(
+            UpdateTimezoneRequest(secondary_timezone="Not/A_Timezone"),
+            db_session,
+            current_user=current_user,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "secondary_timezone must be a valid IANA timezone"
+
+
 def test_update_current_user_timezone_queues_google_reconciliation(
     db_session: Session,
 ) -> None:
