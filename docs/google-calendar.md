@@ -3,6 +3,8 @@
 TaskCalendar mirrors incomplete scheduled tasks into a dedicated Google secondary calendar named `TaskCalendar Mirror — Read Only`.
 The mirror is one-way. TaskCalendar remains the source of truth.
 
+Google Calendar mirroring is optional; the core calendar and task features do not require Google credentials.
+
 Each synchronized category uses one managed mirror calendar. Categories opt in
 through the category editor; uncategorized and disabled-category tasks are not
 mirrored. The legacy unified calendar remains available during migration; see

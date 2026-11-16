@@ -15,7 +15,7 @@ Persistent status for continuing [refactor-backlog.md](./refactor-backlog.md) sa
   - Notes: added shared JSON response parsing with clearer non-JSON errors.
 - Centralize frontend API route constants.
   - Commit: `9107679 Centralize frontend API route constants`
-  - Notes: added `API_ROUTES` and replaced repeated endpoint strings in API clients. Shared request helper extraction is still pending.
+  - Notes: added `API_ROUTES` and replaced repeated endpoint strings in API clients. The shared `requestJson` helper was completed later in this refactor series.
 - Clean up broad CSS selectors.
   - Notes: replaced broad `.task-form button` styling with explicit task-form button class selectors.
 - Extract `AdminSettingsPanel`.
@@ -30,7 +30,7 @@ Persistent status for continuing [refactor-backlog.md](./refactor-backlog.md) sa
 
 ## Current
 
-- None
+- Calendar hourly time-label positioning helper with cleanup on unmount and row resize observation; added alongside the full-hour centering behavior.
 
 ## Next Recommended
 

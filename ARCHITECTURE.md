@@ -21,6 +21,7 @@ This document describes the current shape of the codebase and the constraints fu
 - Notifications: Discord webhook delivery from the backend notification worker thread, including per-task reminders and optional daily todo digests.
 - Google Calendar mirror: one-way mirror to a dedicated Google secondary calendar through a durable PostgreSQL outbox and worker process.
 - PWA: installable production build with standalone mode and a service worker that precaches built static assets only.
+- Calendar time-axis labels in day/week views are centered across the full hourly interval on desktop and mobile; an optional second timezone is displayed as a paired label.
 
 ## Architectural Principles
 
@@ -104,6 +105,7 @@ Future cleanup targets:
 - No native Android app yet.
 - No Android widget yet.
 - No OAuth or social login beyond Google Calendar mirror setup.
+- No email delivery or password-reset flow.
 
 ## Google Calendar Category Routing
 

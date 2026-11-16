@@ -1,107 +1,35 @@
 # Roadmap
 
-This roadmap starts from the current repository state and tracks the next phases in order.
+This roadmap separates shipped features from work that is still under consideration. Completed features are listed once; unchecked items are proposals, not promises or active development.
 
----
+## Shipped
 
-## Completed Platform Work
+- Web app for scheduled and unscheduled tasks, completion tracking, day/week/month calendar views, and responsive mobile use.
+- Categories, notes, priorities, task duplication, inbox ordering, task recurrence, and overdue views.
+- Account registration, login, administrator controls, password changes, and account deletion.
+- User-scoped JSON backup and restore.
+- Discord task reminders and daily todo digests.
+- One-way Google Calendar mirror, including category-specific calendars and durable background sync.
+- Installable web app support and single-step undo for recent task changes.
 
-- [x] Authentication and multi-user safety.
-- [x] Deployment portability and environment configuration.
-- [x] Backup, restore, migration, and production readiness.
-- [x] Mobile/PWA usability baseline.
-- [x] Task list/sidebar improvements.
-- [x] Recurrence and notifications MVP.
-- [x] Google Calendar mirror with durable outbox and worker.
-- [x] Undo support.
-- [x] User-scoped settings for working-hours start, week start, Discord settings, and daily todo notification enablement.
-- [x] Daily todo Discord digest scanner and durable delivery state machine.
+## Product improvements under consideration
 
----
+- Password reset by email, including a configured email delivery service and secure reset flow.
+- Direct due-date editing in the task editor.
+- ICS/VTODO export for calendar interoperability.
+- Further mobile usability improvements.
+- Additional focused frontend and backend extractions where they make ongoing changes safer.
 
-## Phase 11: ICS / VTODO export
+## Longer-term ideas
 
-Goal: support interoperability with external calendar and task systems only.
+- Native Android client and home-screen widget.
+- Shared tasks and collaboration.
+- Offline editing and synchronization after conflict behavior is designed.
+- CalDAV support or two-way external calendar sync after a separate product and compatibility design.
 
-- [ ] Add an `.ics` export endpoint.
-- [ ] Export tasks as VTODO.
-- [ ] Map title to `SUMMARY`.
-- [ ] Map notes to `DESCRIPTION`.
-- [ ] Map `scheduled_start` to `DTSTART`.
-- [ ] Map `scheduled_end` or `due_at` to `DUE`.
-- [x] Preserve all-day task dates without introducing timezone drift.
-- [ ] Map `completed` to `STATUS:COMPLETED`.
-- [ ] Map `completed_at` to `COMPLETED`.
-- [ ] Map `id` to `UID`.
-- [ ] Keep ICS export separate from full backup/import functionality.
-- [ ] Do not implement full CalDAV sync yet.
+## Guardrails
 
-## Future API Route Cleanup
-
-Goal: normalize backend product routes under `/api/*` once the current MVP surface is stable.
-
-- [ ] Move auth routes from `/auth/*` to `/api/auth/*`.
-- [ ] Move admin routes from `/admin/*` to `/api/admin/*`.
-- [ ] Move backup routes from `/backup/*` to `/api/backup/*`.
-- [ ] Keep `/health` at the root.
-- [ ] Put future external calendar APIs under `/api/external-calendars/*` or a similar subtree.
-- [ ] Keep current Caddy and PWA route exclusions in sync until normalization is complete.
-
-## Phase 12: Native Android planning
-
-Goal: plan the native Android client after the backend API is stable.
-
-- [ ] Do not implement Android yet.
-- [ ] Document the Android architecture around Kotlin, Jetpack Compose, Room, Retrofit or Ktor Client, WorkManager, and Jetpack Glance.
-- [ ] Reuse the existing backend API instead of replacing it.
-- [ ] Keep the Android app as a client, not a backend replacement.
-- [ ] Plan the Android widget around the same backend-backed task data.
-
-## Phase 13: Undo support
-
-Goal: add a small, safe undo system for recent task changes.
-
-- [x] Add single-step undo for task updates.
-- [x] Show a compact floating undo control after task edit, drag, resize, complete, and category changes.
-- [x] Store the previous task snapshot before applying the update.
-- [x] Restore the previous snapshot if the user clicks Undo.
-- [x] Add undo for delete by restoring the deleted task.
-- [x] Keep undo in-memory only at first.
-- [x] Do not support undo after page refresh in the MVP.
-- [x] Do not implement full multi-step history yet.
-
-## Future Due-Date UI
-
-Goal: expose the existing `due_at` model in the task editor without weakening scheduled-task behavior.
-
-- [ ] Add a direct due-date editor for due-only tasks.
-- [ ] Keep due-only tasks distinct from scheduled calendar blocks.
-- [ ] Clear or reconcile `due_at` intentionally when a task is dragged onto the calendar.
-- [ ] Cover overdue and daily digest behavior before exposing the UI.
-
-## Phase 14: Shared tasks
-
-- [ ] Add task sharing model.
-- [ ] Support sharing tasks with another user.
-- [ ] Start with view/edit permissions only.
-- [ ] Decide whether completion is shared or per-user.
-- [ ] Decide how recurring shared tasks behave.
-- [ ] Do not implement collaboration/live editing yet.
-
-## Phase 15: Category-specific Google calendars
-
-Goal: route one-way Google mirror events to separate managed calendars for
-categories selected by the user.
-
-- [x] Add persisted category-level Google sync enablement.
-- [x] Add user/category-to-Google-calendar mappings.
-- [x] Add category sync controls to the frontend.
-- [x] Route task events to the selected category calendar.
-- [x] Safely move events when a task changes category.
-- [x] Remove events for uncategorized or disabled categories.
-- [x] Migrate existing events during reconciliation without deleting the legacy calendar.
-- [x] Add backend and frontend coverage.
-- [x] Preserve one-way sync, durable outbox behavior, and TaskCalendar authority.
-
-See [Google Calendar Category Routing](google-calendar-category-routing.md) for
-the design.
+- Keep TaskCalendar as the source of truth for the current Google Calendar mirror.
+- Keep unscheduled tasks and scheduled time blocks distinct while preserving completion state for both.
+- Treat schema migrations and restore behavior as compatibility-sensitive.
+- Do not start a larger platform or collaboration feature as incidental cleanup.

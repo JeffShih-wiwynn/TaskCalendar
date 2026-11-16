@@ -1,5 +1,18 @@
 # Development Commands
 
+This page is a technical reference for contributors. For a short feature overview and first-time local installation, start with the repository [README](../README.md).
+
+## Choose a source version
+
+Regular users should install a published release tag, as shown in the README. Developers who need to test unreleased changes may fetch `main` directly:
+
+```sh
+git fetch origin main
+git switch --detach origin/main
+```
+
+Return to the release or development branch you were working on after testing. Do not use `main` as the regular user installation instructions.
+
 ## Playwright CI environment
 
 The Playwright E2E workflow uses `ubuntu-24.04`. Playwright 1.60.0 cannot install Chromium dependencies on Ubuntu 26.04, so this workflow pins the runner instead of following `ubuntu-latest`.

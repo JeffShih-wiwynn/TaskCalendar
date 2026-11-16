@@ -110,6 +110,7 @@ This document summarizes what is already in the repository snapshot and where th
 ## Current Notes
 
 - Day/week time labels are centered vertically across the full hourly interval on desktop and mobile, including both lines when a secondary timezone is enabled. Browser checks cover day/week views with single/dual timezones at desktop and mobile widths.
+- Hourly label placement uses the full group of FullCalendar rows for an hour and observes row resizing so labels stay centered when the calendar layout changes.
 - The app is still web-first.
 - There is no native Android app yet.
 - Phase 1 PWA install support exists, but offline task editing, offline CRUD sync, and push notifications are not implemented.

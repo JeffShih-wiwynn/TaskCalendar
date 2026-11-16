@@ -18,6 +18,7 @@ The goal of the refactors below is not to normalize routes yet or to re-architec
 | Done | Better non-JSON API error handling | Proxy/HTML fallback failures now produce clearer errors. |
 | Done | CSS selector specificity cleanup | Broad task form button selectors have been narrowed. |
 | Done | Caddy/PWA route-family drift check | Static tests cover the current route families. |
+| Done | Hourly time-axis label positioning | Day/week timezone labels are centered across each full hourly interval on desktop and mobile, including row resize updates. |
 | After manual stable testing | Task form section extraction | Useful, but it touches a form that already had scroll and accordion regressions. |
 | After manual stable testing | Backend auth/admin service separation | Helpful for structure, but the current behavior is already correct. |
 | After manual stable testing | Daily notification settings extraction | Useful only if notification settings continue to grow. |

@@ -1,5 +1,7 @@
 # Docker Production Deployment
 
+Status: this document describes the container images and deployment layout. The production runtime on this host is managed by rootless Podman Quadlet units in `/home/jeff/Self-host/quadlets`; local Compose remains for development and image builds.
+
 This repository documents the container images and Compose-compatible service
 layout. On the Ubuntu host, production runtime is managed by rootless Podman
 Quadlet units under the Self-host repository; Compose remains useful for local

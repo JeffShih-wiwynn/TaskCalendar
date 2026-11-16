@@ -4,6 +4,8 @@ Category-specific routing is implemented. OAuth credentials remain user-scoped,
 while each opted-in TaskCalendar category maps to one managed Google secondary
 calendar. Sync remains one-way, with TaskCalendar as the source of truth.
 
+This feature is optional and can be used independently from the task calendar. It does not import edits made in Google Calendar.
+
 ## Routing rules
 
 | Task state | Google behavior |

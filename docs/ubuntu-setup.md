@@ -1,5 +1,7 @@
 # Ubuntu Setup
 
+For the product feature overview and the shortest first-time setup path, see the repository [README](../README.md). This page keeps the detailed Ubuntu development environment instructions.
+
 ## Required Ubuntu Packages
 
 On Ubuntu 24.04 or similar, install the system tools first:

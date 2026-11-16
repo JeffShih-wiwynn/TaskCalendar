@@ -2,6 +2,8 @@
 
 This document describes how the current web MVP can grow into an Android client later.
 
+Status: planning only. There is no native Android application, Android widget, local database, or offline synchronization implementation in this repository. The installable web app described in the current product is a separate browser-based experience.
+
 ## Current Architecture
 
 - Frontend: React + TypeScript + FullCalendar.

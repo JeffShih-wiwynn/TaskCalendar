@@ -1,97 +1,30 @@
 # Project Status
 
-This file summarizes the current repository state.
+TaskCalendar is a usable, self-hosted task calendar for desktop and mobile browsers. It supports unscheduled work, scheduled calendar blocks, completion tracking, recurrence, personal preferences, backups, and optional Discord and Google Calendar integrations.
 
-## Current Stack
+## Available today
 
-- Frontend: React + TypeScript + Vite + FullCalendar
-- Backend: FastAPI + SQLAlchemy + psycopg
-- Database: PostgreSQL
-- Auth: JWT authentication with backend register/login/current-user endpoints and frontend login/logout flow
-- Admin: first registered user becomes admin; Settings -> Admin supports user listing and deletion with last-admin protection
-- Migration: Alembic workflow with baseline, ownership, all-day, user timezone, app settings, Google mirror, and daily todo notification migrations; FastAPI no longer mutates schema on startup
-- Notifications: Discord webhook notifications with per-task reminder fields, optional daily todo digests, and an in-process backend worker thread
-- Google Calendar: one-way mirror through OAuth, a dedicated Google secondary calendar, a durable outbox, and a separate worker process
-- Timezone: application timezone is configurable with `APP_TIMEZONE`, defaulting to `UTC`
-- Deployment: non-Docker Ubuntu deployment and container/Quadlet deployment are documented
-- PWA: installable production build with manifest, app icons, standalone display mode, and static asset service worker
+- Calendar day, week, and month views, plus Today, Upcoming, Inbox, Overdue, Completed, and All task views.
+- Tasks can stay unscheduled or appear as timed or all-day calendar blocks. Completion state is preserved in either case.
+- Categories, notes, priorities, reminders, recurring tasks, and one-step undo for recent task changes.
+- Calendar preferences for main and optional secondary timezones, working hours, and week start.
+- Mobile navigation and touch-first calendar actions; desktop supports event drag and resize.
+- User accounts, first-account administrator setup, registration controls, account settings, and administrator user management.
+- User-scoped JSON backup and restore.
+- Optional Discord task reminders and daily todo digests.
+- Optional one-way Google Calendar mirror with per-category calendars and background reconciliation.
+- Installable web app support.
 
-## Completed Major Features
+## Current limits
 
-- Calendar month, week, and day views with a single cycle button
-- Sidebar task list and task editor
-- Inbox / no-time task ordering persisted through the backend
-- RRULE-compatible recurring tasks
-- Recurring occurrences materialized as independent tasks
-- Discord notification support
-- Backend authentication foundation
-- Frontend login/logout flow with local JWT storage
-- Backend task and category ownership scoping
-- Account password change and self-deletion flows
-- Admin user management without a seeded default account
-- Backend JSON export/import endpoints for the authenticated user's backup data
-- JSON backups include current-user task lists/categories, tasks, recurrence fields, notification fields, unscheduled ordering, completed state, and notes; they exclude auth secrets and user accounts
-- Google Calendar mirror with durable outbox jobs, retry behavior, and reconciliation worker
-- Google category calendar mappings are concurrency-safe; category deletion removes
-  the local mapping without null-foreign-key failures
-- Mobile bottom navigation and safe-area spacing fixes
-- Mobile calendar quick actions for tap-to-edit, long-press create, and 15-minute time adjustments
-- Phase 1 PWA install support and phone-width responsive layout
-- Category rows in the category dropdown open edit mode directly, with switches reserved for filtering
-- Working-hours viewport toggle for week/day time-grid views
-- Preferences for working-hours start, week start, and daily todo notifications
-- Month view uses a clickable month title with a compact Month-Year picker
-- Desktop calendar events click reliably again; mobile calendar events stay tap-only with drag and resize disabled
-- Today view includes incomplete overdue all-day tasks
-- Due-only tasks are represented in the backend model and participate in overdue filtering and daily digest selection, though the current edit form hides direct due-date editing
+- No native Android or iOS app.
+- No offline task editing or synchronization.
+- No CalDAV, ICS/VTODO export, or two-way Google Calendar synchronization.
+- No task sharing, push notifications, or password reset by email.
+- Due dates exist in the data model and overdue behavior, but direct due-date editing is not exposed in the task editor.
+- Recurrence uses materialized occurrences with a bounded horizon, not a full recurrence exception model.
+- Restore replaces the current user's calendar data; it does not merge records.
 
-## Recently Completed Work
+## Development and deployment
 
-- Google Calendar mirror OAuth, outbox, worker, and batch reconciliation
-- Durable Google sync jobs with retries and periodic reconciliation
-- Mobile bottom navigation and task-list safe spacing
-- Mobile calendar quick actions and readonly mobile calendar behavior
-- JWT auth foundation
-- Register and login endpoints
-- Password hashing
-- First-user-admin bootstrap with no seeded default `root`/`111111` account
-- Admin user management in Settings, including last-admin deletion protection
-- Account password change and account deletion
-- Migration workflow and baseline migration
-- Schema auto-mutation removed from FastAPI startup
-- Dev env loading now resolves from the repo checkout
-- Dev database reset runs migrations from the local backend checkout
-- Docker Caddy proxies `/admin/*` so admin API requests do not fall through to the React app shell
-- Backup export/import now runs through user-scoped JSON payloads
-- PWA manifest and static-asset service worker support
-- User timezone storage and timezone-aware notification formatting
-- Daily todo notification records, scanner, claim/retry state machine, and Discord digest delivery
-
-## Current Focus
-
-- Mobile ergonomics beyond the Phase 1 responsive baseline.
-- Task form extraction and backend auth/admin service separation remain refactor candidates.
-
-Google Calendar category routing and missing-calendar recovery are implemented. A
-recent production sync issue caused by sending `endTimeUnspecified` with a
-fallback timed-event end has been fixed; sync errors now offer retry, while
-reconnect is reserved for authorization failures.
-
-## Known Limitations
-
-- JSON restore is replace-only; merge/import-as-copy conflict handling is future work
-- No CalDAV sync
-- No two-way Google Calendar sync
-- No offline sync
-- No push notifications
-- No email/password reset flow
-- No direct due-date editor in the current task form
-- Mobile calendar interactions are intentionally touch-first; desktop drag/resize remains available
-- Container deployment is documented but not the only deployment path; this host uses rootless Podman Quadlet for production runtime
-- Google Calendar uses the restricted `calendar.app.created` scope, so old
-  orphaned duplicate calendars may require manual cleanup in Google Calendar
-- Backend product routes are still split across `/api/*`, `/auth/*`, `/admin/*`, and `/backup/*`; future cleanup should normalize the product APIs under `/api/*`
-
-## Next Recommended Priority
-
-Mobile ergonomics, production verification, and lower-risk component/service extraction are the next major milestones.
+Local development starts through `./dev.sh`. Production can use the documented Ubuntu service setup or the rootless Podman Quadlet deployment on this host. See the README for local installation and `docs/` for operational details.

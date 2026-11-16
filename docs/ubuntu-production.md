@@ -1,6 +1,6 @@
 # Ubuntu Production Deployment
 
-This project is still primarily developed and run locally with `scripts/dev.sh`. The guide below covers an alternative non-container Ubuntu path with `systemd`, a Python virtual environment, built frontend assets, PostgreSQL, and Caddy. The production path used on this host is rootless Podman Quadlet; see [docs/docker-production.md](docker-production.md).
+This guide covers an alternative non-container Ubuntu deployment with `systemd`, a Python virtual environment, built frontend assets, PostgreSQL, and Caddy. Local development uses `scripts/dev.sh`. Production on this host uses rootless Podman Quadlet; see [the container deployment guide](docker-production.md).
 
 ## Assumptions
 

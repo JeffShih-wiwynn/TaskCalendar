@@ -19,6 +19,7 @@ Current progress for the Playwright end-to-end suite in `frontend/e2e/`.
 - Saved main and optional sub timezone selection, UTC offset display, and single- or dual-zone week/day time-axis labels.
 - Reminder and repeating-task indicators.
 - Mobile calendar screen smoke coverage on Chromium mobile emulation.
+- Calendar time-axis group centering was visually checked at desktop and mobile viewport widths in day/week views with both single and dual timezone labels.
 
 ## Pending High-Value Flows
 
@@ -27,6 +28,7 @@ Current progress for the Playwright end-to-end suite in `frontend/e2e/`.
 - Week-start preference behavior across calendar views.
 - Undo snackbar behavior after update/delete and unavailable recurring-series actions.
 - Production container E2E.
+- Automated end-to-end assertion for vertical centering across the full hourly interval and relayout/resizing.
 
 ## Guardrails
 

@@ -29,6 +29,7 @@ The current app is web-first:
 - Week titles show `Nov – Dec 2026` across months and `Dec 2026 – Jan 2027` across years; weeks within one month retain the full month and year.
 - Main and sub time zones have separate expandable rows with scrollable zone lists. Main includes the browser-time-zone action; Sub includes `None` and is disabled by default.
 - Week and day time axes show the main zone and, when enabled, an optional sub zone; task placement and editing continue to use the main zone.
+- Week and day time-axis labels are vertically centered as a group across each full hour interval on desktop and mobile, including both lines when the secondary zone is enabled.
 - Task creation from selected calendar time ranges, including all-day slots.
 - Mobile calendar interactions use a quick action sheet for tap-to-edit; drag and resize are disabled on narrow screens.
 - Mobile month-view day previews use compact icon buttons for `Close` and `Add`.
@@ -46,6 +47,7 @@ The current app is web-first:
 - Settings -> Admin for admin users, including user listing and two-step user deletion.
 - First registered user becomes admin when the users table is empty.
 - No default `root`/`111111` account and no seeded default user.
+- Password recovery by email is not implemented; no email delivery service is configured.
 - Last-admin deletion protection.
 - Account password change and account deletion.
 - Category/task-list creation, color updates, and deletion.
