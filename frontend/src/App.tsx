@@ -1,4 +1,5 @@
 import { taskColors } from "./taskColors";
+import { formatCalendarWeekTitle } from "./calendarPeriodTitle";
 import { startCalendarDragMotion, startExternalTaskDragMotion, revertCalendarEventWithMotion } from "./calendarDragMotion";
 import {
     formatCalendarSlotTimes,
@@ -2031,7 +2032,15 @@ export function App() {
     const handleDatesSet = useCallback(
         (dateInfo: DatesSetArg) => {
             setCalendarView(dateInfo.view.type as CalendarView);
-            setCalendarTitle(dateInfo.view.title);
+            setCalendarTitle(
+                dateInfo.view.type === "timeGridWeek" &&
+                dateInfo.view.currentStart && dateInfo.view.currentEnd
+                    ? formatCalendarWeekTitle(
+                          dateInfo.view.currentStart,
+                          dateInfo.view.currentEnd,
+                      )
+                    : dateInfo.view.title,
+            );
             setCalendarDate(
                 calendarRef.current?.getApi().getDate() ?? dateInfo.start,
             );
@@ -7865,7 +7874,7 @@ export function App() {
                             </div>
                         ) : (
                             <span className={isMobileLayout ? "calendar-toolbar-period-label" : undefined}>
-                                {isTimeGridView
+                                {isTimeGridView && calendarView !== "timeGridWeek"
                                     ? formatCalendarWallClockDate(calendarDate, { month: "long", year: "numeric" })
                                     : calendarTitle}
                             </span>
