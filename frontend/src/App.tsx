@@ -1,5 +1,6 @@
 import { taskColors } from "./taskColors";
 import { formatCalendarWeekTitle } from "./calendarPeriodTitle";
+import { centerCalendarSlotLabel, releaseCalendarSlotLabel } from "./calendarSlotLabels";
 import { startCalendarDragMotion, startExternalTaskDragMotion, revertCalendarEventWithMotion } from "./calendarDragMotion";
 import {
     formatCalendarSlotTimes,
@@ -7974,6 +7975,8 @@ export function App() {
                             hour12: false,
                         }}
                         slotLabelContent={renderSlotLabelContent}
+                        slotLabelDidMount={centerCalendarSlotLabel}
+                        slotLabelWillUnmount={releaseCalendarSlotLabel}
                         slotLabelInterval={
                             (calendarView === "timeGridWeek" ||
                                 calendarView === "timeGridDay") &&
