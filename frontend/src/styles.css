@@ -4341,12 +4341,15 @@ input[type="checkbox"].task-checkbox:checked {
   display: none;
 }
 
+.fc .fc-timegrid-slot-label {
+  vertical-align: middle;
+}
+
 .fc .fc-timegrid-slot-label-frame {
-  align-items: center;
-  display: flex;
-  justify-content: center;
-  overflow: hidden;
+  display: grid;
+  place-items: center;
   position: relative;
+  transform: translateY(var(--calendar-slot-label-offset, 0px));
 }
 
 .fc .fc-timegrid-axis-frame {

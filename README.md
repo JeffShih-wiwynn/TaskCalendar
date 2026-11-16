@@ -22,6 +22,7 @@ Calendar is licensed under the GNU Affero General Public License v3.0. See [LICE
 - Current task views include Today, Upcoming, Inbox, Calendar, Completed, and All.
 - The sidebar also supports an Overdue filter for incomplete scheduled or due-only tasks.
 - Recurring tasks are materialized into concrete occurrences.
+- Day and week calendar time labels, including secondary timezones, are vertically centered between hourly grid lines on desktop and mobile.
 - Categories, backup export/import, Discord per-task reminders, daily todo Discord digests, and PWA install support are implemented.
 - Category colors remain user-selected; task cards and calendar blocks derive muted, theme-aware surfaces and accent borders from them. Completed tasks use neutral surfaces.
 - Google Calendar mirror support is implemented as a one-way mirror from TaskCalendar to a dedicated Google secondary calendar.
